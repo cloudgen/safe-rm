@@ -1,6 +1,6 @@
 # safe-rm
 
-![Version](https://img.shields.io/badge/Version-1.0.4-blue?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.0.5-blue?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 [![CIAO](https://img.shields.io/badge/Philosophy-CIAO%20v2.10.*-purple.svg)](https://github.com/cloudgen/ciao)
 [![Stars](https://img.shields.io/github/stars/cloudgen/safe-rm?style=flat-square)](https://github.com/cloudgen/safe-rm)
@@ -46,7 +46,7 @@ Human output says whether the path exists and whether removal is allowed. JSON i
 
 ## Install
 
-Runtime version: `VERSION="1.0.4"` in `src/safe-rm`.
+Runtime version: `VERSION="1.0.5"` in `src/safe-rm`.
 
 Channel default:
 
@@ -81,7 +81,7 @@ safe-rm about
 At a terminal the front board is:
 
 ```text
-safe-rm(1.0.4) — Guarded rm that refuses login homes and system directories
+safe-rm(1.0.5) — Guarded rm that refuses login homes and system directories
 1. remove-guard: check a path and remove it only when it is allowed
 8. self-management: this CLI install, version, update, uninstall
 9. Exit
@@ -90,7 +90,7 @@ safe-rm(1.0.4) — Guarded rm that refuses login homes and system directories
 **1** opens:
 
 ```text
-safe-rm(1.0.4) — remove-guard
+safe-rm(1.0.5) — remove-guard
 11. rm: check each path and remove only when every path is allowed
 0. Back
 ```
@@ -103,7 +103,7 @@ Scratch for one run lives in a cache folder named for this login and this proces
 
 ## Usage
 
-Each command is also a switch with the same name: `help` and `--help`, `version` and `--version`, `self-install` and `--self-install`, and the same pair for `about`, `version-check`, `self-update`, `self-uninstall`, `install`, `menu`, `main`, `setup`, `restore`, and `rm`. When `rm` is this program, `rm version` and `rm --version` print this version. They are not a file named `version`. The remover's own text is `origin-rm --version`.
+Each command is also a switch with the same name: `help` and `--help`, `version` and `--version`, `self-install` and `--self-install`, and the same pair for `about`, `version-check`, `self-update`, `self-uninstall`, `install`, `menu`, `main`, `setup`, `restore`, and `rm`. On `safe-rm`, the bare word and the switch are the same command. When `rm` is this program, only the switch is that command: `rm --version` prints this version, and `rm version` removes a link named `version`. The same split applies to every other command word. The remover's own text is `origin-rm --version`.
 
 ```sh
 safe-rm                  # terminal: numbered menu; pipe: install-ensure
@@ -113,7 +113,8 @@ safe-rm about
 safe-rm version           # same as safe-rm --version
 safe-rm --help
 safe-rm self-install       # same as safe-rm --self-install
-rm version                 # when rm is this program: this version, not a file
+rm --version               # when rm is this program: this version
+rm version                 # when rm is this program: a path named version
 safe-rm version-check
 safe-rm self-update
 safe-rm self-uninstall

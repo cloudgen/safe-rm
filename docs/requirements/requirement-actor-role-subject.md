@@ -47,7 +47,7 @@ Three columns. No approver.
 |-------|------|---------|
 | This login, on a terminal | Opens the main menu (`safe-rm` or `safe-rm --debug`) | None |
 | This login | Runs the guard (`rm`, `--dry-run`) | The path named on that command |
-| This login | Runs self-install, version, about, help, menu, self-update, self-uninstall. Each of those words is also `--` plus the same word, including when this program is the `rm` people type (`rm version`, `rm --help`) | None |
+| This login | Runs self-install, version, about, help, menu, self-update, self-uninstall. Each of those words is also `--` plus the same word. On the command named `rm`, only the `--` form is that command (`rm --help`, `rm --version`). The bare word is a path (`rm version` removes a link named version) | None |
 | Admin login: root, or a login that can move `/usr/bin/rm` and `/bin/rm` | Runs **setup**. Setup checks whether `/usr/bin/origin-rm` or `/bin/origin-rm` is already the original binary. If it is, setup does not move `rm` again and replaces the existing `safe-rm` with this program. If `rm` is still the original binary, setup moves it to that `origin-rm` path and points `rm` at this program | The host `rm` command (`/usr/bin/rm`, `/bin/rm`, `/usr/bin/origin-rm`, `/bin/origin-rm`) |
 | The same admin login | Runs `restore` | The host `rm` command |
 | A pipe, or quiet, or json, with no command | Places this CLI. Does not open the menu and does not move `rm`. When that place is root and `origin-rm` is already there, it replaces the guard file with this program | None |
@@ -111,6 +111,6 @@ Rules:
 
 ---
 
-**Last Updated**: 2026-09-27 (1.0.3 — lifecycle verbs are switches, including on the command named `rm`)
+**Last Updated**: 2026-09-27 (1.0.5 — on the command named `rm`, only the `--` form of a lifecycle verb is that command)
 **Owner**: safe-rm project maintainers
 **Alignment**: Registry `docs/requirements/index.md`; CIAO (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

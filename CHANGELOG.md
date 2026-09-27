@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.5] - 2026-09-27
+
+### Changed
+
+- On the command named `rm`, a bare command word is a path again. `rm version` removes a link named `version`. `rm --version` still prints this version. The same split applies to `help`, `about`, `version-check`, `self-update`, `self-uninstall`, `self-install`, `install`, `menu`, `main`, `setup`, and `restore`
+- `safe-rm version` and `safe-rm --version` stay this program's version. `-restore` stays the 2023 restore token
+
 ## [1.0.4] - 2026-09-27
 
 ### Added

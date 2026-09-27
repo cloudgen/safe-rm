@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| **1.0.4** (current) | Yes — report security issues against this release |
+| **1.0.5** (current) | Yes — report security issues against this release |
+| **1.0.4** | Yes — `rm version` on this guard prints this program's version, so a link named `version` is not removed |
 | **1.0.3** | Yes — `rm version` on this older guard still tries to remove a file named `version` |
 | **1.0.2** | Yes — the guard people type as `rm` could stay on this older file after a later install |
 | 1.0.1 | Yes |

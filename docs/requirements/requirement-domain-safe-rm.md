@@ -1,6 +1,6 @@
 **file**: docs/requirements/requirement-domain-safe-rm.md
 **id**: RQ-DOMAIN-SAFE-RM
-**Status**: Active (Version 1.2.2)
+**Status**: Active (Version 1.2.3)
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -103,7 +103,7 @@ The remover on this host accepts every switch in `origin-rm --help`, including c
 | `--dry-run` | On `rm`, or before or after the `safe-rm rm` verb | This guard's switch. Do not forward it. Do not exec `/usr/bin/origin-rm` or `/bin/origin-rm`. For each path, say whether it exists and whether removal is allowed |
 | `--` | On the remove argument list | End of options. Later operands are paths, even when a name starts with `-` |
 | Any other switch the remover accepts | On the remove argument list | Forward it unchanged, in the order given. A clustered short switch is one token: `-rf` is `-r` and `-f` together. A value glued with `=` stays on that token (`--interactive=never`, `--preserve-root=all`). The closed examples are `-f`, `--force`, `-i`, `-I`, `--interactive`, `--one-file-system`, `--no-preserve-root`, `--preserve-root`, `-r`, `-R`, `--recursive`, `-d`, `--dir`, `-v`, and `--verbose`. A switch not in that list is still forwarded, except a lifecycle verb switch in the next row |
-| Lifecycle verb, or the same word as a switch | On `safe-rm`, or on the command named `rm`, before `--` | The command, not a path and not a remover switch. The pairs are `help`/`--help`, `version`/`--version`, `about`/`--about`, `version-check`/`--version-check`, `self-update`/`--self-update`, `self-uninstall`/`--self-uninstall`, `self-install`/`--self-install`, `install`/`--install`, `menu`/`--menu`, `main`/`--main`, `setup`/`--setup`, `restore`/`--restore`, and `rm`/`--rm` (the last pair only when the command name is not already `rm`). `-restore` is the 2023 token for `restore`. Remove nothing. Do not exec the remover. Do not open the menu unless the command is `menu` or `main`. A path or a remover switch in the same command removes nothing and exits `1`. A file whose name is one of these words is removed only as `./name` or after `--` |
+| Lifecycle verb, or the same word as a switch | On `safe-rm`, before `--`. On the command named `rm`, only the `--` form, and `-restore` | On `safe-rm`, the bare word and the `--` switch are the command, not a path. On the command named `rm`, the `--` switch is the command and the bare word is a path: `rm version` removes a link named `version`, and `rm --version` prints this version. The pairs are `help`/`--help`, `version`/`--version`, `about`/`--about`, `version-check`/`--version-check`, `self-update`/`--self-update`, `self-uninstall`/`--self-uninstall`, `self-install`/`--self-install`, `install`/`--install`, `menu`/`--menu`, `main`/`--main`, `setup`/`--setup`, `restore`/`--restore`, and `rm`/`--rm` (the last pair only when the command name is not already `rm`). The same bare-word split applies to every pair. `-restore` is the 2023 token for `restore` on both command names. A `--` switch removes nothing and does not exec the remover. Do not open the menu unless the command is `menu` or `main`. A `--` switch mixed with a path or a remover switch removes nothing and exits `1` |
 | `--help`, `--version` | Same as the lifecycle row | This program's help and version. They are not forwarded. `origin-rm --help` and `origin-rm --version` are the remover's own text |
 | `--quiet`, `--json`, `--debug` | On `safe-rm`, or on the remove argument list as that whole token | This guard's switches. Do not forward them. On the command named `rm` they do not open the menu and they do not install |
 | `-q` | On a remove argument list with no lifecycle verb | Not stolen as quiet. The remover has no `-q`. Forward the token. Beside a lifecycle verb, `-q` is quiet |
@@ -113,11 +113,11 @@ Rules:
 1. If any path is refused, remove **no** path, including paths that would have been allowed. Do not exec the remover.
 2. `--dry-run` never execs `/usr/bin/origin-rm`, `/bin/origin-rm`, `/usr/bin/rm`, or `/bin/rm`.
 3. A prompt flag (`-i` inside a short cluster, or `--interactive` other than `never`) in real mode with no terminal is a fatal error. The command must not wait. A lifecycle verb, including `--help` and `--version`, is handled before that check.
-4. No path operands is a fatal error, except a lifecycle verb or its switch alone. Nothing is removed. That command does not exec the remover.
+4. No path operands is a fatal error, except a lifecycle `--` switch alone, or `-restore` alone. A bare lifecycle word on the command named `rm` is one path. Nothing is removed for a switch with no path. That command does not exec the remover.
 5. On the command named `safe-rm`, a token that is not a command, not that command's `--` switch, not a guard switch, and not a remove switch or path after `rm` still fails via `out_die` and points at `safe-rm help`. A remove switch, including `-rf` and any other remover switch, is not that failure.
 6. Product sentences use `out_info`, `out_success`, `out_error`, and `out_die`. The guard does not use `echo` or `printf` for those sentences. `origin-rm --help` and `origin-rm --version` are the remover's own text.
 7. Exit `0` when every path is allowed and the remover exits `0` (dry-run exits `0` without calling the remover). Exit with the remover's status when the remover is called and fails. Exit `1` when any path is refused or the invocation is invalid.
-8. When the basename of `$0` is `rm`, route the argument list to this remove before the numbered menu and before install-ensure, unless the list is a lifecycle verb or its switch. No arguments, and `rm --debug` alone, are this remove (no path), not the menu and not install-ensure. `rm version` and `rm --version` are this program's version. `safe-rm` and `safe-rm --debug` stay the menu. The script still enters `app_main`. This is not a basename gate that skips `app_main` for `curl | sh` (`$0` there is the shell).
+8. When the basename of `$0` is `rm`, route the argument list to this remove before the numbered menu and before install-ensure, unless the list is a lifecycle `--` switch or `-restore`. No arguments, and `rm --debug` alone, are this remove (no path), not the menu and not install-ensure. `rm --version` is this program's version. `rm version` is a path named `version`, including a link. `safe-rm version` stays this program's version. `safe-rm` and `safe-rm --debug` stay the menu. The script still enters `app_main`. This is not a basename gate that skips `app_main` for `curl | sh` (`$0` there is the shell).
 9. `--force` on a remove with no lifecycle verb is the remover's `--force`. Forward it. Beside a lifecycle verb, `--force` is reinstall force.
 
 ### 2.2 Specialized features
@@ -237,7 +237,7 @@ JSON `about` includes `"remove_guard":"on"` and `"dry_run_switch":"--dry-run"`.
 | `TP-SRM-24` | `safe-rm rm -rf --preserve-root --dry-run` of an allowed folder is allowed and the folder remains |
 | `TP-SRM-25` | The command named `rm` with `--debug --dry-run` and no path exits `1`, says no path was given, and does not open the menu |
 | `TP-SRM-26` | A second setup, after the fixture guard was replaced with a stub, writes this program back, does not move `origin-rm`, and the command named `rm` accepts `rm -rf --dry-run` of an allowed folder. The folder remains |
-| `TP-SRM-27` | `help`/`--help`, `version`/`--version`, and the other lifecycle pairs are one command. On the command named `rm`, `version` and `--version` print this program's version and do not remove. A path written as `./version` under `--dry-run` is still a path. A verb and a path together remove nothing |
+| `TP-SRM-27` | `help`/`--help`, `version`/`--version`, and the other lifecycle pairs are one command on `safe-rm`. On the command named `rm`, `--version` prints this program's version and does not remove. A bare word, including a link named `version`, is a path under `--dry-run` and stays in place. A `--` switch and a path together remove nothing |
 | `TP-SRM-18` | `about` includes `Remove guard:` |
 | `TP-SRM-19` | `--quiet` still prints the refusal |
 
@@ -250,7 +250,7 @@ Runner: `tests/run_dry_run.sh`. It does not point `HOME` at a scratch directory.
 | Product | `safe-rm` |
 | Ship unit | `src/safe-rm` |
 | Companion | `src/safe-rm.sha256` |
-| Version | `1.0.4` |
+| Version | `1.0.5` |
 | Prefix | `srm_` |
 | Bootstrap origin | `selfmanaged` Type 0 architecture kept in full (self-install, self-update, self-uninstall, version, about, help, numbered menu, `out_*`). The 2023 safe-rm setup is kept as well: `origin-rm`, `rm` → this program, `restore` |
 | Channel default | `REPO_USER=cloudgen`, `REPO_NAME=safe-rm`, `SCRIPT_RELPATH=src/safe-rm` |
@@ -286,7 +286,7 @@ Runner: `tests/run_dry_run.sh`. It does not point `HOME` at a scratch directory.
 12. Exec the remover once per path. One allowed command is one exec of every allowed path.
 13. Treat the command named `rm` with no arguments, or `rm --debug` alone, as the numbered menu or as install-ensure.
 14. Leave a stale `safe-rm` in place after a root place or a later setup when `origin-rm` already exists, so the command people type is an older program that rejects `-rf`.
-15. Forward `--help` or `--version` to the remover, or treat a bare lifecycle verb on the command named `rm` as a file name.
+15. Forward `--help` or `--version` to the remover. On the command named `rm`, route a bare lifecycle word (`version`, `help`, and the other words with no dashes) as this program's command, or route a `--` lifecycle switch as a path.
 
 **Violating this rule is a critical remove-guard regression.**
 
@@ -328,6 +328,7 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | 2026-09-27 | 1.2.0: the command named `rm` is the remover's command line. `-rf` and every other remover switch are accepted and forwarded in one exec. `rm -rf` of a folder inside the login home may be removed. |
 | 2026-09-27 | 1.2.1: when `origin-rm` is already present, a later setup and a root place replace the guard file with this program. They do not move `origin-rm` again. A non-root place does not write that guard. |
 | 2026-09-27 | 1.2.2: each lifecycle verb is also its `--` switch. On the command named `rm`, `version` and `--version` are this program's version, not a file and not the remover's text. |
+| 2026-09-27 | 1.2.3: on the command named `rm`, a bare lifecycle word is a path again. `rm version` removes a link named `version`. `rm --version` stays this program's version. The same split applies to every other command word. `safe-rm version` stays the command. |
 
 **Last Updated**: 2026-09-27
 **Owner**: safe-rm project maintainers

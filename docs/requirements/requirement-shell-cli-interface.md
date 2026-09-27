@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-interface.md  
-**Status**: Active (Version 1.2.3)  
+**Status**: Active (Version 1.2.4)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -142,7 +142,7 @@ When specializing product **B** from this bootstrap (**A → B only**):
 
 #### Supported commands (normative for this project)
 
-Every command is also a switch of the same name. `help` and `--help` are the same command. `version` and `--version`. `self-install` and `--self-install`. The same pair for each row below. `-restore` stays the 2023 token. Its switch is `--restore`.
+Every command is also a switch of the same name. `help` and `--help` are the same command. `version` and `--version`. `self-install` and `--self-install`. The same pair for each row below. `-restore` stays the 2023 token. Its switch is `--restore`. On the command named `rm`, only that `--` form, and `-restore`, is the command. The bare word is a path, so `rm version` removes a link named `version`.
 
 | Command | Type | Handler (current) | Required behavior |
 |---------|------|-------------------|-------------------|
@@ -151,7 +151,7 @@ Every command is also a switch of the same name. `help` and `--help` are the sam
 | `main` | Type 0 | `app_default` | Alias of `menu` |
 | `self-install` | Type 0 | `inst_self_install` | Place **this CLI** (copy when `$0` is a script; download when piped). Dest **0700** local / **0755** global. Dual mention: `requirement-shell-cli-self-install.md`. Sample: `selfmanaged self-install` |
 | `install` | Type 0 | `inst_self_install` | **Alias of `self-install`** (this product has no payload). Same copy/download/dest-mode contract. Sample: `selfmanaged install` |
-| `version`, `--version` | Type 0 | `app_main` / `app_version` | Print local version; JSON object when `--json`. On the command named `rm` this is the same command, not a file named `version` |
+| `version`, `--version` | Type 0 | `app_main` / `app_version` | Print local version; JSON object when `--json`. On the command named `rm`, `--version` is this command. The bare word `version` is a path, including a link |
 | `about` | Type 0 | `app_about` | Diagnostics: install presence, global/local paths, user, shell, TTY; **Cache folder used**, **Cache folder (preferred)**, **Cache folder (1st fallback)**, **Cache folder (2nd fallback)** when that host has one, and **Persistence storage** (`requirement-shell-cli-storage`); JSON when `--json`; **no `CHECKSUM` field** |
 | `version-check` | Type 0 | `ver_check` | Compare local vs remote `VERSION` from `SCRIPT_URL`; fail clearly if URL unset/unreachable |
 | `self-update` | Type 0 | `inst_self_update` | Fetch remote version; reinstall when policy allows; reuse install primitives |
@@ -160,7 +160,7 @@ Every command is also a switch of the same name. `help` and `--help` are the sam
 | `setup` | domain | `srm_cmd_setup` | Admin login checks the before/after table and swaps when needed. Sample: `safe-rm setup`. Law: `requirement-domain-safe-rm.md` |
 | `restore` | domain | `srm_cmd_restore` | Put `origin-rm` back as `rm` and remove the `safe-rm` link. Sample: `safe-rm restore`. Law: `requirement-domain-safe-rm.md` |
 | `-restore` | domain | `srm_cmd_restore` | 2023 token when this program is the `rm` people type |
-| *(command name is `rm`)* | domain | `srm_cmd_rm` | Basename of `$0` is `rm`. A lifecycle verb or its switch is that command. Other arguments are the remover's arguments (`rm -rf test`), not a second `rm` verb. Law: `requirement-domain-safe-rm.md` |
+| *(command name is `rm`)* | domain | `srm_cmd_rm` | Basename of `$0` is `rm`. A lifecycle `--` switch is that command. A bare lifecycle word is a path (`rm version` removes a link named `version`). Other arguments are the remover's arguments (`rm -rf test`), not a second `rm` verb. Law: `requirement-domain-safe-rm.md` |
 
 #### Global flags (normative wiring for this project)
 
@@ -272,6 +272,6 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 
 ---
 
-**Last Updated**: 2026-09-27 (1.2.3 — each command is also its `--` switch)  
+**Last Updated**: 2026-09-27 (1.2.4 — on the command named `rm`, a bare command word is a path; the `--` switch stays the command)  
 **Owner**: selfmanaged project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 5, 6, 10, 16, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

@@ -375,9 +375,9 @@ assert_eq "TP-SRM-25 no path exit" 1 "$ec"
 assert_contains "TP-SRM-25 no path message" "$(cat "$err")" "No path was given"
 assert_not_contains "TP-SRM-25 is not the menu" "$out$(cat "$err")" "Choice:"
 
-# TP-SRM-27 lifecycle verbs are switches. Not a remove path, so no --dry-run.
-# A real path check below still uses --dry-run. No file named "version" is passed
-# to a live remove.
+# TP-SRM-27 lifecycle verbs are switches. On safe-rm the bare word is that
+# command. On the command named rm only the --switch is that command, and a
+# bare word is a path checked with --dry-run. No live remove of a link.
 ver=$(grep '^VERSION="' "$SAFE_RM" | head -n1 | cut -d'"' -f2)
 out=$(sh "$SAFE_RM" --version 2>"$err")
 ec=$?
@@ -410,24 +410,15 @@ assert_contains "TP-SRM-27 --about remove guard" "$out" "Remove guard:"
 out=$(TTY=0 sh "$SAFE_RM" --menu </dev/null 2>/dev/null)
 assert_contains "TP-SRM-27 --menu off a terminal is help" "$out" "--self-install"
 
-out=$("$SCRATCH/rm" version 2>"$err")
-ec=$?
-assert_eq "TP-SRM-27 rm version exit" 0 "$ec"
-assert_contains "TP-SRM-27 rm version names safe-rm" "$out" "safe-rm version ${ver}"
-assert_not_contains "TP-SRM-27 rm version does not remove" "$out$(cat "$err")" "cannot remove"
-assert_not_contains "TP-SRM-27 rm version is not GNU" "$out$(cat "$err")" "GNU coreutils"
-
 out=$("$SCRATCH/rm" --version 2>"$err")
 ec=$?
 assert_eq "TP-SRM-27 rm --version exit" 0 "$ec"
 assert_contains "TP-SRM-27 rm --version names safe-rm" "$out" "safe-rm version ${ver}"
 assert_not_contains "TP-SRM-27 rm --version is not GNU" "$out$(cat "$err")" "GNU coreutils"
 
-out=$("$SCRATCH/rm" help 2>/dev/null)
-assert_contains "TP-SRM-27 rm help lists --self-install" "$out" "--self-install"
-
 out=$("$SCRATCH/rm" --help 2>/dev/null)
 assert_contains "TP-SRM-27 rm --help lists --setup" "$out" "--setup"
+assert_contains "TP-SRM-27 rm --help says bare version is a path" "$out" "rm version removes a link named version"
 
 out=$(sh "$SAFE_RM" rm --version 2>"$err")
 ec=$?
@@ -437,19 +428,57 @@ assert_contains "TP-SRM-27 safe-rm rm --version names safe-rm" "$out" "safe-rm v
 out=$("$SCRATCH/rm" --about 2>/dev/null)
 assert_contains "TP-SRM-27 rm --about remove guard" "$out" "Remove guard:"
 
-printf 'keep\n' > "$SCRATCH/version"
+# Bare words on the command named rm are paths. A symlink named version
+# stays in place under --dry-run. --version above is still this program.
+# -restore stays a command and is not invoked here.
+printf 'keep\n' > "$SCRATCH/link-target"
+for name in help version about version-check self-update self-uninstall self-install install menu main setup restore; do
+    ln -s link-target "$SCRATCH/$name"
+    out=$(cd "$SCRATCH" && "$SCRATCH/rm" --dry-run "$name" 2>"$err")
+    ec=$?
+    assert_eq "TP-SRM-27 rm ${name} exit" 0 "$ec"
+    assert_contains "TP-SRM-27 rm ${name} is a path" "$out" "Dry-run: ${name} exists"
+    assert_not_contains "TP-SRM-27 rm ${name} is not a command" "$out$(cat "$err")" "safe-rm version"
+    if [ -L "$SCRATCH/$name" ]; then
+        t_pass "TP-SRM-27 link ${name} still exists"
+    else
+        t_fail "TP-SRM-27 link ${name} was removed"
+    fi
+done
+
+out=$(cd "$SCRATCH" && "$SCRATCH/rm" --version 2>"$err")
+ec=$?
+assert_eq "TP-SRM-27 rm --version beside the link exit" 0 "$ec"
+assert_contains "TP-SRM-27 rm --version beside the link" "$out" "safe-rm version ${ver}"
+if [ -L "$SCRATCH/version" ]; then
+    t_pass "TP-SRM-27 rm --version left the link"
+else
+    t_fail "TP-SRM-27 rm --version removed the link"
+fi
+
+out=$(cd "$SCRATCH" && sh "$SAFE_RM" --dry-run rm version 2>"$err")
+ec=$?
+assert_eq "TP-SRM-27 safe-rm rm version exit" 0 "$ec"
+assert_contains "TP-SRM-27 safe-rm rm version is a path" "$out" "Dry-run: version exists"
+assert_not_contains "TP-SRM-27 safe-rm rm version is not the version command" "$out$(cat "$err")" "safe-rm version"
+if [ -L "$SCRATCH/version" ]; then
+    t_pass "TP-SRM-27 safe-rm rm version left the link"
+else
+    t_fail "TP-SRM-27 safe-rm rm version removed the link"
+fi
+
 out=$("$SCRATCH/rm" --dry-run "$SCRATCH/version" 2>"$err")
 ec=$?
 assert_eq "TP-SRM-27 path version exit" 0 "$ec"
 assert_contains "TP-SRM-27 path version allowed" "$out" "Removal is allowed"
 assert_not_contains "TP-SRM-27 path version is not the version command" "$out" "safe-rm version"
-if [ -f "$SCRATCH/version" ]; then
+if [ -L "$SCRATCH/version" ]; then
     t_pass "TP-SRM-27 path version still exists"
 else
     t_fail "TP-SRM-27 path version was removed"
 fi
 
-out=$("$SCRATCH/rm" version "$SCRATCH/missing-leaf" 2>"$err")
+out=$("$SCRATCH/rm" --version "$SCRATCH/missing-leaf" 2>"$err")
 ec=$?
 assert_eq "TP-SRM-27 mixed exit" 1 "$ec"
 assert_contains "TP-SRM-27 mixed says command" "$(cat "$err")" "--version"
