@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-interface.md  
-**Status**: Active (Version 1.2.4)  
+**Status**: Active (Version 1.2.5)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -183,7 +183,7 @@ Every command is also a switch of the same name. `help` and `--help` are the sam
 
 - Type 1: `prerequisites`, `create-user`, Docker host install, etc.  
 - Type 2: app `start`/`stop`/`configure` under a system user  
-- The remove guard (`rm`, `--dry-run`, `setup`, `restore`, the protected-rm swap) is owned by `requirement-domain-safe-rm.md`. This file keeps the Type 0 menu and does not restate the refuse table. The swap is the one admin step on a Linux host. It is unused on Termux, Git Bash, and Windows cmd. Tests use a `/tmp/safe-rm-swap.*` directory and do not remove a directory.  
+- The remove guard (`rm`, `--dry-run`, `setup`, `restore`, the protected-rm swap) is owned by `requirement-domain-safe-rm.md`. This file keeps the Type 0 menu and does not restate the refuse table. The swap is the one admin step on a Linux host. On Termux this login runs it against `$PREFIX/bin/rm` and does not call `sudo`. It is unused on Git Bash and Windows cmd. Tests use a `/tmp/safe-rm-swap.*` directory and do not remove a directory.  
 
 ### 2.7 Why This Requirement Exists (Direct CIAO Alignment)
 
@@ -272,6 +272,6 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 
 ---
 
-**Last Updated**: 2026-09-27 (1.2.4 — on the command named `rm`, a bare command word is a path; the `--` switch stays the command)  
+**Last Updated**: 2026-09-27 (1.2.5 — on Termux this login runs setup against `$PREFIX/bin/rm` and does not call `sudo`; Git Bash and Windows cmd still do not run the swap)  
 **Owner**: selfmanaged project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 5, 6, 10, 16, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

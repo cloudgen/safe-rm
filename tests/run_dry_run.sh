@@ -1016,6 +1016,128 @@ for _sd in "$REG_U" "$REG_B" "$BB_U" "$BB_B" "$EMPTY_U" "$EMPTY_B"; do
 done
 unset _sd REG_U REG_B BB_U BB_B EMPTY_U EMPTY_B reg_before bb_before
 
+# TP-SRM-30 Termux. which rm is $PREFIX/bin/rm
+# (/data/data/com.termux/files/usr/bin/rm). The fixture stands in for
+# that prefix. Nothing in the fixture is executed. /usr/bin/rm stays.
+usr_before=$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)
+out=$(sh "$SAFE_RM" help 2>"$err")
+assert_contains "TP-SRM-30 help names the Termux rm" "$out" "/data/data/com.termux/files/usr/bin/rm"
+assert_contains "TP-SRM-30 help says no sudo" "$out" "No sudo"
+
+out=$(SRM_TERMUX_PREFIX=/tmp/not-a-swap sh "$SAFE_RM" setup 2>"$err")
+ec=$?
+assert_eq "TP-SRM-30 foreign prefix exit" 1 "$ec"
+assert_contains "TP-SRM-30 foreign prefix stays admin" "$(cat "$err")" "needs an admin login"
+assert_contains "TP-SRM-30 foreign prefix moved nothing" "$(cat "$err")" "Nothing was moved"
+assert_eq "TP-SRM-30 foreign prefix left system rm" "$usr_before" "$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)"
+
+TX=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
+mkdir -p "$TX/bin"
+out=$(SRM_TERMUX_PREFIX="$TX" sh "$SAFE_RM" setup 2>"$err")
+ec=$?
+assert_eq "TP-SRM-30 empty prefix exit" 1 "$ec"
+assert_contains "TP-SRM-30 empty prefix names the rm" "$(cat "$err")" "No original rm at ${TX}/bin/rm"
+assert_contains "TP-SRM-30 empty prefix moved nothing" "$(cat "$err")" "Nothing was moved"
+assert_not_contains "TP-SRM-30 empty prefix is not the admin error" "$(cat "$err")" "needs an admin login"
+if [ -e "$TX/bin/safe-rm" ] || [ -e "$TX/bin/origin-rm" ]; then
+    t_fail "TP-SRM-30 empty prefix wrote a guard"
+else
+    t_pass "TP-SRM-30 empty prefix wrote nothing"
+fi
+
+printf '#!/bin/sh\nexit 0\n' > "$TX/bin/rm"
+chmod 0755 "$TX/bin/rm"
+tx_before=$(stat -c '%d:%i' "$TX/bin/rm")
+out=$(SRM_TERMUX_PREFIX="$TX" sh "$SAFE_RM" setup 2>"$err")
+ec=$?
+assert_eq "TP-SRM-30 regular exit" 0 "$ec"
+assert_contains "TP-SRM-30 moved prefix rm" "$out" "Moved ${TX}/bin/rm to ${TX}/bin/origin-rm"
+assert_contains "TP-SRM-30 pointed prefix rm" "$out" "Pointed ${TX}/bin/rm at ${TX}/bin/safe-rm"
+assert_not_contains "TP-SRM-30 regular is not the admin error" "$out$(cat "$err")" "needs an admin login"
+if [ -L "$TX/bin/rm" ]; then
+    t_pass "TP-SRM-30 prefix rm is a symlink"
+else
+    t_fail "TP-SRM-30 prefix rm is not a symlink"
+fi
+assert_contains "TP-SRM-30 prefix link target" "$(readlink "$TX/bin/rm")" "${TX}/bin/safe-rm"
+assert_eq "TP-SRM-30 origin inode" "$tx_before" "$(stat -c '%d:%i' "$TX/bin/origin-rm" 2>/dev/null || true)"
+assert_eq "TP-SRM-30 regular left system rm" "$usr_before" "$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)"
+if [ -d "$TX/bin/origin-rm" ]; then
+    t_fail "TP-SRM-30 origin-rm is a directory"
+else
+    t_pass "TP-SRM-30 origin-rm is not a directory"
+fi
+out=$(SRM_TERMUX_PREFIX="$TX" sh "$SAFE_RM" setup 2>"$err")
+ec=$?
+assert_eq "TP-SRM-30 second setup exit" 0 "$ec"
+assert_contains "TP-SRM-30 second setup sees origin" "$out" "Already swapped"
+assert_eq "TP-SRM-30 second setup did not move again" "$tx_before" "$(stat -c '%d:%i' "$TX/bin/origin-rm" 2>/dev/null || true)"
+out=$(SRM_TERMUX_PREFIX="$TX" sh "$SAFE_RM" restore 2>"$err")
+ec=$?
+assert_eq "TP-SRM-30 restore exit" 0 "$ec"
+assert_contains "TP-SRM-30 restored" "$out" "Restored ${TX}/bin/rm"
+assert_eq "TP-SRM-30 restored inode" "$tx_before" "$(stat -c '%d:%i' "$TX/bin/rm" 2>/dev/null || true)"
+if [ -e "$TX/bin/origin-rm" ]; then
+    t_fail "TP-SRM-30 origin-rm still exists"
+else
+    t_pass "TP-SRM-30 origin-rm removed by restore"
+fi
+if [ -e "$TX/bin/safe-rm" ]; then
+    t_fail "TP-SRM-30 safe-rm still exists"
+else
+    t_pass "TP-SRM-30 safe-rm removed by restore"
+fi
+if [ -f "$TX/bin/rm" ] && [ ! -L "$TX/bin/rm" ]; then
+    t_pass "TP-SRM-30 restored rm is the original file"
+else
+    t_fail "TP-SRM-30 restored rm is not the original file"
+fi
+
+for _kind in toybox coreutils; do
+    KD=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
+    mkdir -p "$KD/bin"
+    printf '#!/bin/sh\nexit 0\n' > "$KD/bin/${_kind}"
+    chmod 0755 "$KD/bin/${_kind}"
+    ln -s "${_kind}" "$KD/bin/rm"
+    kd_before=$(stat -c '%d:%i' "$KD/bin/${_kind}")
+    out=$(SRM_TERMUX_PREFIX="$KD" sh "$SAFE_RM" setup 2>"$err")
+    ec=$?
+    assert_eq "TP-SRM-30 ${_kind} exit" 0 "$ec"
+    assert_contains "TP-SRM-30 ${_kind} keeps the applet" "$out" "Kept ${_kind} rm as ${KD}/bin/origin-rm"
+    assert_contains "TP-SRM-30 ${_kind} link target" "$(readlink "$KD/bin/rm")" "${KD}/bin/safe-rm"
+    assert_contains "TP-SRM-30 ${_kind} origin marker" "$(cat "$KD/bin/origin-rm")" "safe-rm applet-origin"
+    assert_contains "TP-SRM-30 ${_kind} origin runs rm" "$(cat "$KD/bin/origin-rm")" "${KD}/bin/${_kind}"
+    assert_eq "TP-SRM-30 ${_kind} inode unchanged" "$kd_before" "$(stat -c '%d:%i' "$KD/bin/${_kind}" 2>/dev/null || true)"
+    assert_eq "TP-SRM-30 ${_kind} left system rm" "$usr_before" "$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)"
+    out=$(SRM_TERMUX_PREFIX="$KD" sh "$SAFE_RM" restore 2>"$err")
+    ec=$?
+    assert_eq "TP-SRM-30 ${_kind} restore exit" 0 "$ec"
+    assert_eq "TP-SRM-30 ${_kind} link restored" "${_kind}" "$(readlink "$KD/bin/rm" 2>/dev/null || true)"
+    assert_eq "TP-SRM-30 ${_kind} still the same file" "$kd_before" "$(stat -c '%d:%i' "$KD/bin/${_kind}" 2>/dev/null || true)"
+    if [ -e "$KD/bin/origin-rm" ]; then
+        t_fail "TP-SRM-30 ${_kind} origin-rm still exists"
+    else
+        t_pass "TP-SRM-30 ${_kind} origin-rm removed"
+    fi
+    if [ -e "$KD/bin/safe-rm" ]; then
+        t_fail "TP-SRM-30 ${_kind} safe-rm still exists"
+    else
+        t_pass "TP-SRM-30 ${_kind} safe-rm removed"
+    fi
+    case "$KD" in
+        /tmp/safe-rm-swap.*)
+            scratch_rm -rf -- "$KD"
+            ;;
+    esac
+done
+
+case "$TX" in
+    /tmp/safe-rm-swap.*)
+        scratch_rm -rf -- "$TX"
+        ;;
+esac
+unset _kind KD kd_before TX tx_before usr_before
+
 printf '\n== summary ==\n'
 printf 'PASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 if [ "$FAIL" -gt 0 ]; then

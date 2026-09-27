@@ -38,6 +38,7 @@ Requires: `sh`, `curl`, `python3` (local HTTP channel), `sha256sum`, `grep`.
 | `TP-CLI-EMPTY-01`, `TP-CLI-17`, `TP-CLI-19`, `TP-CLI-21`, `TP-CLI-22`, `TP-CLI-SRM-01`, `TP-CLI-SRM-02` | Main menu, including `safe-rm --debug` and the folder list under **11**. No install. No real remove |
 | `TP-SRM-SWAP-01` | Before/after swap inside `/tmp/safe-rm-swap.*` only. The fixture `rm` is never executed. Non-admin setup leaves `/usr/bin/rm` unchanged |
 | `TP-SRM-29` | An empty first fixture directory does not stop setup. The second directory's regular `rm` is moved. A BusyBox symlink is not renamed; `origin-rm` runs `busybox rm`. Neither fixture is executed |
+| `TP-SRM-30` | Termux `$PREFIX/bin/rm` inside `/tmp/safe-rm-swap.*`. A regular file is moved. A `toybox` or `coreutils` symlink is not renamed. An empty `bin` does not ask for an admin login. `/usr/bin/rm` stays. The fixture is never executed |
 | `TP-CACHE-01`, `TP-CACHE-02`, `TP-CACHE-03` | Cache folder chains, silent tier miss, persistence `~/.local/safe-rm`, mktemp scratch names. `about` is not a remove. HOME stays this login |
 
 ## Specializee porting checklist (A → B)

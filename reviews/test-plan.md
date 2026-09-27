@@ -2,7 +2,7 @@
 
 Maps **baseline coverage** and **finding lock-in (TP-*)** to `tests/`.  
 **Suite entry:** `./tests/run.sh`  
-**Last update:** 2026-09-27 (cache folder on `src/safe-rm`; choice 11 lists subfolders)
+**Last update:** 2026-09-27 (Termux `$PREFIX/bin/rm` setup; Alpine `/bin/rm`)
 
 Status: **have** = automated today · **TODO** = needed · **n/a** = not applicable / product choice
 
@@ -86,7 +86,9 @@ Status: **have** = automated today · **TODO** = needed · **n/a** = not applica
 | TP-CLI-22 | L-MENU-01 | Off-TTY `menu` is help. Under **8**, **87** is listed and **81** is omitted | **have** | `tests/run_dry_run.sh` |
 | TP-CLI-SRM-01 | L-MENU-01 | Front board has the remove-guard category plus **8** and **9**. `rm` is **11** under **1**, not on the front board | **have** | `tests/run_dry_run.sh` |
 | TP-CLI-SRM-02 | L-MENU-01 | **11** lists subfolders of the current path, then **custom-path**, then **0** Back. Empty custom path and a bad pick reprint that board. Nothing is removed | **have** | `tests/run_dry_run.sh` |
-| TP-SRM-SWAP-01 | domain 1.1.2 | Setup moves a fixture `rm` to `origin-rm` and points `rm` at this program. Second setup does not move again. `restore` reverses it. Non-admin setup moves nothing. No real directory remove | **have** | `tests/run_dry_run.sh` (`SRM_SWAP_ROOT=/tmp/safe-rm-swap.*`) |
+| TP-SRM-SWAP-01 | domain 1.2.6 | Setup moves a fixture `rm` to `origin-rm` and points `rm` at this program. Second setup does not move again. `restore` reverses it. Non-admin setup moves nothing. No real directory remove | **have** | `tests/run_dry_run.sh` (`SRM_SWAP_ROOT=/tmp/safe-rm-swap.*`) |
+| TP-SRM-29 | domain 1.2.6 §2.0.2 | An empty fixture directory does not stop setup. A regular `rm` in the other directory is moved. A BusyBox symlink is not renamed; `origin-rm` runs `busybox rm`. Nothing is executed | **have** | `tests/run_dry_run.sh` (`SRM_SWAP_ROOT` and `SRM_SWAP_BIN`) |
+| TP-SRM-30 | domain 1.2.6 §2.0.3 | Termux `$PREFIX/bin/rm`. A regular file is moved. A `toybox` or `coreutils` symlink is not renamed. An empty `bin` does not ask for an admin login. `/usr/bin/rm` stays. Nothing is executed | **have** | `tests/run_dry_run.sh` (`SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*`) |
 | TP-CACHE-01 | storage 1.1.0 | `about` prints Cache folder used, preferred, 1st fallback, 2nd fallback, and Persistence storage. JSON has `cache_used`, `cache_preferred`, `cache_fallback`, `cache_fallback_2`, `persistence_storage`. No Storage (effective) label | **have** | `tests/run_dry_run.sh` |
 | TP-CACHE-02 | storage 1.1.0 | Linux `/dev/shm/cache/cache-${APP_NAME}-${login}-$$`, then `/tmp/cache/...`, then `${HOME}/.cache/cache-${APP_NAME}-$$`. Git Bash and Mac chains. Silent skip. Leaf mode 0700. Persistence `${HOME}/.local/${APP_NAME}`. Suite does not assign HOME | **have** | `tests/run_dry_run.sh` |
 | TP-CACHE-03 | storage 1.1.0 | `util_mktemp` writes an mktemp name under the cache leaf and refuses a `$$` file-name template | **have** | `tests/run_dry_run.sh` |

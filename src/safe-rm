@@ -50,8 +50,8 @@ APP_NAME="safe-rm"
 : "${SHORT_DESCRIPTION:=${APP_DESC}}"
 : "${DESCRIPTION:=POSIX /bin/sh program you install for yourself. It keeps self-install and self-update, and it refuses to remove the login home itself, every account home in /etc/passwd, /home, another login's folder under /home, /usr/bin, or other system directories. A named folder inside the login home, such as a cache directory, may be removed. --dry-run reports whether a path exists and whether removal is allowed, and removes nothing.}"
 # Product version SSOT (semver). Extractors use: grep '^VERSION="'
-VERSION="1.0.7"
-: "${VERSION:=1.0.7}"
+VERSION="1.0.8"
+: "${VERSION:=1.0.8}"
 
 # Runtime flags (safe defaults)
 : "${QUIET:=0}"
@@ -3028,7 +3028,7 @@ app_help() {
     out_plain "  self-update          Update ${APP_NAME} to a newer remote version"
     out_plain "  self-uninstall       Remove ${APP_NAME} (safe PATH cleanup)"
     out_plain "  help                 Show this help"
-    out_plain "  setup                Check /usr/bin/rm and /bin/rm. An admin login moves the one that exists aside and points rm at this program"
+    out_plain "  setup                Check /usr/bin/rm and /bin/rm. On Termux, which rm is \$PREFIX/bin/rm (/data/data/com.termux/files/usr/bin/rm). This login moves that file. No sudo"
     out_plain "  restore              Put origin-rm back as rm. Same as -restore"
     out_plain "  menu                 Numbered list on a terminal (1 remove-guard, 8 self-management, 9 Exit). Help off a terminal"
     out_plain "  main                 Same as menu"
@@ -3579,11 +3579,40 @@ srm_flags_request_info() {
     return 1
 }
 
-# Remover after the swap: /usr/bin/origin-rm or /bin/origin-rm.
-# Before the swap, the original regular file still named rm.
+# Remover after the swap.
+# Linux: /usr/bin/origin-rm or /bin/origin-rm.
+# Termux: $PREFIX/bin/origin-rm. which rm is $PREFIX/bin/rm.
+# Before the swap, the original file still named rm.
 # Path on stdout (class B). Never returns a symlink to this program.
 srm_origin_rm() {
     _self=$0
+    _tprefix=$(srm_termux_prefix 2>/dev/null || true)
+    if [ -n "${_tprefix}" ]; then
+        _c="${_tprefix}/bin/origin-rm"
+        if [ -x "$_c" ] && [ ! -L "$_c" ]; then
+            printf '%s\n' "$_c"
+            unset _self _list _c _t _tprefix
+            return 0
+        fi
+        _c="${_tprefix}/bin/rm"
+        if [ -x "$_c" ] && [ "$_c" != "$_self" ]; then
+            _skip=0
+            if [ -L "$_c" ]; then
+                _t=$(readlink -- "$_c" 2>/dev/null || true)
+                case "$_t" in
+                    *safe-rm*) _skip=1 ;;
+                esac
+            fi
+            if [ "$_skip" -eq 0 ]; then
+                printf '%s\n' "$_c"
+                unset _self _list _c _t _tprefix _skip
+                return 0
+            fi
+            unset _skip
+        fi
+        unset _self _list _c _t _tprefix
+        return 1
+    fi
     _list="/usr/bin/origin-rm /bin/origin-rm"
     if [ -n "${SRM_SWAP_BIN-}" ]; then
         _list="${SRM_SWAP_BIN}/origin-rm ${_list}"
@@ -3669,7 +3698,80 @@ srm_install_guard() {
     return 0
 }
 
-# Termux, Git Bash, and Windows cmd do not refresh the host guard.
+# Termux rm is $PREFIX/bin/rm. which rm prints
+# /data/data/com.termux/files/usr/bin/rm. That is not /usr/bin/rm or /bin/rm.
+# Live: TERMUX_VERSION, or PREFIX under /data/*/com.termux/files/usr,
+# or uname containing Android, and that bin directory exists.
+# Tests pass SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.* and do not touch the host.
+srm_termux_prefix() {
+    if [ -n "${SRM_TERMUX_PREFIX-}" ]; then
+        case "${SRM_TERMUX_PREFIX}" in
+            /tmp/safe-rm-swap.*) ;;
+            *)
+                return 1
+                ;;
+        esac
+        case "${SRM_TERMUX_PREFIX}" in
+            *..*) return 1 ;;
+        esac
+        if [ -n "${HOME-}" ] && [ "${SRM_TERMUX_PREFIX}" = "${HOME}" ]; then
+            return 1
+        fi
+        [ -d "${SRM_TERMUX_PREFIX}" ] || return 1
+        printf '%s\n' "${SRM_TERMUX_PREFIX}"
+        return 0
+    fi
+    _hit=0
+    if [ -n "${TERMUX_VERSION-}" ]; then
+        _hit=1
+    fi
+    if [ "$_hit" -eq 0 ] && [ -n "${PREFIX-}" ]; then
+        case "${PREFIX}" in
+            /data/*/com.termux/files/usr|/data/*/com.termux/files/usr/)
+                _hit=1
+                ;;
+        esac
+    fi
+    if [ "$_hit" -eq 0 ]; then
+        _ua=$(uname -a 2>/dev/null || true)
+        case "$_ua" in
+            *[Aa]ndroid*) _hit=1 ;;
+        esac
+        unset _ua
+    fi
+    if [ "$_hit" -eq 0 ]; then
+        unset _hit
+        return 1
+    fi
+    unset _hit
+    _tp=${PREFIX:-/data/data/com.termux/files/usr}
+    case "${_tp}" in
+        */) _tp=${_tp%/} ;;
+    esac
+    case "${_tp}" in
+        *..*)
+            unset _tp
+            return 1
+            ;;
+    esac
+    case "${_tp}" in
+        /data/*/com.termux/files/usr) ;;
+        *)
+            unset _tp
+            return 1
+            ;;
+    esac
+    if [ ! -d "${_tp}/bin" ]; then
+        unset _tp
+        return 1
+    fi
+    printf '%s\n' "${_tp}"
+    unset _tp
+    return 0
+}
+
+# Termux, Git Bash, and Windows cmd do not refresh /usr/bin.
+# Termux refreshes $PREFIX/bin when origin-rm is already there.
 srm_swap_host_skipped() {
     if [ -n "${TERMUX_VERSION-}" ] || [ -n "${MSYSTEM-}" ]; then
         return 0
@@ -3686,6 +3788,22 @@ srm_swap_host_skipped() {
 # Root place only. Does not move rm. When origin-rm is already there, the
 # command people type is the guard in that directory, not GLOBAL_BIN.
 srm_place_refreshes_guard() {
+    _tprefix=$(srm_termux_prefix 2>/dev/null || true)
+    if [ -n "${_tprefix}" ]; then
+        if [ -e "${_tprefix}/bin/origin-rm" ]; then
+            _pg_src=$(srm_script_source 2>/dev/null || true)
+            if [ -z "${_pg_src}" ] || [ ! -f "${_pg_src}" ]; then
+                _pg_src=${INSTALL_PATH-}
+            fi
+            if [ -n "${_pg_src}" ] && [ -f "${_pg_src}" ]; then
+                srm_install_guard "${_pg_src}" "${_tprefix}/bin/safe-rm"
+            fi
+            unset _pg_src
+        fi
+        unset _tprefix
+        return 0
+    fi
+    unset _tprefix
     if srm_swap_host_skipped; then
         return 0
     fi
@@ -3715,6 +3833,7 @@ srm_place_refreshes_guard() {
 # Symlink text when $1 is a link whose target name is busybox. Empty otherwise.
 srm_busybox_link_text() {
     _bl=${1-}
+    _want=${2:-busybox}
     [ -n "$_bl" ] || return 1
     [ -L "$_bl" ] || return 1
     _bt=$(readlink -- "$_bl" 2>/dev/null || readlink "$_bl" 2>/dev/null || true)
@@ -3730,12 +3849,12 @@ srm_busybox_link_text() {
             ;;
     esac
     _bb=${_bt##*/}
-    if [ "$_bb" != "busybox" ]; then
-        unset _bl _bt _bb
+    if [ "$_bb" != "${_want}" ]; then
+        unset _bl _bt _bb _want
         return 1
     fi
     printf '%s\n' "$_bt"
-    unset _bl _bt _bb
+    unset _bl _bt _bb _want
     return 0
 }
 
@@ -3760,9 +3879,17 @@ srm_install_busybox_origin() {
     _bo_origin=${1-}
     _bo_text=${2-}
     _bo_abs=${3-}
+    _bo_kind=${4:-busybox}
     _bo_dir=${_bo_origin%/*}
     _bo_tmp=$(mktemp "${_bo_dir}/origin-rm.XXXXXX") || out_die "Could not stage origin-rm. Nothing else was changed."
-    if ! printf '%s\n' '#!/bin/sh' '# safe-rm busybox-origin' "# link: ${_bo_text}" "exec '${_bo_abs}' rm \"\$@\"" > "${_bo_tmp}"; then
+    if [ "${_bo_kind}" = "busybox" ]; then
+        _bo_mark='safe-rm busybox-origin'
+        _bo_msg="Kept BusyBox rm as ${_bo_origin}"
+    else
+        _bo_mark='safe-rm applet-origin'
+        _bo_msg="Kept ${_bo_kind} rm as ${_bo_origin}"
+    fi
+    if ! printf '%s\n' '#!/bin/sh' "# ${_bo_mark}" "# link: ${_bo_text}" "exec '${_bo_abs}' rm \"\$@\"" > "${_bo_tmp}"; then
         unlink -- "$_bo_tmp" 2>/dev/null || unlink "$_bo_tmp" 2>/dev/null || true
         out_die "Could not write ${_bo_origin}. Nothing else was changed."
     fi
@@ -3771,8 +3898,8 @@ srm_install_busybox_origin() {
         unlink -- "$_bo_tmp" 2>/dev/null || unlink "$_bo_tmp" 2>/dev/null || true
         out_die "Could not write ${_bo_origin}. Nothing else was changed."
     fi
-    out_info "Kept BusyBox rm as ${_bo_origin}"
-    unset _bo_origin _bo_text _bo_abs _bo_dir _bo_tmp
+    out_info "${_bo_msg}"
+    unset _bo_origin _bo_text _bo_abs _bo_kind _bo_dir _bo_tmp _bo_mark _bo_msg
     return 0
 }
 
@@ -3785,6 +3912,10 @@ srm_origin_is_busybox() {
         return 1
     fi
     if grep -q 'safe-rm busybox-origin' "$_ob" 2>/dev/null; then
+        unset _ob
+        return 0
+    fi
+    if grep -q 'safe-rm applet-origin' "$_ob" 2>/dev/null; then
         unset _ob
         return 0
     fi
@@ -3814,16 +3945,25 @@ srm_swap_one() {
         out_info "Moved ${_rm} to ${_origin}"
     else
         _bb_text=$(srm_busybox_link_text "$_rm" 2>/dev/null || true)
+        _bb_kind=busybox
+        if [ -z "${_bb_text}" ]; then
+            _bb_text=$(srm_busybox_link_text "$_rm" toybox 2>/dev/null || true)
+            _bb_kind=toybox
+        fi
+        if [ -z "${_bb_text}" ]; then
+            _bb_text=$(srm_busybox_link_text "$_rm" coreutils 2>/dev/null || true)
+            _bb_kind=coreutils
+        fi
         if [ -n "${_bb_text}" ]; then
             _bb_abs=$(srm_busybox_abs "$_rm" "$_bb_text")
             if [ ! -f "$_bb_abs" ]; then
-                out_die "BusyBox rm at ${_rm} does not point at a usable ${_bb_abs}. Nothing was moved."
+                out_die "${_bb_kind} rm at ${_rm} does not point at a usable ${_bb_abs}. Nothing was moved."
             fi
-            srm_install_busybox_origin "$_origin" "$_bb_text" "$_bb_abs"
-            unset _bb_text _bb_abs
+            srm_install_busybox_origin "$_origin" "$_bb_text" "$_bb_abs" "${_bb_kind}"
+            unset _bb_text _bb_abs _bb_kind
         elif [ ! -e "$_rm" ] || [ -L "$_rm" ]; then
             out_info "No original rm at ${_rm}."
-            unset _dir _src _rm _origin _guard _bb_text _bb_abs
+            unset _dir _src _rm _origin _guard _bb_text _bb_abs _bb_kind
             return 1
         else
             out_die "No original rm binary in ${_dir}. Nothing was moved."
@@ -3890,7 +4030,7 @@ srm_restore_one() {
         _ol=$(grep '^# link: ' "$_origin" 2>/dev/null | head -n 1)
         _ol=${_ol#"# link: "}
         if [ -z "${_ol}" ]; then
-            out_die "Could not restore the BusyBox link at ${_rm}. Nothing was moved."
+            out_die "Could not restore the original link at ${_rm}. Nothing was moved."
         fi
         if [ -L "$_rm" ]; then
             srm_drop_symlink "$_rm" || out_die "Could not remove the rm link in ${_dir}."
@@ -3992,6 +4132,18 @@ srm_cmd_setup() {
         unset _src
         return 0
     fi
+    _tprefix=$(srm_termux_prefix 2>/dev/null || true)
+    if [ -n "${_tprefix}" ]; then
+        _tbin="${_tprefix}/bin"
+        if [ ! -d "${_tbin}" ]; then
+            out_die "Termux rm is ${_tbin}/rm. That directory is missing. Nothing was moved."
+        fi
+        if ! srm_swap_one "${_tbin}" "$_src"; then
+            out_die "No original rm at ${_tbin}/rm. Nothing was moved."
+        fi
+        unset _tprefix _tbin _src
+        return 0
+    fi
     if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
         out_die "Setup checks /usr/bin/rm and /bin/rm and may move the system rm. That needs an admin login. Nothing was moved."
     fi
@@ -4019,6 +4171,14 @@ srm_cmd_restore() {
             out_die "No origin-rm to restore. Nothing was moved."
         fi
         unset _rdid
+        return 0
+    fi
+    _tprefix=$(srm_termux_prefix 2>/dev/null || true)
+    if [ -n "${_tprefix}" ]; then
+        if ! srm_restore_one "${_tprefix}/bin"; then
+            out_die "No origin-rm at ${_tprefix}/bin/origin-rm. Nothing was moved."
+        fi
+        unset _tprefix
         return 0
     fi
     if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then

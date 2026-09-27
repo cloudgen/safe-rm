@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.8] - 2026-09-27
+
+### Fixed
+
+- On Termux, `which rm` is `$PREFIX/bin/rm` (`/data/data/com.termux/files/usr/bin/rm`). `safe-rm setup` was refusing that host with `That needs an admin login` because it only looked at `/usr/bin/rm` and `/bin/rm`. This login now moves `$PREFIX/bin/rm` and does not call `sudo`. A symlink to `coreutils`, `toybox`, or `busybox` is not renamed; `$PREFIX/bin/origin-rm` runs that program's `rm`
+
 ## [1.0.7] - 2026-09-27
 
 ### Fixed

@@ -1,6 +1,6 @@
 **file**: docs/requirements/requirement-domain-safe-rm.md
 **id**: RQ-DOMAIN-SAFE-RM
-**Status**: Active (Version 1.2.5)
+**Status**: Active (Version 1.2.6)
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -14,7 +14,7 @@ It also exists because an agent once ran a recursive remove of the login home af
 
 ### 1.1 Human-facing
 
-**In one sentence:** After setup, the remover is `/usr/bin/origin-rm` or `/bin/origin-rm` (the original binary that was moved); `/usr/bin/rm` and `/bin/rm` are this guard and accept the same switches as that remover, including `-rf`; `rm -rf` of any account home is refused, a folder inside any account home may be removed, and `--dry-run` does not call the remover.
+**In one sentence:** After setup, the remover is `/usr/bin/origin-rm` or `/bin/origin-rm` (the original binary that was moved); on Termux the remover is `$PREFIX/bin/origin-rm` and `which rm` is `$PREFIX/bin/rm`; `/usr/bin/rm` and `/bin/rm` are this guard and accept the same switches as that remover, including `-rf`; `rm -rf` of any account home is refused, a folder inside any account home may be removed, and `--dry-run` does not call the remover.
 
 | Box | Meaning | Example |
 |-----|---------|---------|
@@ -49,13 +49,13 @@ Two different files. Do not mix them.
 
 | Word in this file | Path | What it is |
 |-------------------|------|------------|
-| **the remover** | `/usr/bin/origin-rm`, or `/bin/origin-rm` when the original binary was moved there | The original `rm` binary after the swap. **This is what deletes.** When this requirement says the real remove, it means one of these two paths. |
-| **the command people type** | `/usr/bin/rm` and `/bin/rm` after setup | A symlink to this program. It checks the path. It does not delete. |
+| **the remover** | `/usr/bin/origin-rm`, or `/bin/origin-rm` when the original binary was moved there. On Termux, `$PREFIX/bin/origin-rm` | The original `rm` after the swap. **This is what deletes.** |
+| **the command people type** | `/usr/bin/rm` and `/bin/rm` after setup. On Termux, `$PREFIX/bin/rm` | A symlink to this program. It checks the path. It does not delete. |
 
-1. The real delete **MUST** exec `/usr/bin/origin-rm` when that file is executable. Otherwise it **MUST** exec `/bin/origin-rm` when that file is executable.  
-2. The real delete **MUST NOT** exec `/usr/bin/rm` or `/bin/rm`. After setup those paths are this program, and calling them would run the guard again.  
+1. On a Linux host the real delete **MUST** exec `/usr/bin/origin-rm` when that file is executable. Otherwise it **MUST** exec `/bin/origin-rm` when that file is executable. On Termux the real delete **MUST** exec `$PREFIX/bin/origin-rm` and **MUST NOT** exec `/usr/bin/origin-rm`, `/bin/origin-rm`, `/usr/bin/rm`, or `/bin/rm`.  
+2. The real delete **MUST NOT** exec `/usr/bin/rm` or `/bin/rm`. After setup those paths are this program, and calling them would run the guard again. On Termux it **MUST NOT** exec `$PREFIX/bin/rm` after setup. That path is this program.  
 3. When `/bin/rm` and `/usr/bin/rm` were the same file, one `origin-rm` exists. Calling either origin path that names that file is the same remover.  
-4. `--dry-run` **MUST NOT** exec `/usr/bin/origin-rm` or `/bin/origin-rm`.
+4. `--dry-run` **MUST NOT** exec `/usr/bin/origin-rm`, `/bin/origin-rm`, or `$PREFIX/bin/origin-rm`.
 
 ### 2.0.1 Before swapped and after swapped
 
@@ -85,13 +85,30 @@ Alpine keeps those two paths apart. The system `rm` is BusyBox. The command peop
 
 `restore` on that host puts the BusyBox symlink back at `/bin/rm` and removes `/bin/origin-rm` and `/bin/safe-rm`. A host where `/bin` and `/usr/bin` are the same directory stays on the §2.0.1 table. Proof: `TP-SRM-29`.
 
+### 2.0.3 Termux: `which rm` is `$PREFIX/bin/rm`
+
+Termux does not keep `rm` at `/usr/bin/rm` or `/bin/rm`. `which rm` prints `$PREFIX/bin/rm`. On the reported phone that path is `/data/data/com.termux/files/usr/bin/rm`. `$PREFIX` is `/data/data/com.termux/files/usr` unless `PREFIX` is another directory matching `/data/*/com.termux/files/usr`. This login owns that directory. Setup **MUST** run as this login. It **MUST NOT** call `sudo`. It **MUST NOT** stop with `That needs an admin login`. It **MUST NOT** move `/usr/bin/rm` or `/bin/rm`.
+
+Detect Termux when `TERMUX_VERSION` is set, or `PREFIX` matches `/data/*/com.termux/files/usr`, or `uname -a` contains `Android`, and `$PREFIX/bin` is a directory. The default `PREFIX` when `TERMUX_VERSION` is set and `PREFIX` is empty is `/data/data/com.termux/files/usr`. Tests pass `SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*` and do not set `TERMUX_VERSION`. A value outside that scratch directory is not Termux. Setup then stays on the Linux admin rule.
+
+| Path | Before swapped | After swapped |
+|------|----------------|---------------|
+| `$PREFIX/bin/rm` | The Termux `rm`. A regular file, or a symlink whose target name is `coreutils`, `toybox`, or `busybox`. `which rm` prints this path | Symlink to `$PREFIX/bin/safe-rm`. This is the guard |
+| `$PREFIX/bin/origin-rm` | Absent | The moved regular file, or a small program that runs `coreutils rm`, `toybox rm`, or `busybox rm`. **This is the remover.** It is not that symlink renamed |
+| `$PREFIX/bin/safe-rm` | Absent | This program, mode `0755` |
+| `/usr/bin/rm`, `/bin/rm` | Not the Termux `rm` | Stay untouched |
+
+A symlink to `coreutils`, `toybox`, or `busybox` **MUST NOT** be renamed to `origin-rm`. Those programs choose the applet from the file name, so a file named `origin-rm` would not remove anything. Write `origin-rm` so it runs that program's `rm`, then point `$PREFIX/bin/rm` at this program. `restore` puts that symlink back and removes `$PREFIX/bin/origin-rm` and `$PREFIX/bin/safe-rm`.
+
+A missing `$PREFIX/bin/rm` moves nothing. A second setup finds `origin-rm` already there, does not move it again, and replaces `$PREFIX/bin/safe-rm` when its bytes are not this program. A later place on Termux does that same replace when `origin-rm` is already there. It does not call `sudo` and it does not write `/usr/bin/safe-rm`. Git Bash and Windows cmd still do not run this setup. Proof: `TP-SRM-30`.
+
 ### 2.1 Specialized CLI subcommands
 
 | Verb | Privilege | Meaning |
 |------|-----------|---------|
-| `rm` | The person who typed `rm`. The check itself does not switch account | Check every operand path. Remove only when every path is allowed and `--dry-run` is off, by exec of `/usr/bin/origin-rm` or `/bin/origin-rm` (§2.0) |
-| `restore` | Admin privilege on a Linux host that owns the system `rm`. Unused on Termux, Git Bash, and Windows cmd | Put `origin-rm` back as `rm` and remove the `safe-rm` link. The 2023 token `-restore` is the same verb when this program is the `rm` people type |
-| protected-rm setup | Admin login only. Who: `requirement-actor-role-subject.md`. Runs when `rm` is still the raw binary, and again when the guard file is already there | Check `/usr/bin/origin-rm` and `/bin/origin-rm`. If the original binary is already there, do not move `rm` again, and replace the existing `safe-rm` with this program. Otherwise move `rm` to that path and point `rm` at this program |
+| `rm` | The person who typed `rm`. The check itself does not switch account | Check every operand path. Remove only when every path is allowed and `--dry-run` is off, by exec of the remover in §2.0 |
+| `restore` | Admin privilege on a Linux host that owns the system `rm`. On Termux, this login, against `$PREFIX/bin` only. Unused on Git Bash and Windows cmd | Put `origin-rm` back as `rm` and remove the `safe-rm` link. The 2023 token `-restore` is the same verb when this program is the `rm` people type |
+| protected-rm setup | Admin login on a Linux host. On Termux, this login, against `$PREFIX/bin/rm` only, with no `sudo`. Who: `requirement-actor-role-subject.md`. Runs when `rm` is still the raw binary, and again when the guard file is already there | On Linux, check `/usr/bin/origin-rm` and `/bin/origin-rm`. On Termux, check `$PREFIX/bin/origin-rm`. If the remover is already there, do not move `rm` again, and replace the existing `safe-rm` with this program. Otherwise move `rm` to that path and point `rm` at this program |
 
 Interactive empty argv opens the numbered menu. It is not `rm`. A pipe, quiet, or json run with no arguments stays install-ensure of this CLI. It does not perform the first move of `rm`. When that place runs as root and `origin-rm` is already present, it replaces the existing guard with this program, so the `rm` people type runs these bytes. It is not a raw `rm`.
 
@@ -177,25 +194,25 @@ A refused dry-run uses `"ok":"false"`, `"removed":"false"`, `"verdict":"refuse"`
 
 #### Protected rm (2023 setup, kept)
 
-`rm -rf` on the raw system binary is the danger this product exists to close. Setup does all of the following, and it is idempotent. The disk after a finished setup **MUST** match §2.0.1 After swapped.
+`rm -rf` on the raw system binary is the danger this product exists to close. Setup does all of the following, and it is idempotent. The disk after a finished setup **MUST** match §2.0.1 After swapped. On Termux it **MUST** match §2.0.3 After swapped, and the steps below apply to `$PREFIX/bin` instead of `/usr/bin` and `/bin`.
 
 1. Check **both** `/usr/bin/rm` and `/bin/rm`. A directory with no `rm` is skipped. Setup **MUST NOT** stop at `/usr/bin` when `/bin/rm` is the `rm` people type, and **MUST NOT** stop at `/bin` when `/usr/bin/rm` is that file. When the two paths are the same file, one move covers both. When neither path has an `rm` that can be swapped, stop and move nothing.
 2. When `rm` in that directory is a regular file and `origin-rm` is absent, move `rm` to `origin-rm`.
-3. When `rm` is a symlink to BusyBox, do not rename that symlink to `origin-rm`. BusyBox chooses its applet from the file name, so a file named `origin-rm` would not remove anything. Write `origin-rm` so it runs `busybox rm`, then point `rm` at this program. `restore` puts that BusyBox symlink back and removes that `origin-rm`.
+3. When `rm` is a symlink to BusyBox, do not rename that symlink to `origin-rm`. BusyBox chooses its applet from the file name, so a file named `origin-rm` would not remove anything. Write `origin-rm` so it runs `busybox rm`, then point `rm` at this program. `restore` puts that BusyBox symlink back and removes that `origin-rm`. On Termux the same rule covers a symlink whose target name is `coreutils`, `toybox`, or `busybox`: `origin-rm` runs that program's `rm`.
 4. Copy this program to `safe-rm` in the directory that was swapped, mode `0755`. When that file is absent, this is the first copy. When that file is already present and its bytes differ, replace it with this program. Do not move `origin-rm` to do that. Do not create `rm` in a directory that had no `rm`.
 5. Point `rm` at `safe-rm`. If `rm` is missing after the move, or is a symlink that does not name this program, replace that link.
 
-A root `self-install` (and the same place from a pipe, quiet, or json run) does not perform that first move. When `origin-rm` is already present, that place replaces `/usr/bin/safe-rm`, and `/bin/safe-rm` when `/bin` is a different directory, with this program. A non-root place does not write those paths. Termux, Git Bash, and Windows cmd do not replace them and do not call `sudo`.
+A root `self-install` (and the same place from a pipe, quiet, or json run) does not perform that first move. When `origin-rm` is already present, that place replaces `/usr/bin/safe-rm`, and `/bin/safe-rm` when `/bin` is a different directory, with this program. A non-root place does not write those paths. On Termux, when `$PREFIX/bin/origin-rm` is already present, that place replaces `$PREFIX/bin/safe-rm` and does not write `/usr/bin/safe-rm`. Git Bash and Windows cmd do not replace a host guard and do not call `sudo`.
 
 The lasting result is: `/usr/bin/rm` and `/bin/rm` are this guard, and the remover is `/usr/bin/origin-rm` or `/bin/origin-rm`. Setup **MUST NOT** point `/usr/bin/rm` or `/bin/rm` back at `origin-rm`. The 2023 script did that in the step after the move, and the later link to `safe-rm` then never ran. That order is a defect. Do not copy it.
 
 `restore` and `-restore`: when `origin-rm` exists, remove the `rm` symlink, move `origin-rm` back to `rm`, and remove `safe-rm`. Say that the original binary is restored, through `out_*`.
 
-On Termux, Git Bash, and Windows cmd this setup does not run and does not call `sudo`. The guard still refuses a home directory when the program is invoked by name.
+On Termux this setup runs as this login against `$PREFIX/bin/rm` and does not call `sudo`. On Git Bash and Windows cmd this setup does not run and does not call `sudo`. The guard still refuses a home directory when the program is invoked by name.
 
 #### Real remove
 
-When `--dry-run` is off and every path is allowed, exec the remover from §2.0 once: `/usr/bin/origin-rm` if that file is executable, otherwise `/bin/origin-rm`. Pass every forwarded switch, in order, then `--`, then every allowed path. One command is one exec, so a switch whose meaning depends on the whole operand list (such as `-I`) matches the remover. **MUST NOT** exec `/usr/bin/rm` or `/bin/rm`. Those paths are this guard after setup. **MUST NOT** exec the remover for a refused path. **MUST NOT** exec it once per path.
+When `--dry-run` is off and every path is allowed, exec the remover from §2.0 once: on Termux, `$PREFIX/bin/origin-rm`; otherwise `/usr/bin/origin-rm` if that file is executable, otherwise `/bin/origin-rm`. Pass every forwarded switch, in order, then `--`, then every allowed path. One command is one exec, so a switch whose meaning depends on the whole operand list (such as `-I`) matches the remover. **MUST NOT** exec `/usr/bin/rm`, `/bin/rm`, or, on Termux, `$PREFIX/bin/rm`. Those paths are this guard after setup. **MUST NOT** exec the remover for a refused path. **MUST NOT** exec it once per path.
 
 #### Non-goals
 
@@ -256,6 +273,7 @@ JSON `about` includes `"remove_guard":"on"` and `"dry_run_switch":"--dry-run"`.
 | `TP-SRM-26` | A second setup, after the fixture guard was replaced with a stub, writes this program back, does not move `origin-rm`, and the command named `rm` accepts `rm -rf --dry-run` of an allowed folder. The folder remains |
 | `TP-SRM-27` | `help`/`--help`, `version`/`--version`, and the other lifecycle pairs are one command on `safe-rm`. On the command named `rm`, `--version` prints this program's version and does not remove. A bare word, including a link named `version`, is a path under `--dry-run` and stays in place. A `--` switch and a path together remove nothing |
 | `TP-SRM-29` | Two fixture directories under `/tmp/safe-rm-swap.*`. An empty first directory does not stop setup. A regular `rm` in the second directory is moved. A BusyBox symlink in the second directory stays the BusyBox file; `origin-rm` there runs `busybox rm`, and `restore` puts the symlink back. Nothing in the fixture is executed. Neither path present moves nothing |
+| `TP-SRM-30` | Termux layout only. `SRM_TERMUX_PREFIX` is `/tmp/safe-rm-swap.*` and stands in for `/data/data/com.termux/files/usr`. Setup moves `$PREFIX/bin/rm` to `$PREFIX/bin/origin-rm` and points `rm` at `safe-rm`. A symlink to `toybox` or `coreutils` is not renamed; `origin-rm` runs that program's `rm`, and `restore` puts the symlink back. An empty `bin` moves nothing and does not say an admin login is required. A prefix outside `/tmp/safe-rm-swap.*` moves nothing. `/usr/bin/rm` stays. Nothing in the fixture is executed |
 | `TP-SRM-28` | `help` says a local `install` copies this file into `/usr/local/bin/` or `${HOME}/.local/bin/` and does not download |
 | `TP-SRM-18` | `about` includes `Remove guard:` |
 | `TP-SRM-19` | `--quiet` still prints the refusal |
@@ -269,12 +287,12 @@ Runner: `tests/run_dry_run.sh`. It does not point `HOME` at a scratch directory.
 | Product | `safe-rm` |
 | Ship unit | `src/safe-rm` |
 | Companion | `src/safe-rm.sha256` |
-| Version | `1.0.7` |
+| Version | `1.0.8` |
 | Prefix | `srm_` |
 | Bootstrap origin | `selfmanaged` Type 0 architecture kept in full (self-install, self-update, self-uninstall, version, about, help, numbered menu, `out_*`). The 2023 safe-rm setup is kept as well: `origin-rm`, `rm` → this program, `restore` |
 | Channel default | `REPO_USER=cloudgen`, `REPO_NAME=safe-rm`, `SCRIPT_RELPATH=src/safe-rm` |
 | Dispatcher anchors | Basename `rm` routes to `srm_cmd_rm` before the menu. `safe-rm rm` is the same remove. `--dry-run` is not forwarded |
-| Honesty | **Implemented** for `setup` / `restore`, for replacing an already-swapped guard on a later setup and on a root place, and for remover switches on the command named `rm` (`-rf` and any other switch, one exec of the remover). Tests pass `SRM_SWAP_ROOT=/tmp/safe-rm-swap.*` so they never touch `/usr/bin` or `/bin`. A non-admin setup without that variable refuses and moves nothing. The real delete still execs `/usr/bin/origin-rm` or `/bin/origin-rm` when that file exists (§2.0). Dry-run never execs it. The suite proves switch acceptance with `--dry-run` and does not exec the remover |
+| Honesty | **Implemented** for `setup` / `restore`, for replacing an already-swapped guard on a later setup and on a root place, for Termux setup against `$PREFIX/bin` with no `sudo`, and for remover switches on the command named `rm` (`-rf` and any other switch, one exec of the remover). Tests pass `SRM_SWAP_ROOT=/tmp/safe-rm-swap.*` or `SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*` so they never touch `/usr/bin` or `/bin`. A non-admin setup without those variables refuses and moves nothing. The real delete execs the remover in §2.0. Dry-run never execs it. The suite proves switch acceptance with `--dry-run` and does not exec the remover |
 
 ---
 
@@ -299,7 +317,7 @@ Runner: `tests/run_dry_run.sh`. It does not point `HOME` at a scratch directory.
 6. Print the refusal with `echo` or `printf` instead of `out_*`.
 7. Allow an account home directory itself, including the login home.
 8. Refuse a named folder strictly inside an account home, such as a cache directory, unless that folder is itself an account home.
-9. Exec `/usr/bin/rm` or `/bin/rm` for the real delete. The real delete execs `/usr/bin/origin-rm` or `/bin/origin-rm` (§2.0).
+9. Exec `/usr/bin/rm` or `/bin/rm` for the real delete. On Termux, exec `$PREFIX/bin/rm` for the real delete. The real delete execs the remover in §2.0.
 10. Reject a remover switch, including a clustered short switch such as `-rf`, with `safe-rm help` or `Unknown command`.
 11. Require a second `rm` verb when the command name is already `rm`.
 12. Exec the remover once per path. One allowed command is one exec of every allowed path.
@@ -315,11 +333,12 @@ Runner: `tests/run_dry_run.sh`. It does not point `HOME` at a scratch directory.
 
 This product may run on Termux, Git Bash, Windows cmd, or the same class (this login only).
 
-**This requirement:** On Termux, Git Bash, and Windows cmd the protected-rm swap does not run and does not call `sudo`. The home-directory refusal still applies when this program is invoked by name. On a Linux host the swap is the setup: it moves the system `rm` to `origin-rm` and points `rm` at this program. That is the one admin step. It is not a general admin shell, and it does not create a dedicated account.
+**This requirement:** On Termux, `which rm` is `$PREFIX/bin/rm` (`/data/data/com.termux/files/usr/bin/rm` on the reported phone). This login runs that swap and does not call `sudo`. The home-directory refusal still applies when this program is invoked by name. On Git Bash and Windows cmd the swap does not run and does not call `sudo`. On a Linux host the swap is the one admin step: it moves the system `rm` to `origin-rm` and points `rm` at this program. It is not a general admin shell, and it does not create a dedicated account.
 
 | MUST | MUST NOT |
 |------|----------|
-| Refuse any account home directory the same way on this login | Run the swap, or call `sudo`, when Termux, Git Bash, or Windows cmd is detected |
+| On Termux, move `$PREFIX/bin/rm` as this login and leave `/usr/bin/rm` and `/bin/rm` untouched | Call `sudo` on Termux, or answer setup with `That needs an admin login` when `$PREFIX/bin/rm` is the `rm` people type |
+| Refuse any account home directory the same way on this login | Run the swap, or call `sudo`, when Git Bash or Windows cmd is detected |
 | Keep `--dry-run` as a local check | Wrap `apt` or `pkg` from this verb |
 
 ---
@@ -350,6 +369,7 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | 2026-09-27 | 1.2.3: on the command named `rm`, a bare lifecycle word is a path again. `rm version` removes a link named `version`. `rm --version` stays this program's version. The same split applies to every other command word. `safe-rm version` stays the command. |
 | 2026-09-27 | 1.2.4: setup checks `/usr/bin/rm` and `/bin/rm`. A missing `rm` in one directory does not cancel the other. A BusyBox symlink is not renamed to `origin-rm`; that file runs `busybox rm`. |
 | 2026-09-27 | 1.2.5: Alpine is the different-path host. `/bin/rm` is BusyBox and `/usr/bin/rm` may be absent. §2.0.2 is that before/after table. Setup must not stop at `/usr/bin` on that host. |
+| 2026-09-27 | 1.2.6: Termux `which rm` is `$PREFIX/bin/rm` (`/data/data/com.termux/files/usr/bin/rm`). §2.0.3 is that before/after table. This login runs setup there. Setup does not call `sudo` and does not require an admin login. |
 
 **Last Updated**: 2026-09-27
 **Owner**: safe-rm project maintainers
