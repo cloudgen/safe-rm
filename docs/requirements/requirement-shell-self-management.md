@@ -1,0 +1,252 @@
+**file**: docs/requirements/requirement-shell-self-management.md  
+**Status**: Active (Version 1.0.1)  
+**Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
+
+## 1. Purpose
+
+This requirement is the **project Single Source of Truth** for **CLI self-management** of the selfmanaged POSIX shell tool: inspecting, upgrading, and removing its own installed binary (and related install artifacts) safely—especially for tools installed via one-command online install (`curl | sh`)—without requiring a separate package-manager workflow for routine updates.
+
+It defines lifecycle capabilities and safety rules for this shell project’s self-management commands.
+
+**Scope:** Lifecycle capabilities and safety rules for `version-check`, `self-update`, `self-uninstall`, and `about` (plus reuse of install primitives).  
+**Out of scope (cited, not re-owned):** Full CLI dispatcher catalog (`requirement-shell-cli-interface.md`); pure re-run matrix (`requirement-shell-idempotency.md`); full online-install algorithm depth; Type 1 host bootstrap / Type 2 system-user app ops.
+
+**Must not confuse with:** OS package managers, domain product start/stop ops, dedicated system-user policy, or non-CLI “self-management.”
+
+### 1.1 Human-facing
+
+**In one sentence:** After the program is on disk, **you** can check for a newer file, replace it from the same internet channel, or remove it — without an OS package manager — and uninstall **will not delete** unless you confirm or pass `--force`.
+
+| Box | Meaning | Example |
+|-----|---------|---------|
+| You / this login | The person who installed the CLI | `selfmanaged version-check` · `selfmanaged self-update` |
+| The other role | First-time empty argv (install-ensure) | `requirement-shell-cli-zero-arguments.md` |
+| Not this file | apt/apk, host packages, dedicated-account app start/stop | Out of scope for this product |
+
+| Includes | Excludes |
+|----------|----------|
+| `version-check`, `self-update`, `self-uninstall`, `about` | Empty-argv first install (peer); checksum math (peer) |
+| Uninstall refuse without `--force` off a terminal / in JSON | Pretending the user cancelled when confirm was required |
+
+| Surface | What you open | What for |
+|---------|---------------|----------|
+| `selfmanaged about` | Command | Installed? where? |
+| `selfmanaged self-uninstall` | Command | Remove with confirm or `--force` |
+
+| You do… | What it means | What you type |
+|---------|---------------|---------------|
+| See if a newer file exists | Compare local version to the channel. Do not mutate the install. | `selfmanaged version-check` · `selfmanaged --json version-check` |
+| Update | If the channel is newer, replace the installed file. If already latest, say so. | `selfmanaged self-update` |
+| Remove | JSON without `--force` **must fail** with “confirm required,” not fake success. | `selfmanaged --json self-uninstall` · `selfmanaged --force self-uninstall` |
+
+---
+
+## 2. Core Rules / Requirements (Mandatory)
+
+### 2.1 Command surface (self-management)
+
+User-facing names **MUST** be stable unless this requirement is explicitly revised:
+
+| Command | Purpose | Typical flags |
+|---------|---------|----------------|
+| `version-check` | Compare **local** version with **remote/latest** | `--quiet`, `--json` |
+| `self-update` | Update the installed CLI to a newer trusted release | `--force` (reinstall / allow policy-gated non-default paths) |
+| `self-uninstall` | Remove the managed CLI binary and clean PATH **only when safe** | `--force` (skip interactive confirm when designed) |
+| `about` | Diagnostics and version / install context | `--quiet`, `--json` |
+
+Shell implementation **SHOULD** use `inst_*` helpers for install/lifecycle and `app_*` for help/about/dispatch; **MUST NOT** bury binary lifecycle under domain product prefixes without a specialized requirement.
+
+Related Type 0 commands (`version`, `self-install` / `install` alias, `help`) are owned by `requirement-shell-cli-interface.md` and `requirement-shell-cli-self-install.md` but **MUST** stay consistent with this lifecycle model.
+
+### 2.2 Self-update (normative)
+
+| Requirement | Meaning |
+|-------------|---------|
+| Trusted source | Fetch only from the configured official channel (project Config / env — not ad hoc URLs in random helpers) |
+| Semver compare | Prefer upgrade when remote is **newer**; **MUST NOT** downgrade without explicit force policy |
+| Integrity | Checksum or digest verification before replace when downloading update artifacts |
+| Atomic install | Download to temp → verify → atomic move/replace of the installed binary |
+| Install type preserved | Per-user vs global/system-wide placement remains consistent with invoker privilege / install policy |
+| Reuse install SSOT | Self-update **MUST** reuse the same install orchestrator primitives as first-time install (no second ad hoc download/replace path) |
+| Output SSOT | All messages via centralized `out_*` |
+
+### 2.3 Version check (normative)
+
+| Requirement | Meaning |
+|-------------|---------|
+| Dual report | Human mode shows local and remote/latest |
+| Semver | Same comparison helper family as update (e.g. pure POSIX `ver_gt`) |
+| Fail loud | Unset/unreachable channel **MUST NOT** be reported as “already latest” |
+| Machine mode | `--json` emits structured result via output SSOT |
+
+### 2.4 Self-uninstall (normative)
+
+| Requirement | Meaning |
+|-------------|---------|
+| Locate binary | Resolve path from install type / Config (`GLOBAL_BIN` / `USER_BIN` / privilege), not scattered absolute path literals in business logic |
+| Remove binary | Delete only the managed CLI file(s) this tool owns |
+| PATH cleanup | Edit shell config PATH entries **only if** the managed bin directory is empty after removal (or equivalent safe policy) |
+| Confirmation | Interactive confirm unless `--force` / non-interactive policy applies |
+| No over-delete | **MUST NOT** wipe unrelated user data or arbitrary home trees |
+| Idempotent absence | Already uninstalled → success no-op (see idempotency requirement) |
+
+### 2.5 About / diagnostics (normative)
+
+| Requirement | Meaning |
+|-------------|---------|
+| Context | Version, install presence/paths, execution user, shell/TTY hints as designed |
+| Modes | Respect `--quiet` / `--json` |
+| Guidance | When not installed, may show recommended install one-liner using configured channel patterns (no secrets) |
+
+### 2.6 Privilege model (default for self-management)
+
+| Type | Self-management default |
+|------|-------------------------|
+| **Type 0 (invoker)** | **Yes** — `version-check`, `about`, `self-update`, `self-uninstall` for invoker-owned CLI install |
+| **Type 1 / Type 2** | **Not required** for base CLI self-management; do not invent a system-user requirement solely for binary lifecycle |
+
+Root may write global install path; non-root uses user path. Do not assume root for every self-management command.
+
+### 2.7 Sacred safety rules
+
+| Rule | Detail |
+|------|--------|
+| **No silent downgrade** | Without explicit force policy, refuse remote older than local |
+| **No skip integrity** | Digest/checksum path required for downloaded update artifacts — automatic companion is default; strict pin secondary. Full automatic transparency law: `requirement-shell-automatic-checksum.md` |
+| **No weak atomicity** | Avoid partial replaces that leave a broken binary |
+| **No reckless PATH edit** | Only clean PATH when managed bin dir is empty / policy-safe |
+| **No raw I/O** | Use output SSOT; quiet/json channel rules |
+| **No secrets in tree** | Never embed tokens or credentials in update URLs in docs/code; Config/env only |
+| **Idempotent where sensible** | Already-latest update and already-removed uninstall must not corrupt state |
+
+### 2.8 Implementation Notes (this project)
+
+| Item | Value for selfmanaged |
+|------|------------------------|
+| **Product / binary** | `selfmanaged` (`APP_NAME`) |
+| **Implementation file** | `src/selfmanaged` |
+| **Dispatcher** | `app_main` routes `version-check` → `ver_check`; `self-update` → `inst_self_update`; `self-uninstall` → `inst_self_uninstall`; `about` → `app_about` |
+| **CLI self-install SSOT** | `inst_self_install` (empty argv / `self-install` / `install` alias; copy when `$0` is a script) — `requirement-shell-cli-self-install.md` |
+| **Install orchestrator SSOT** | `inst_perform_install` (+ prepare / download with or without checksum / atomic install) — **download** path reused by `self-update` and interpreter `$0` |
+| **Version compare** | `ver_gt` (pure POSIX); local version via `inst_get_version` |
+| **Install presence** | `inst_is_installed` |
+| **Paths** | `GLOBAL_BIN` default `/usr/local/bin`; `USER_BIN` default `${HOME}/.local/bin` |
+| **Repository identity** | `REPO_USER` default `cloudgen`; `REPO_NAME` default `selfmanaged` |
+| **Release channel** | `SCRIPT_URL` Config default composed as `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/${SCRIPT_RELPATH}` with `SCRIPT_RELPATH` default `src/${APP_NAME}` (this project: `https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged` — product channel SSOT; override `SCRIPT_URL`, `SCRIPT_RELPATH`, or `REPO_*` via env if needed) |
+| **Strict digest pin** | Runtime `CHECKSUM` when set in process env → `inst_perform_install_download_with_checksum` (secondary install-path only; **not** shown in `help`/`about`; see automatic-checksum requirement) |
+| **Companion digest** | Default `${SCRIPT_URL}.sha256` via `inst_perform_install_download_without_checksum` — law + transparency: `requirement-shell-automatic-checksum.md` |
+| **Force reinstall** | `FORCE_REINSTALL`; CLI `--force` required by CLI interface requirement |
+| **Uninstall steps** | `inst_self_uninstall_determine_bin` → `inst_self_uninstall_confirm_and_remove` → `inst_self_uninstall_cleanup_path` |
+| **PATH ensure** | `path_add_shell` / bash / zsh / fish helpers on user install |
+| **Privilege** | Type 0 only for self-management surface; no dedicated system user |
+| **Version SSOT** | `VERSION` default `1.3.1` in script config block (`VERSION="1.3.1"`) |
+
+#### Normative acceptance behaviors (this project)
+
+1. **`version-check`:** Fetch remote `VERSION` from `SCRIPT_URL`; report local vs remote; JSON fields include local/remote and latest-status semantics; fail if channel missing/unreachable.  
+2. **`self-update`:**  
+   - Fail if remote version cannot be fetched.  
+   - If local equals remote and force off → success no-op (“already latest”).  
+   - If remote is **older** than local and force off → **refuse** (no silent downgrade).  
+   - If remote is newer (or force policy allows reinstall) → set reinstall and call `inst_perform_install` with integrity + atomic replace.  
+3. **`self-uninstall`:** Resolve binary; confirm when interactive and force off; remove only that binary; clean PATH only if `~/.local/bin` empty (non-root); never delete unrelated trees.  
+4. **`about`:** Human diagnostics + JSON about object; no secrets; **no `CHECKSUM` name/value**.  
+5. **Shared install path:** Self-update **must not** introduce a parallel curl-to-final-path overwrite outside `inst_perform_install*`.
+
+#### Compliance notes (implementation status)
+
+| Item | Status |
+|------|--------|
+| Downgrade gate via `ver_gt` (refuse unless `--force`) | **Implemented** in `inst_self_update` (2026-07-12) |
+| CLI `--force` → `FORCE` / `FORCE_REINSTALL` | **Implemented** in `app_main` |
+| `SCRIPT_URL` default channel URL | **This project:** non-empty product default composed from `REPO_USER` / `REPO_NAME` / `SCRIPT_RELPATH` (`https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged`); product README must show simple literal one-liner(s) from that SSOT; env may still override |
+
+### 2.9 Why This Requirement Exists (Direct CIAO Alignment)
+
+- **CIAO Principle 1 – Caution** (https://github.com/cloudgen/ciao): Block silent downgrade and unsafe uninstall; verify downloads.  
+- **CIAO Principle 2 – Intentional** (https://github.com/cloudgen/ciao): Separate version-check, self-update, self-uninstall, and about.  
+- **CIAO Principle 3 – Anti-fragile** (https://github.com/cloudgen/ciao): Per-user and global installs; temp + atomic replace survive partial failure.  
+- **CIAO Principle 5 – Single Source of Output** and **Principle 14 – Security & Traceability** (https://github.com/cloudgen/ciao): Central `out_*`; JSON/human modes.  
+- **CIAO Principle 10 – Least-Privilege User** (https://github.com/cloudgen/ciao): Type 0 invoker default for CLI lifecycle.  
+- **CIAO Principle 11 – Safe Temporary File Handling** (https://github.com/cloudgen/ciao): `mktemp`, cleanup on error.  
+- **CIAO Principle 4 (O) / Principle 20 – Over-protect / Protect Against AI & Human Modification** (https://github.com/cloudgen/ciao): Digest, atomicity, PATH empty-dir check are sacred.
+
+---
+
+## 3. Design Principles (CIAO / CIAO-Lite)
+
+- **Caution:** Never trust network bytes without verification path; never silent downgrade.  
+- **Intentional:** One orchestrator for install and update; clear command separation.  
+- **Anti-fragile:** Works for root global and user local; idempotent no-ops when already good.  
+- **Over-protect:** Do not simplify away checksum layers, atomic move, or safe PATH cleanup.  
+- **SSOT:** Channel via `SCRIPT_URL`/Config; install via `inst_perform_install*`; output via `out_*`.  
+- **Idempotency:** Align with `requirement-shell-idempotency.md` for already-latest / already-uninstalled.  
+- **Respect old working logic:** Preserve Protection Zones on install and self-management helpers.
+
+---
+
+## 4. Protection Rule (Sacred)
+
+**Future AI assistants, Grok, or maintainers MUST NOT**:
+
+1. Remove or weaken checksum/digest verification on self-update downloads.  
+2. Bypass semantic version comparison to allow silent downgrades without force.  
+3. Replace atomic install with in-place curl overwrite of the live binary.  
+4. Remove the empty-directory (or equivalent safe) PATH cleanup guard on uninstall.  
+5. Over-delete user data or non-owned paths during uninstall.  
+6. Change standard self-management command names without updating this requirement and help together.  
+7. Use raw user-facing `echo`/`printf` instead of the centralized output system.  
+8. Hard-code project secrets or private tokens into update URLs in the tree.  
+9. Require a dedicated system user solely for Type 0 CLI self-update without a specialized architecture requirement.  
+10. Invent a second update implementation path that bypasses `inst_perform_install*`.
+
+**Self-management is critical for long-term maintainability of one-command shell CLIs. Violating this rule is a critical regression.**
+
+---
+
+## 5. Definition of done (shell self-management)
+
+Work claiming self-management support for selfmanaged is **not done** if any of the following fail:
+
+1. User-facing lifecycle commands exist and are routed (`version-check`, `self-update`, `self-uninstall`, `about`).  
+2. Update path verifies integrity (pinned and/or companion digest policy) and uses atomic replace via install SSOT.  
+3. Downgrade is blocked without explicit force policy.  
+4. Uninstall does not over-delete and cleans PATH only when safe.  
+5. Version-check reports local and remote (or fails loud if channel missing).  
+6. All messages go through output SSOT; `--json` stays machine-oriented when claimed.  
+7. Project channel/path facts live in Config/env / Implementation Notes—not scattered hardcodes.  
+8. Idempotent already-latest / already-uninstalled behaviors hold.  
+9. Implementation changes cite `requirement-shell-self-management`.
+
+---
+
+## Under command line for normal user only
+
+This product may run on Termux, Git Bash, Windows cmd, or the same class (this login only).
+
+**This requirement:** `version-check`, `self-update`, `self-uninstall`, and `about` run as **this login**. Global-bin uninstall may warn that Linux root is needed; that warning **MUST NOT** become an in-tool `sudo` wrap on Termux / Git Bash / Windows cmd. **MUST NOT** recommend `sudo curl | sh` as the self-update path on that class. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
+
+| MUST | MUST NOT |
+|------|----------|
+| Lifecycle verbs as this login | Enable admin-privilege or dedicated-account lifecycle |
+| Fail closed when this login cannot write the installed path | Wrap `sudo` to “finish uninstall” on that class |
+
+---
+
+## 6. Related artifacts
+
+| Artifact | Role |
+|----------|------|
+| `docs/requirements/requirement-shell-cli-interface.md` | Command surface, flags, dispatcher |
+| `docs/requirements/requirement-shell-cli-self-install.md` | First-shot CLI place (`self-install`; copy vs download) |
+| `docs/requirements/requirement-shell-idempotency.md` | Re-run safety for ensure ops |
+| `docs/requirements/requirement-shell-output-requirements.md` | Lifecycle messaging / quiet / JSON |
+| `docs/requirements/requirement-shell-modular-function-design.md` | `inst_*` / `out_*` ownership |
+| `docs/requirements/index.md` | Registry SSOT |
+| `./src/selfmanaged` | Implementation under test |
+
+---
+
+**Last Updated**: 2026-09-17  
+**Owner**: selfmanaged project maintainers  
+**Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 5, 10, 11, 14, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).
