@@ -1,6 +1,6 @@
 # safe-rm
 
-![Version](https://img.shields.io/badge/Version-1.0.1-blue?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.0.2-blue?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 [![CIAO](https://img.shields.io/badge/Philosophy-CIAO%20v2.10.*-purple.svg)](https://github.com/cloudgen/ciao)
 [![Stars](https://img.shields.io/github/stars/cloudgen/safe-rm?style=flat-square)](https://github.com/cloudgen/safe-rm)
@@ -46,7 +46,7 @@ Human output says whether the path exists and whether removal is allowed. JSON i
 
 ## Install
 
-Runtime version: `VERSION="1.0.1"` in `src/safe-rm`.
+Runtime version: `VERSION="1.0.2"` in `src/safe-rm`.
 
 Channel default:
 
@@ -70,7 +70,7 @@ safe-rm about
 At a terminal the front board is:
 
 ```text
-safe-rm(1.0.1) — Guarded rm that refuses login homes and system directories
+safe-rm(1.0.2) — Guarded rm that refuses login homes and system directories
 1. remove-guard: check a path and remove it only when it is allowed
 8. self-management: this CLI install, version, update, uninstall
 9. Exit
@@ -79,14 +79,16 @@ safe-rm(1.0.1) — Guarded rm that refuses login homes and system directories
 **1** opens:
 
 ```text
-safe-rm(1.0.1) — remove-guard
+safe-rm(1.0.2) — remove-guard
 11. rm: check each path and remove only when every path is allowed
 0. Back
 ```
 
-**11** asks for one path, then runs the same guard as `safe-rm rm`. **8** opens version, about, version-check, self-update, self-uninstall, and self-install (**82–87**). **81** is not listed. **9** leaves. **0** steps back. A wrong number reprints that board.
+**11** lists each subfolder of the current path as a number, then one number to type a path. That path runs the same guard as `safe-rm rm`. **8** opens version, about, version-check, self-update, self-uninstall, and self-install (**82–87**). **81** is not listed. **9** leaves. **0** steps back. A wrong number reprints that board.
 
 Messages go through `out_*` (`--quiet`, `--json`, `--debug`). Do not look for a second printer.
+
+Scratch for one run lives in a cache folder named for this login and this process. On Linux that folder is under `/dev/shm/cache/` when that directory can be created, then `/tmp/cache/`, then `~/.cache`. Git Bash and Mac use their own chains. A folder that cannot be created is skipped with no warning. Durable data for this login is `~/.local/safe-rm`. `safe-rm about` prints the folder that was used, the preferred folder, the fallbacks, and persistence.
 
 ## Usage
 

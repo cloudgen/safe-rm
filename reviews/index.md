@@ -1,7 +1,7 @@
 # Reviews index — selfmanaged
 
 **Registry** of review plan artifacts and run reports. Keep rows in sync with disk.  
-**Updated:** 2026-09-27 (safe-rm main menu vs selfmanaged 1.4.0)
+**Updated:** 2026-09-27 (safe-rm 1.0.2 cache folder)
 
 ## Plan artifacts
 
@@ -27,6 +27,7 @@
 | 2026-09-02 | `reports/2026-09-02-bug-inst-maybe-install-quiet-json-skip.md` | Helper quiet/json skip; REQ coverage + human-facing | PASS=108 FAIL=0 | **Closed** (helper patched) |
 | 2026-09-06 | `reports/2026-09-06-coverage-readme-req-tp-json-raw.md` | README voice; coding-style REQ; TP-JSON-RAW-01; command-line-for-normal-user-only | PASS=117 FAIL=0 | **Closed** (1.2.4) |
 | 2026-09-27 | `reports/2026-09-27-safe-rm-main-menu-vs-selfmanaged.md` | safe-rm numbered main menu vs selfmanaged 1.4.0 | probes only; suite not re-run | **Revise** |
+| 2026-09-27 | `reports/2026-09-27-checklist-temp-file-system-cache-folder.md` | safe-rm 1.0.2 cache folder vs grok-cli storage 1.4.0 | dry-run PASS=200; bootstrap PASS=142 | **Pass** |
 
 ## Open items summary
 

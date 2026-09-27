@@ -42,6 +42,13 @@ assert_contains() {
     esac
 }
 
+assert_not_contains() {
+    case "$2" in
+        *"$3"*) t_fail "$1 (unexpected '$3')" ;;
+        *) t_pass "$1" ;;
+    esac
+}
+
 # Remove checks. Both --dry-run positions are always present.
 srm() {
     sh "$SAFE_RM" --dry-run rm --dry-run "$@"
@@ -302,6 +309,168 @@ assert_contains "TP-SRM-17 unknown points at help" "$(cat "$err")" "help"
 out=$(sh "$SAFE_RM" about 2>/dev/null)
 assert_contains "TP-SRM-18 about remove guard" "$out" "Remove guard:"
 
+# TP-CACHE-01 / TP-CACHE-02 cache folder.
+# about is not a remove path. This block does not assign HOME.
+login=$(id -un 2>/dev/null || echo "unknown")
+case "$login" in
+    *[!A-Za-z0-9._-]*)
+        login=$(printf '%s' "$login" | tr -c 'A-Za-z0-9._-' '_')
+        ;;
+esac
+[ -n "$login" ] || login="unknown"
+app=safe-rm
+json=$(sh "$SAFE_RM" --json about 2>/dev/null)
+ec=$?
+assert_eq "TP-CACHE-01 about json exit" 0 "$ec"
+assert_contains "TP-CACHE-01 cache_used" "$json" '"cache_used"'
+assert_contains "TP-CACHE-01 cache_preferred" "$json" '"cache_preferred"'
+assert_contains "TP-CACHE-01 cache_fallback" "$json" '"cache_fallback"'
+assert_contains "TP-CACHE-01 cache_fallback_2" "$json" '"cache_fallback_2"'
+assert_contains "TP-CACHE-01 persistence_storage" "$json" '"persistence_storage"'
+assert_contains "TP-CACHE-01 effective_storage" "$json" '"effective_storage"'
+assert_not_contains "TP-CACHE-01 no CHECKSUM" "$json" "CHECKSUM"
+hum=$(sh "$SAFE_RM" about 2>/dev/null)
+assert_contains "TP-CACHE-01 human used" "$hum" "Cache folder used:"
+assert_contains "TP-CACHE-01 human preferred" "$hum" "Cache folder (preferred):"
+assert_contains "TP-CACHE-01 human 1st" "$hum" "Cache folder (1st fallback):"
+assert_contains "TP-CACHE-01 human 2nd" "$hum" "Cache folder (2nd fallback):"
+assert_contains "TP-CACHE-01 human persistence" "$hum" "Persistence storage:"
+assert_not_contains "TP-CACHE-01 no Storage (effective)" "$hum" "Storage (effective)"
+assert_not_contains "TP-CACHE-01 no Storage (fallback)" "$hum" "Storage (fallback)"
+pref=$(printf '%s' "$json" | sed -n 's/.*"cache_preferred":"\([^"]*\)".*/\1/p' | head -n1)
+pid="${pref##*-}"
+case "$pref" in
+    /dev/shm/cache/cache-${app}-${login}-[0-9]*)
+        t_pass "TP-CACHE-02 cache_preferred is shm login process leaf"
+        ;;
+    *)
+        t_fail "TP-CACHE-02 cache_preferred unexpected: ${pref:-empty}"
+        ;;
+esac
+fb=$(printf '%s' "$json" | sed -n 's/.*"cache_fallback":"\([^"]*\)".*/\1/p' | head -n1)
+assert_eq "TP-CACHE-02 cache_fallback 1st" "/tmp/cache/cache-${app}-${login}-${pid}" "$fb"
+fb2=$(printf '%s' "$json" | sed -n 's/.*"cache_fallback_2":"\([^"]*\)".*/\1/p' | head -n1)
+assert_eq "TP-CACHE-02 cache_fallback 2nd" "${HOME}/.cache/cache-${app}-${pid}" "$fb2"
+used=$(printf '%s' "$json" | sed -n 's/.*"cache_used":"\([^"]*\)".*/\1/p' | head -n1)
+eff=$(printf '%s' "$json" | sed -n 's/.*"effective_storage":"\([^"]*\)".*/\1/p' | head -n1)
+sdir=$(printf '%s' "$json" | sed -n 's/.*"storage_dir":"\([^"]*\)".*/\1/p' | head -n1)
+assert_eq "TP-CACHE-02 cache_used matches effective" "$eff" "$used"
+assert_eq "TP-CACHE-02 storage_dir is 1st fallback" "$fb" "$sdir"
+if [ -n "$eff" ] && [ -d "$eff" ]; then
+    t_pass "TP-CACHE-02 effective cache directory exists"
+else
+    t_fail "TP-CACHE-02 effective cache missing: ${eff:-empty}"
+fi
+case "$eff" in
+    /dev/shm/${app}|/dev/shm/${app}-*)
+        t_fail "TP-CACHE-02 effective cache must not be a ram-drive project shape: ${eff}"
+        ;;
+    *)
+        t_pass "TP-CACHE-02 effective cache is not a ram-drive project shape"
+        ;;
+esac
+mode=$(stat -c %a "$eff" 2>/dev/null || echo "")
+assert_eq "TP-CACHE-02 effective cache mode 0700" "700" "$mode"
+errc=$(SRM_CACHE_SKIP=preferred sh "$SAFE_RM" about 2>&1 >/dev/null)
+assert_not_contains "TP-CACHE-02 silent cache fallback" "$errc" "fallback"
+assert_not_contains "TP-CACHE-02 silent cache fallback error" "$errc" "Cannot create cache"
+skip_hum=$(SRM_CACHE_SKIP=preferred sh "$SAFE_RM" about 2>/dev/null)
+assert_not_contains "TP-CACHE-02 no warn on skip" "$skip_hum" "[WARN]"
+assert_not_contains "TP-CACHE-02 no error on skip" "$skip_hum" "[ERROR]"
+skip=$(SRM_CACHE_SKIP=preferred sh "$SAFE_RM" --json about 2>/dev/null)
+skip_eff=$(printf '%s' "$skip" | sed -n 's/.*"effective_storage":"\([^"]*\)".*/\1/p' | head -n1)
+skip_fb=$(printf '%s' "$skip" | sed -n 's/.*"cache_fallback":"\([^"]*\)".*/\1/p' | head -n1)
+skip_pref=$(printf '%s' "$skip" | sed -n 's/.*"cache_preferred":"\([^"]*\)".*/\1/p' | head -n1)
+assert_eq "TP-CACHE-02 skipped preferred uses 1st fallback" "$skip_fb" "$skip_eff"
+if [ -n "$skip_pref" ] && [ "$skip_pref" != "$skip_eff" ]; then
+    t_pass "TP-CACHE-02 skipped preferred still names the preferred path"
+else
+    t_fail "TP-CACHE-02 preferred path should stay visible when unused"
+fi
+gb=$(SRM_CACHE_HOST=gitbash sh "$SAFE_RM" --json about 2>/dev/null)
+gb_pref=$(printf '%s' "$gb" | sed -n 's/.*"cache_preferred":"\([^"]*\)".*/\1/p' | head -n1)
+gb_pid="${gb_pref##*-}"
+assert_eq "TP-CACHE-02 gitbash preferred" "/tmp/cache/cache-${app}-${login}-${gb_pid}" "$gb_pref"
+gb_fb=$(printf '%s' "$gb" | sed -n 's/.*"cache_fallback":"\([^"]*\)".*/\1/p' | head -n1)
+assert_eq "TP-CACHE-02 gitbash 1st fallback" "${HOME}/AppData/Local/Temp/cache-${app}-${gb_pid}" "$gb_fb"
+assert_contains "TP-CACHE-02 gitbash json has empty cache_fallback_2" "$gb" '"cache_fallback_2":""'
+gb_fb2=$(printf '%s' "$gb" | sed -n 's/.*"cache_fallback_2":"\([^"]*\)".*/\1/p' | head -n1)
+assert_eq "TP-CACHE-02 gitbash no 2nd fallback" "" "$gb_fb2"
+mac=$(SRM_CACHE_HOST=mac sh "$SAFE_RM" --json about 2>/dev/null)
+mac_pref=$(printf '%s' "$mac" | sed -n 's/.*"cache_preferred":"\([^"]*\)".*/\1/p' | head -n1)
+mac_pid="${mac_pref##*-}"
+assert_eq "TP-CACHE-02 mac preferred" "/tmp/cache/cache-${app}-${login}-${mac_pid}" "$mac_pref"
+mac_fb=$(printf '%s' "$mac" | sed -n 's/.*"cache_fallback":"\([^"]*\)".*/\1/p' | head -n1)
+assert_eq "TP-CACHE-02 mac 1st fallback" "${HOME}/Library/Caches/cache-${app}-${mac_pid}" "$mac_fb"
+mac_fb2=$(printf '%s' "$mac" | sed -n 's/.*"cache_fallback_2":"\([^"]*\)".*/\1/p' | head -n1)
+assert_eq "TP-CACHE-02 mac 2nd fallback" "${HOME}/cache/cache-${app}-${mac_pid}" "$mac_fb2"
+hum_l=$(sh "$SAFE_RM" about 2>/dev/null)
+used_line=$(printf '%s\n' "$hum_l" | sed -n 's/.*Cache folder used: //p' | head -n1)
+pref_line=$(printf '%s\n' "$hum_l" | sed -n 's/.*Cache folder (preferred): //p' | head -n1)
+assert_eq "TP-CACHE-02 used matches preferred when preferred works" "$pref_line" "$used_line"
+assert_contains "TP-CACHE-02 linux about preferred path" "$hum_l" "/dev/shm/cache/cache-${app}-${login}-"
+assert_contains "TP-CACHE-02 linux about 2nd path" "$hum_l" "/.cache/cache-${app}-"
+hum_gb=$(SRM_CACHE_HOST=gitbash sh "$SAFE_RM" about 2>/dev/null)
+assert_contains "TP-CACHE-02 gitbash about 1st" "$hum_gb" "AppData/Local/Temp/cache-${app}-"
+assert_not_contains "TP-CACHE-02 gitbash about omits 2nd" "$hum_gb" "Cache folder (2nd fallback)"
+hum_mac=$(SRM_CACHE_HOST=mac sh "$SAFE_RM" about 2>/dev/null)
+assert_contains "TP-CACHE-02 mac about 1st" "$hum_mac" "Library/Caches/cache-${app}-"
+assert_contains "TP-CACHE-02 mac about 2nd path" "$hum_mac" "Cache folder (2nd fallback): ${HOME}/cache/cache-${app}-"
+persist=$(printf '%s' "$json" | sed -n 's/.*"persistence_storage":"\([^"]*\)".*/\1/p' | head -n1)
+assert_eq "TP-CACHE-02 persistence_storage path" "${HOME}/.local/${app}" "$persist"
+if [ -n "$persist" ] && [ -d "$persist" ]; then
+    t_pass "TP-CACHE-02 persistence storage directory exists"
+else
+    t_fail "TP-CACHE-02 persistence storage missing: ${persist:-empty}"
+fi
+case "$persist" in
+    */.local/bin|*/.local/bin/)
+        t_fail "TP-CACHE-02 persistence must not be USER_BIN: ${persist}"
+        ;;
+    *)
+        t_pass "TP-CACHE-02 persistence is not the install bin directory"
+        ;;
+esac
+j2=$(sh "$SAFE_RM" --json about 2>/dev/null)
+p2=$(printf '%s' "$j2" | sed -n 's/.*"cache_preferred":"\([^"]*\)".*/\1/p' | head -n1)
+p2="${p2##*-}"
+if [ -n "$pid" ] && [ -n "$p2" ] && [ "$pid" != "$p2" ]; then
+    t_pass "TP-CACHE-02 each process has its own cache leaf"
+else
+    t_fail "TP-CACHE-02 cache leaf pid reused (${pid:-empty} vs ${p2:-empty})"
+fi
+
+# TP-CACHE-03 scratch file names stay mktemp names inside the cache directory.
+lib=$(mktemp /tmp/safe-rm-lib.XXXXXX) || exit 2
+awk '
+    /^app_main "\$@"$/ { print "# app_main stripped"; next }
+    { print }
+' "$SAFE_RM" > "$lib"
+leaf=$(sh -c '. "$1"; util_mktemp tmp' sh "$lib" 2>/dev/null) || leaf=""
+case "$leaf" in
+    /dev/shm/cache/cache-${app}-${login}-[0-9]*/${app}.tmp.*)
+        base=${leaf##*/}
+        case "$base" in
+            *.\$\$|${app}.\$\$)
+                t_fail "TP-CACHE-03 scratch file uses a dollar name: ${base}"
+                ;;
+            *)
+                t_pass "TP-CACHE-03 scratch file is an mktemp name under the cache leaf"
+                ;;
+        esac
+        ;;
+    *)
+        t_fail "TP-CACHE-03 scratch file unexpected: ${leaf:-empty}"
+        ;;
+esac
+if [ -n "$leaf" ] && [ -f "$leaf" ]; then
+    /bin/rm -f -- "$leaf"
+fi
+dollars=$(printf '%s%s' '$' '$')
+bad=$(sh -c '. "$1"; util_mktemp "$2"' sh "$lib" "x${dollars}y" 2>&1 >/dev/null) || true
+assert_contains "TP-CACHE-03 refuses a dollar file name" "$bad" "refuse predictable"
+/bin/rm -f -- "$lib"
+
 # TP-SRM-19 quiet still shows the refusal
 out=$(sh "$SAFE_RM" --quiet --dry-run rm --dry-run /usr/bin 2>"$err")
 ec=$?
@@ -396,6 +565,75 @@ ec=$?
 assert_eq "TP-CLI-SRM-01 remove-guard exit" 0 "$ec"
 assert_contains "TP-CLI-SRM-01 lists 11 rm" "$out" "11."
 assert_contains "TP-CLI-SRM-01 remove-guard back" "$out" "0. Back"
+
+# TP-CLI-SRM-02 path board. Choices are Back, an empty custom path, or a
+# bad number. No folder is chosen, so the remover is not called.
+PICK="${SCRATCH}/pick"
+EMPTY="${SCRATCH}/nofolders"
+mkdir -p "${PICK}/alpha" "${PICK}/beta" "${PICK}/leaf one" "${PICK}/.hidden" "${EMPTY}"
+printf 'x\n' > "${PICK}/note.txt"
+printf 'x\n' > "${EMPTY}/note.txt"
+_b_alpha=$(printf '\033[1malpha\033[0m')
+_b_beta=$(printf '\033[1mbeta\033[0m')
+_b_leaf=$(printf '\033[1mleaf one\033[0m')
+_b_custom=$(printf '\033[1mcustom-path\033[0m')
+
+out=$(cd "$PICK" && printf '1\n11\n0\n0\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-SRM-02 list exit" 0 "$ec"
+assert_contains "TP-CLI-SRM-02 current path" "$out" "Current path: ${PICK}"
+assert_contains "TP-CLI-SRM-02 alpha is 1" "$out" "1. ${_b_alpha}"
+assert_contains "TP-CLI-SRM-02 beta is 2" "$out" "2. ${_b_beta}"
+assert_contains "TP-CLI-SRM-02 spaced name is 3" "$out" "3. ${_b_leaf}"
+assert_contains "TP-CLI-SRM-02 shows the spaced path" "$out" "${PICK}/leaf one"
+assert_contains "TP-CLI-SRM-02 custom-path is 4" "$out" "4. ${_b_custom}"
+assert_contains "TP-CLI-SRM-02 custom explain" "$out" "type a path"
+assert_contains "TP-CLI-SRM-02 path back" "$out" "0. Back"
+n=$(printf '%s\n' "$out" | grep -c 'check each path and remove only when every path is allowed' || true)
+assert_eq "TP-CLI-SRM-02 back returns to remove-guard" "2" "$n"
+case "$out" in
+    *note.txt*) t_fail "TP-CLI-SRM-02 listed a file" ;;
+    *) t_pass "TP-CLI-SRM-02 omits files" ;;
+esac
+case "$out" in
+    *".hidden"*) t_fail "TP-CLI-SRM-02 listed a dotfolder" ;;
+    *) t_pass "TP-CLI-SRM-02 omits dotfolders" ;;
+esac
+if [ -d "${PICK}/alpha" ] && [ -d "${PICK}/beta" ] && [ -d "${PICK}/leaf one" ]; then
+    t_pass "TP-CLI-SRM-02 folders still present"
+else
+    t_fail "TP-CLI-SRM-02 a folder was removed"
+fi
+
+out=$(cd "$PICK" && printf '1\n11\n4\n\n0\n0\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-SRM-02 empty custom exit" 0 "$ec"
+assert_contains "TP-CLI-SRM-02 custom asks Path" "$out" "Path: "
+assert_contains "TP-CLI-SRM-02 empty path error" "$out" "No path was given"
+n=$(printf '%s\n' "$out" | grep -c 'Current path:' || true)
+assert_eq "TP-CLI-SRM-02 empty path reprints the path board" "2" "$n"
+if [ -d "${PICK}/alpha" ]; then
+    t_pass "TP-CLI-SRM-02 empty path removed nothing"
+else
+    t_fail "TP-CLI-SRM-02 empty path removed a folder"
+fi
+
+out=$(cd "$PICK" && printf '1\n11\n99\n0\n0\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-SRM-02 bad pick exit" 0 "$ec"
+assert_contains "TP-CLI-SRM-02 bad pick names 99" "$out" "Not a menu choice '99'"
+n=$(printf '%s\n' "$out" | grep -c 'Current path:' || true)
+assert_eq "TP-CLI-SRM-02 bad pick reprints the path board" "2" "$n"
+
+out=$(cd "$EMPTY" && printf '1\n11\n0\n0\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-SRM-02 no-folder exit" 0 "$ec"
+assert_contains "TP-CLI-SRM-02 no-folder custom is 1" "$out" "1. ${_b_custom}"
+case "$out" in
+    *"2. "*) t_fail "TP-CLI-SRM-02 no-folder listed a second row" ;;
+    *) t_pass "TP-CLI-SRM-02 no-folder has no second folder row" ;;
+esac
+unset _b_alpha _b_beta _b_leaf _b_custom
 
 # TP-SRM-SWAP-01 layout only. The fixture rm is never executed.
 # This block does not remove a directory. It moves one regular file inside

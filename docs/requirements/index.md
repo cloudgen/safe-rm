@@ -2,7 +2,7 @@
 
 **Product:** safe-rm (POSIX `/bin/sh` Type 0 CLI plus a guarded `rm`, specialized from selfmanaged)  
 **Workspace state:** Specialized product law (not blank genesis); **software-development** class; one Active domain SSOT.  
-**Updated:** 2026-09-27 (numbered main menu)
+**Updated:** 2026-09-27 (cache folder per login and per process; choice 11 lists subfolders)
 
 | ID / key | Title | Area | Status | Path | Updated |
 |----------|-------|------|--------|------|---------|
@@ -10,9 +10,9 @@
 | requirement-class-software-dev | Software-development class law + residual stack (posix-sh, no package tool) | class | Active | `requirement-class-software-dev.md` | 2026-09-06 |
 | requirement-shell-automatic-checksum | Automatic companion-digest integrity (transparent link/value/result; CHECKSUM not help/about) | shell | Active | `requirement-shell-automatic-checksum.md` | 2026-09-06 |
 | requirement-shell-cli-default-interaction | Main menu (interactive 0-argv, including --debug alone, opens it) | shell | Active | `requirement-shell-cli-default-interaction.md` | 2026-09-27 |
-| requirement-shell-cli-interface | Shell CLI interface (commands, flags, dispatch, modes) | shell | Active | `requirement-shell-cli-interface.md` | 2026-09-27 |
+| requirement-shell-cli-interface | Shell CLI interface (commands, flags, dispatch, modes; about cache lines point at storage 1.1.0) | shell | Active | `requirement-shell-cli-interface.md` | 2026-09-27 |
 | requirement-shell-cli-self-install | CLI self-place (`self-install`; script `$0` copy; dest 0755/0700) | shell | Active | `requirement-shell-cli-self-install.md` | 2026-09-17 |
-| requirement-shell-cli-storage | Scratch/cache storage resolve (per-user isolation, main wire, about fields) | shell | Active | `requirement-shell-cli-storage.md` | 2026-09-06 |
+| requirement-shell-cli-storage | Cache folder (Linux shm → tmp → `~/.cache`; Git Bash tmp → AppData; Mac tmp → Library/Caches → `~/cache`) and persistence `${HOME}/.local/${APP_NAME}`; silent tier miss | shell | Active (1.1.0) | `requirement-shell-cli-storage.md` | 2026-09-27 |
 | requirement-shell-cli-zero-arguments | Empty argv: interactive numbered menu; otherwise Type O install-ensure | shell | Active | `requirement-shell-cli-zero-arguments.md` | 2026-09-27 |
 | requirement-shell-idempotency | Shell idempotency / re-run safety for ensure-style ops | shell | Active | `requirement-shell-idempotency.md` | 2026-09-17 |
 | requirement-shell-interactive-vs-noninteractive | Interactive vs non-interactive / `curl\|sh` behavior | shell | Active | `requirement-shell-interactive-vs-noninteractive.md` | 2026-09-17 |

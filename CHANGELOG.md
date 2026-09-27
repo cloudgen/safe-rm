@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.2] - 2026-09-27
+
+### Added
+
+- Choice **11** lists the subfolders of the current path, then a number to type a path. **0** steps back without removing
+- Scratch for this run is a cache folder named for this login and this process. On Linux the preferred folder is under `/dev/shm/cache/`, then `/tmp/cache/`, then `~/.cache`. Git Bash uses `/tmp/cache/` then `AppData/Local/Temp`. Mac uses `/tmp/cache/`, then `~/Library/Caches`, then `~/cache`. Persistence stays `~/.local/safe-rm`
+- `safe-rm about` prints the cache folder that was used, the preferred folder, the fallbacks for this host, and persistence. A skipped tier is silent
+
+### Changed
+
+- About no longer labels scratch as Storage (effective) or Storage (fallback)
+
 ## [1.0.1] - 2026-09-27
 
 ### Added

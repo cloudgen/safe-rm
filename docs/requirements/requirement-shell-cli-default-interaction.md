@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-default-interaction.md  
-**Status**: Active (Version 1.1.0)  
+**Status**: Active (Version 1.1.1)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -29,7 +29,7 @@ This file is the **main menu requirement**. On a real terminal, typing only `saf
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
 | Open the list | Front board, then leave. `--debug` alone still opens this list | `safe-rm` then `9`, or `safe-rm --debug` then `9` |
-| Open the remove guard | **11** asks for one path, then runs `rm` | `safe-rm` then `1` |
+| Open the remove guard | **11** lists subfolders of the current path, plus a number to type a path | `safe-rm` then `1` then `11` |
 | Check, update, or place | Open **8**, then **82–87** | `safe-rm` then `8` |
 | Step back | Return to the front board | `0` |
 
@@ -81,9 +81,15 @@ safe-rm has a zero-argument requirement. That file owns empty argv. This file ow
 | **0** | Back | return to the front board |
 
 1. **0**, `back`, or an empty line **MUST** return to the front board and **MUST NOT** run `rm`.  
-2. **11** or `rm` **MUST** ask for one path in the current shell, then call `srm_cmd_rm` with that path. An empty path **MUST** `out_error` and reprint this layer. **MUST NOT** `out_die` for an empty path.  
-3. After `rm` finishes, the **front** board **MUST** show again. **MUST NOT** stay on this board. **MUST NOT** leave the program only because the command finished. A refused path still follows `requirement-domain-safe-rm.md` (that path calls `out_die`).  
-4. **9** is not a row on this board. It is a bad pick here.
+2. **11** or `rm` **MUST** open a path board in the current shell. The board **MUST** show `Current path:` as the working directory, then each immediate subfolder as **1…N** (`folder name: absolute path`), then the next number **custom-path** (`type a path`), then **0** Back. Files and dotfolders **MUST NOT** be rows. Names that contain a newline **MUST NOT** be rows. Folder order **MUST** be byte order (`LC_ALL=C`).  
+3. A folder number, or that folder’s name, **MUST** call `srm_cmd_rm` with that folder’s absolute path. The **custom-path** number **MUST** ask `Path:` in the current shell, then call `srm_cmd_rm` with the typed text. The tokens `custom-path` and `custom` **MUST** do the same, unless a listed folder already has that name, in which case the folder is chosen.  
+4. An empty typed path **MUST** `out_error` and reprint the path board. **MUST NOT** `out_die` for an empty path. **MUST NOT** call `srm_cmd_rm` for an empty path.  
+5. **0**, `back`, or an empty line on the path board **MUST** return to the remove-guard board and **MUST NOT** call `srm_cmd_rm`.  
+6. A bad pick on the path board **MUST** `out_error`, name the pick, and reprint the path board. **MUST NOT** `out_die`.  
+7. The path board is a data picker. Its rows **MUST** be **1…N**, not **111…**. The `rm` row on the remove-guard board stays **11**.  
+8. After `rm` finishes, the **front** board **MUST** show again. **MUST NOT** stay on the path board or on this board. **MUST NOT** leave the program only because the command finished. A refused path still follows `requirement-domain-safe-rm.md` (that path calls `out_die`).  
+9. **9** is not a row on this board or on the path board. It is a bad pick here.  
+10. The choice and the typed path **MUST** be read in the current shell. **MUST NOT** capture either `read` with `$()` or backticks.
 
 ### 2.4 Self-management board (parent 8)
 
@@ -123,7 +129,7 @@ An unused number, an unknown name, or a hidden reserved number (**2**, **81**, s
 | **Ship unit** | `src/safe-rm` |
 | **Claimed** | yes |
 | **Case** | Zero-argument requirement exists. It defers **interactive** empty argv here. Non-interactive empty argv stays Type O place |
-| **Handler** | `app_default`; remove-guard layer `app_default_rm_loop`; self-management layer `app_default_self_loop` |
+| **Handler** | `app_default`; remove-guard layer `app_default_rm_loop`; path board `app_default_ask_rm`; self-management layer `app_default_self_loop` |
 | **Honesty** | **Implemented.** |
 
 ### 2.8 Why this requirement exists (CIAO)
@@ -151,12 +157,13 @@ An unused number, an unknown name, or a hidden reserved number (**2**, **81**, s
 1. Open this menu for empty argv when there is no TTY, or when `JSON=1`, or when `QUIET=1`.  
 2. Put `install`, `version`, `about`, `version-check`, `self-update`, `self-uninstall`, `self-install`, `help`, `menu`, or `rm` on the front board as its own row.  
 3. Print **81**, or renumber **82–87** because **81** is hidden.  
-4. Number children of **8** as **91–94** or restart the inner list at **1**. Number the `rm` row as **1** on the remove-guard board.  
-5. `out_die` on a bad menu pick, or on an empty path at the **11** prompt.  
+4. Number children of **8** as **91–94** or restart a command submenu at **1**. Number the `rm` row as **1** on the remove-guard board. Number the path board’s folders as **111…** (that board is a data picker and starts at **1**).  
+5. `out_die` on a bad menu pick, or on an empty path at the **custom-path** prompt.  
 6. Stay on the self-management board or the remove-guard board after a command finishes.  
 7. Put a Back row on the front board.  
 8. Draw a TTY explain without italic light gray, or a TTY short name without bold.  
-9. Read the choice or the path with `$()` around a helper that calls `read`.
+9. Read the choice or the path with `$()` around a helper that calls `read`.  
+10. Open **11** onto a bare `Path:` line that does not first list the subfolders of the current path and a **custom-path** number.
 
 ---
 
@@ -170,6 +177,7 @@ An unused number, an unknown name, or a hidden reserved number (**2**, **81**, s
 | **TP-CLI-22** | `tests/run_dry_run.sh` | have (off-TTY `menu` is help; **8** lists **87** and omits **81**) |
 | **TP-CLI-EMPTY-01** | `tests/run_dry_run.sh` | have (interactive empty argv is the menu and does not place; `safe-rm --debug` on a TTY is the same menu) |
 | **TP-CLI-SRM-01** | `tests/run_dry_run.sh` | have (front has remove-guard, **8**, and **9**; `rm` is **11** under **1**) |
+| **TP-CLI-SRM-02** | `tests/run_dry_run.sh` | have (**11** lists subfolders of the current path, then **custom-path**, then **0** Back; empty custom path and a bad pick reprint that board; nothing is removed) |
 
 The Type 0 suite `tests/test_cli.sh` still targets the bootstrap snapshot `src/selfmanaged`. These menu rows live on the safe-rm suite because that is the program the operator runs.
 

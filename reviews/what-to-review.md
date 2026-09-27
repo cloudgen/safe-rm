@@ -33,7 +33,7 @@
 | Idempotency | `requirement-shell-idempotency.md` | Re-run ensure safety |
 | Interactive modes | `requirement-shell-interactive-vs-noninteractive.md` | TTY vs pipe / quiet / json |
 | Automatic checksum | `requirement-shell-automatic-checksum.md` | Companion primary; CHECKSUM not help/about |
-| CLI storage | `requirement-shell-cli-storage.md` | util_resolve_storage; main wire; about fields |
+| CLI storage | `requirement-shell-cli-storage.md` 1.1.0 | Per-login per-process cache folder; persistence `${HOME}/.local/${APP_NAME}`; silent tier miss; about labels |
 
 **Out of scope unless added:** Domain requirements / domain verbs (not bootstrap product law).
 
@@ -79,6 +79,7 @@ Reference is selfmanaged **1.4.0** (`selfmanaged/src/selfmanaged`), not `src/sel
 | Front board | Header nametag, **1** remove-guard, **8** self-management, **9** Exit. No lifecycle verb and no `rm` row on this board |
 | Under **8** | **82–87** and **0** Back. **81** not printed |
 | Domain | `rm` on its own front category, not beside **8** |
+| Under **11** | Subfolders of the current path as **1…N**, then **custom-path**, then **0** Back. Files and dotfolders stay off the list |
 | `menu` / `main` | Same board on a terminal. Help off a terminal |
 | Bad pick | `out_error` and reprint. Not `out_die` |
 | After a leaf | Front board shows again |

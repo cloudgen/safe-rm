@@ -1,100 +1,251 @@
 **file**: docs/requirements/requirement-shell-cli-storage.md  
-**Status**: Active (Version 1.0.1 – selfmanaged storage wire)  
-**Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered / Over-protect)
+**Status**: Active (Version 1.1.0)  
+**Area**: shell  
+**Key**: `requirement-shell-cli-storage`  
+**Philosophy**: CIAO **v2.10.2** / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered / Over-protect)
 
 ## 1. Purpose
 
-This requirement is the **project Single Source of Truth** for **shell CLI storage resolution** of the selfmanaged POSIX `/bin/sh` Type 0 bootstrap CLI: volatile scratch and app-scoped cache path selection, per-user isolation, central resolver ownership, `app_main` wire, and about diagnostics.
+This requirement is the **project Single Source of Truth** for **shell CLI storage** of safe-rm. **Storage** means **two** classes:
 
-**Scope:** Resolve priority chain; isolation; `util_resolve_storage` contract; `EFFECTIVE_STORAGE_DIR` / `TMPDIR` export; about human + JSON fields.  
-**Out of scope (cited, not re-owned):** Binary install paths (`USER_BIN` / `GLOBAL_BIN`); domain project trees (none on this bootstrap product); companion checksum; PATH shell-rc.
+| Class | Role | Survives reboot |
+|-------|------|-----------------|
+| **Cache folder** | Volatile scratch / temps | No (shm/tmp) or maybe (home fallback) |
+| **Persistence storage** | Durable per-user app data | Yes (under this login’s `$HOME`) |
 
-### 1.1 Human-facing
+It owns path **shapes**, central resolvers, the `app_main` wire, and about diagnostics for both classes.
 
-**In one sentence:** Scratch and cache for this run live in **one per-user folder** the tool picks (RAM disk if it can, then `/tmp`, then a cache under your home) — not a shared dump that mixes you with someone else.
+The preferred cache is **not** a ram-drive **project** tree (`/dev/shm/safe-rm` or `/dev/shm/safe-rm-<login>`). It lives under `/dev/shm/cache/` (Linux) or `/tmp/cache/` (Git Bash and Mac). The leaf is **per login and per process** so two logins never share one cache directory.
 
-| Box | Meaning | Example |
-|-----|---------|---------|
-| You / this login | The Unix login running the CLI | `selfmanaged about` shows the chosen folder |
-| The other role | Another login on the same host | Their cache **must not** be this login’s folder |
-| Not this file | Where the **program binary** is installed (`~/.local/bin` vs `/usr/local/bin`) | Install-path law on zero-arguments / self-management |
+Placeholders only. **MUST NOT** hardcode an app name, a login name, or a process id.
 
-| Includes | Excludes |
-|----------|----------|
-| One resolver; `about` fields for the chosen path | Domain project trees (this bootstrap has none) |
-| Temp downloads under that root | Hard-coded `/tmp/selfmanaged` dumps |
+- `${APP_NAME}` is the product app name.
+- `${login}` is this login (`id -un`), one path segment.
+- `$$` is this process id. It is not a fixed number.
+- `${HOME}` is this login’s home.
 
-| Surface | What you open | What for |
-|---------|---------------|----------|
-| `selfmanaged about` | Command | Human + JSON storage fields |
-| `./src/selfmanaged` | Program file | `util_resolve_storage` |
+A skipped tier is silent. No warning and no error because a higher cache folder was not used. An error is only when every tier for this host failed.
 
-| You do… | What it means | What you type |
-|---------|---------------|---------------|
-| See where scratch went | About names the effective folder and the persistent cache fallback. Two logins must not share one directory. | `selfmanaged about` · `selfmanaged --json about` |
+The directory name carries `$$`. Scratch files inside that directory stay `mktemp` names. They do not use a `$$` file name.
+
+Volatile tiers (`/dev/shm` and `/tmp`) include `${login}` so two logins do not share one leaf. Home tiers omit `${login}` because `${HOME}` is already that login.
 
 ---
 
+### 1.1 Human-facing
+
+Scratch goes in a cache folder. Durable app data for this login goes under persistence storage.
+
+| You | Another role | Not this |
+|-----|--------------|----------|
+| Let the CLI pick cache + persistence | Another login’s leaf is a different directory | Putting scratch in `/tmp` with a guessed name; treating `~/.local/bin` as data |
+
+**Includes:** cache resolver, persistence resolver, about fields. **Excludes:** install binary placement; the remove guard (`requirement-domain-safe-rm`).
+
+| You do… | What it means | What you type |
+|---------|---------------|---------------|
+| Inspect storage | about shows Cache folder used, preferred, 1st fallback, 2nd fallback when that host has one, and Persistence storage. A skipped tier prints nothing | `safe-rm about` / `safe-rm --json about` |
+
 ## 2. Core Rules / Requirements (Mandatory)
 
-### 2.1 Single resolver SSOT
+### 2.1 Two storage classes (mandatory split)
 
-1. **MUST** keep **one** authoritative storage-resolve helper: **`util_resolve_storage`**.  
-2. New code that needs a product scratch/cache **root** **MUST** call `util_resolve_storage` (or `mktemp` under a path it returned) — **MUST NOT** introduce parallel hard-coded `/tmp/selfmanaged` dumps.  
-3. Resolver **MUST** print the chosen directory path on **stdout** for `$(util_resolve_storage)` capture (data return — not product UI).  
-4. User-visible failure about storage **MUST** use Output SSOT (`out_die` / structured error as mode requires).
+Volatile leaf (shared parents `/dev/shm` and `/tmp`): `cache-${APP_NAME}-${login}-$$`.  
+Home leaf (already per login): `cache-${APP_NAME}-$$`.  
+`$$` is **this process id**. `${login}` is `id -un` as one path segment. **MUST NOT** hardcode either.
 
-### 2.2 Live resolve priority (normative for this product)
+| Host | Preferred | 1st fallback | 2nd fallback |
+|------|-----------|--------------|--------------|
+| Linux (and Termux, and any host that is not Git Bash or Mac) | `/dev/shm/cache/cache-${APP_NAME}-${login}-$$` | `/tmp/cache/cache-${APP_NAME}-${login}-$$` | `${HOME}/.cache/cache-${APP_NAME}-$$` |
+| Git Bash (`MSYSTEM`, or `uname -s` `MINGW*` / `MSYS*`) | `/tmp/cache/cache-${APP_NAME}-${login}-$$` | `${HOME}/AppData/Local/Temp/cache-${APP_NAME}-$$` | none |
+| Mac (`uname -s` `Darwin`) | `/tmp/cache/cache-${APP_NAME}-${login}-$$` | `${HOME}/Library/Caches/cache-${APP_NAME}-$$` | `${HOME}/cache/cache-${APP_NAME}-$$` |
 
-First match that is available and writable:
+| Class | Helper |
+|-------|--------|
+| Cache folder (preferred) | `util_preferred_cache_dir` |
+| Cache folder (1st fallback) | `util_fallback_cache_dir` |
+| Cache folder (2nd fallback) | `util_fallback2_cache_dir` (empty on Git Bash) |
+| Persistence storage | `util_persistent_storage_dir` → `${HOME}/.local/${APP_NAME}` |
 
-| Order | Condition | Path shape |
-|-------|-----------|------------|
-| 1 | `/dev/shm` exists and is writable | `/dev/shm/${APP_NAME}-${USERNAME}` |
-| 2 | `/tmp` is writable | `/tmp/${APP_NAME}-${USERNAME}` |
-| 3 | Fallback | `STORAGE_DIR` (`${XDG_CACHE_HOME}/${APP_NAME}-${USERNAME}`, env-overridable) |
+Live chosen **cache** root: `util_resolve_storage` (stdout).  
+Live **persistence** root: `util_resolve_persistent_storage` (stdout; create-before-return).
 
-**Create before return:** for the **chosen** tier, the resolver **MUST** `mkdir -p` the root (all tiers), then print the path. If create fails → **MUST** fail closed via `out_die`. **MUST NOT** return a path without creating it.
+On Termux/Android, the chosen cache root (including `/tmp` and `/dev/shm`) **MAY** be **`noexec`**. Termux uses the **Linux** chain. Cache remains scratch **only**. **MUST NOT** exec a binary from the cache folder.
 
-### 2.3 Isolation
+**Silent fallback.** Choosing a later tier **MUST NOT** print a warning or an error. **MUST NOT** say that a fallback happened. An error is allowed only when **every** tier for this host failed to be created.
 
-1. Paths **MUST** include **`${APP_NAME}`** and **`${USERNAME}`** (with safe defaults when unset).  
-2. **MUST NOT** rewrite the resolver to a single shared world-writable directory for all users.  
-3. Live product **MUST** export `TMPDIR=${EFFECTIVE_STORAGE_DIR}` so `mktemp -t` install staging inherits the isolated root.
+**MUST NOT** mix these with:
 
-### 2.4 Wire and diagnostics
+| Forbidden as this product’s storage | Why |
+|-------------------------------------|-----|
+| `${HOME}/.local/bin` / `USER_BIN` | Install binary dir |
+| `/dev/shm/${APP_NAME}` or `/dev/shm/${APP_NAME}-${USERNAME}` | Looks like a ram-drive project folder |
+| `${HOME}/.local/share/${APP_NAME}` | Not this product’s persistence shape |
+| `XDG_CACHE_HOME` as the chain | Replaces the host table |
+
+Persistence is not a cache tier. It stays `${HOME}/.local/${APP_NAME}` with no login suffix and no `$$`.
+
+### 2.2 Single cache resolver SSOT
+
+1. **MUST** keep **one** authoritative cache-resolve helper: **`util_resolve_storage`**.  
+2. New code that needs a product scratch/cache **root** **MUST** call `util_resolve_storage` (or `mktemp` under a path it returned).  
+3. Resolver **MUST** print the chosen directory path on **stdout** for `$(util_resolve_storage)` capture.  
+4. User-visible failure about cache **MUST** use Output SSOT.
+
+Preferred and fallback **path shapes** **MUST** be `util_preferred_cache_dir`, `util_fallback_cache_dir`, and `util_fallback2_cache_dir` (or the same literals those helpers print).
+
+### 2.3 Live cache resolve priority
+
+Walk this host’s chain in order. First directory that can be created **and** is writable wins. The chain is the table in §2.1. **MUST NOT** replace that chain with one shared `cache-${APP_NAME}` leaf or with `XDG_CACHE_HOME`.
+
+**Parent:** for `/dev/shm/cache` and `/tmp/cache` the resolver **MUST** create that parent (prefer mode **1777** when creating) so each login can add its own `cache-${APP_NAME}-${login}-$$` leaf. The **leaf** **MUST** be mode **0700**.
+
+**Create before return:** for the **chosen** leaf, the resolver **MUST** create it, confirm it is **writable**, then print the path. If create/write fails → try the next tier **with no message**. If none work → **MUST** fail closed. **MUST NOT** return a path without creating it.
+
+**MUST NOT** use these as cache:
+
+| Forbidden cache path | Why |
+|----------------------|-----|
+| `/dev/shm/${APP_NAME}` | Looks like a ram-drive project folder |
+| `/dev/shm/${APP_NAME}-${USERNAME}` | Same confusion. Login belongs in the leaf **under** `cache/`, as `cache-${APP_NAME}-${login}-$$` |
+| `/dev/shm` or `/tmp` as a dump | No app-named cache leaf |
+| Persistence storage | Durable data is not scratch |
+
+### 2.4 Cache isolation
+
+1. Cache leaves **MUST** include **`cache-${APP_NAME}`** (app identity).  
+2. Volatile leaves (`/dev/shm/cache` and `/tmp/cache`) **MUST** be `cache-${APP_NAME}-${login}-$$`. Home leaves **MUST** be `cache-${APP_NAME}-$$` (no login segment). Isolation is the login segment plus this process id, not one shared directory that the second login falls out of.  
+3. **MUST NOT** use a single shared world-writable directory for all logins or all apps.  
+4. Live product **MUST** export `TMPDIR=${EFFECTIVE_STORAGE_DIR}` so `mktemp` inherits the isolated **cache** root.  
+5. New scratch files **MUST** be created via **`util_mktemp`** (or `mktemp` under a path `util_resolve_storage` returned).  
+6. The **cache directory** name includes `$$` (this process). Scratch **files** inside it **MUST NOT** use a predictable `$$` file name (forbidden: `/tmp/${APP_NAME}.$$`, `${EFFECTIVE_STORAGE_DIR}/${APP_NAME}.$$`).
+
+**Complete `util_mktemp` sample:**
+
+```sh
+util_mktemp() {
+    : "${APP_NAME:=safe-rm}"
+    : "${EFFECTIVE_STORAGE_DIR:=}"
+    _suffix="${1:-tmp}"
+    _dollar='$'
+    case "${_suffix}" in
+        *"${_dollar}${_dollar}"*)
+            out_die "util_mktemp: refuse predictable \$\$ name template"
+            ;;
+    esac
+    if [ -z "${EFFECTIVE_STORAGE_DIR}" ]; then
+        EFFECTIVE_STORAGE_DIR=$(util_resolve_storage)
+        export EFFECTIVE_STORAGE_DIR
+    fi
+    mktemp "${EFFECTIVE_STORAGE_DIR}/${APP_NAME}.${_suffix}.XXXXXX" \
+        || mktemp
+}
+```
+
+**Forbidden:**
+
+```sh
+# MUST NOT
+tmp="/tmp/${APP_NAME}.$$"
+tmp="${EFFECTIVE_STORAGE_DIR}/${APP_NAME}.$$"
+```
+
+### 2.5 Persistence storage
+
+1. Persistence **MUST** be **`${HOME}/.local/${APP_NAME}`** (this login’s home + app name).  
+2. Helper **`util_persistent_storage_dir`** **MUST** print that path. **`util_resolve_persistent_storage`** **MUST** `mkdir -p` it, confirm it is writable, then print it (fail closed).  
+3. **MUST NOT** use `${HOME}/.local/bin` as persistence (that is `USER_BIN`).  
+4. **MUST NOT** store scratch/temps in persistence when a cache root is available.  
+5. Persistence **MUST** be under the invoking login’s `$HOME` (per-user). **MUST** include `${APP_NAME}`. **MUST NOT** add a login suffix or `$$`.
+
+### 2.6 Wire and diagnostics
 
 | Surface | Requirement |
 |---------|-------------|
-| `app_main` | Resolve once early: `EFFECTIVE_STORAGE_DIR=$(util_resolve_storage)`; export `EFFECTIVE_STORAGE_DIR`, `STORAGE_DIR`, `TMPDIR` |
-| `app_about` JSON | Include `effective_storage` and `storage_dir` (no CHECKSUM) |
-| `app_about` human | Show effective storage (and config fallback field) |
+| `app_main` | Resolve once early: `EFFECTIVE_STORAGE_DIR=$(util_resolve_storage)`; `PERSISTENT_STORAGE_DIR=$(util_resolve_persistent_storage)`; export `EFFECTIVE_STORAGE_DIR`, `STORAGE_DIR`, `PERSISTENT_STORAGE_DIR`, `TMPDIR` (`TMPDIR` = cache root; `STORAGE_DIR` = 1st fallback path) |
+| `app_about` human | **MUST** print **`Cache folder used:`** then the live directory; **`Cache folder (preferred):`** then this host’s preferred path; **`Cache folder (1st fallback):`** then the 1st fallback; **`Cache folder (2nd fallback):`** only when this host has a 2nd fallback; **`Persistence storage:`** then `${HOME}/.local/${APP_NAME}`. Linux sample below. **MUST NOT** label cache lines **Storage (effective)** or **Storage (fallback)**. **MUST NOT** warn or error when the used directory is a fallback |
+| `app_about` JSON | **MUST** include `cache_used`, `cache_preferred`, `cache_fallback` (1st), `cache_fallback_2` (2nd, empty string when the host has none), `persistence_storage`, and the live chosen cache root as `effective_storage` (same value as `cache_used`; `storage_dir` = 1st fallback). **MUST NOT** include `CHECKSUM` |
 
-### 2.5 Implementation Notes (this project)
+`Cache folder used` is the tier that was created. When the preferred tier is the one used, the used line and the preferred line are the same path. When a fallback is used, the used line is that fallback path and the preferred line still shows the preferred path. Neither case prints a warning.
+
+Linux `about` lines (placeholders, not a fixed process id):
+
+```
+[INFO] Cache folder used: /dev/shm/cache/cache-${APP_NAME}-${login}-$$
+[INFO] Cache folder (preferred): /dev/shm/cache/cache-${APP_NAME}-${login}-$$
+[INFO] Cache folder (1st fallback): /tmp/cache/cache-${APP_NAME}-${login}-$$
+[INFO] Cache folder (2nd fallback): ${HOME}/.cache/cache-${APP_NAME}-$$
+[INFO] Persistence storage: ${HOME}/.local/${APP_NAME}
+```
+
+Git Bash omits the 2nd fallback line:
+
+```
+[INFO] Cache folder used: /tmp/cache/cache-${APP_NAME}-${login}-$$
+[INFO] Cache folder (preferred): /tmp/cache/cache-${APP_NAME}-${login}-$$
+[INFO] Cache folder (1st fallback): ${HOME}/AppData/Local/Temp/cache-${APP_NAME}-$$
+[INFO] Persistence storage: ${HOME}/.local/${APP_NAME}
+```
+
+Mac prints preferred under `/tmp/cache/`, 1st fallback under `${HOME}/Library/Caches/`, and 2nd fallback under `${HOME}/cache/`:
+
+```
+[INFO] Cache folder used: /tmp/cache/cache-${APP_NAME}-${login}-$$
+[INFO] Cache folder (preferred): /tmp/cache/cache-${APP_NAME}-${login}-$$
+[INFO] Cache folder (1st fallback): ${HOME}/Library/Caches/cache-${APP_NAME}-$$
+[INFO] Cache folder (2nd fallback): ${HOME}/cache/cache-${APP_NAME}-$$
+[INFO] Persistence storage: ${HOME}/.local/${APP_NAME}
+```
+
+### 2.7 Implementation Notes (this project)
 
 | Item | Live value |
 |------|------------|
-| **Product / binary** | `selfmanaged` |
-| **Resolver** | `util_resolve_storage` in `./src/selfmanaged` |
-| **Config fallback** | `: "${STORAGE_DIR:=${XDG_CACHE_HOME}/${APP_NAME}-${USERNAME}}"` |
-| **Call sites** | `app_main` (resolve + TMPDIR); `app_about` (human + JSON) |
-| **Not used for** | Domain project trees (bootstrap has none) |
-| **Tests** | `tests/test_cli.sh` — about storage fields, isolation, dir exists, STORAGE_DIR override on fallback field |
+| **Product / binary** | `safe-rm` |
+| **Ship unit** | `src/safe-rm` |
+| **Cache resolver** | `util_resolve_storage` |
+| **Linux preferred** | `/dev/shm/cache/cache-${APP_NAME}-${login}-$$` |
+| **Linux 1st / 2nd** | `/tmp/cache/cache-${APP_NAME}-${login}-$$` then `${HOME}/.cache/cache-${APP_NAME}-$$` |
+| **Git Bash** | `/tmp/cache/cache-${APP_NAME}-${login}-$$` then `${HOME}/AppData/Local/Temp/cache-${APP_NAME}-$$` |
+| **Mac** | `/tmp/cache/cache-${APP_NAME}-${login}-$$` then `${HOME}/Library/Caches/cache-${APP_NAME}-$$` then `${HOME}/cache/cache-${APP_NAME}-$$` |
+| **Persistence** | `${HOME}/.local/safe-rm` |
+| **Persistence resolver** | `util_resolve_persistent_storage` |
+| **Call sites** | `app_main`, `app_about` |
+| **Test-purpose env** | `SRM_CACHE_HOST=linux\|gitbash\|mac` selects the chain. `SRM_CACHE_SKIP=preferred` skips tier 1 with no message. Operators do not set these |
+| **Not this ship unit** | `src/selfmanaged` is the bootstrap snapshot. Its older resolver is not this version’s proof |
 
-### 2.6 Why This Requirement Exists (CIAO)
+### 2.8 Why This Requirement Exists (CIAO)
 
-- **Caution:** Multi-user / sudo / containers — never mix users’ scratch.  
-- **Intentional:** One resolver; explicit tiers; wired from main.  
-- **Anti-fragile:** Missing `/dev/shm` still works via `/tmp` or cache.  
-- **Over-protect:** Forbid “simplify” to shared dumps; create fail-closed.
+- **Caution:** Multi-user isolation without looking like a project tree on tmpfs; durable data is not mixed with the install bin.  
+- **Intentional:** Storage = cache folder **and** persistence storage; about says both.  
+- **Anti-fragile:** Missing `/dev/shm` still works, and the miss is silent.  
+- **Over-protect:** The directory may carry `$$`. Scratch files inside it stay `mktemp` names.
+
+---
+
+## Under command line for normal user only
+
+When safe-rm runs on Termux, Git Bash, Windows cmd, or the same class (this login only — no root, no dedicated system account):
+
+| MUST | MUST NOT |
+|------|----------|
+| Keep **normal user privilege** only | Enable **admin privilege** (`sudo`, write `/etc`) or a **dedicated system user** to “fix” a missing cache tier |
+| Termux: Linux cache chain; cache may be `noexec` and is scratch only | Exec a binary from the cache folder |
+| Git Bash and Windows cmd: same ceiling | Invoke Termux `pkg` because those hosts were detected |
+
+Detect: Termux — `uname` contains Android, or `PREFIX` / `TERMUX_VERSION` is set. Git Bash — `MSYSTEM` or `uname -s` is MINGW*/MSYS*. Windows cmd — `OS=Windows_NT` after excluding Git Bash, Cygwin, and WSL.
+
+**This requirement:** cache and persistence stay under this login. Do not resolve scratch into `/etc`.
 
 ---
 
 ## 3. Design Principles (CIAO / CIAO-Lite)
 
-- Volatile first, user cache last for **scratch**.  
+- Volatile cache first, user cache last for scratch.  
+- Persistence is under `$HOME/.local/${APP_NAME}`, not under `bin`.  
 - Isolation before convenience.  
-- Soft-`mkdir` of the effective root is forbidden; create is fail-closed in the resolver.
+- Create fail-closed in the resolvers. A skipped tier stays silent.  
+- Cache path family is distinct from ram-drive **project** folders.
 
 ---
 
@@ -102,58 +253,72 @@ First match that is available and writable:
 
 **Future AI assistants, Grok, or maintainers MUST NOT**:
 
-1. Remove `${APP_NAME}` / `${USERNAME}` isolation from `util_resolve_storage`.  
-2. Replace the fallback chain with a single shared world-writable path.  
-3. Scatter new hard-coded `/tmp/${APP_NAME}` roots outside the resolver.  
-4. Leave the resolver as dead code with no call sites while claiming storage is product law.  
-5. Echo a tier path **without** creating it (or without fail-closed create).  
-6. Bypass Output SSOT for storage failure messages.  
-7. Put CHECKSUM in about storage diagnostics.  
+1. Restore `/dev/shm/${APP_NAME}` or `/dev/shm/${APP_NAME}-${USERNAME}` as the preferred cache.  
+2. Label about cache lines **Storage (effective)** / **Storage (fallback)**. The labels are **Cache folder used**, **Cache folder (preferred)**, **Cache folder (1st fallback)**, **Cache folder (2nd fallback)** when that host has one.  
+3. Drop persistence storage from this requirement or from `about`.  
+4. Use `${HOME}/.local/bin` as persistence.  
+5. Replace the cache fallback chain with a shared world-writable dump, with `XDG_CACHE_HOME`, or with one `cache-${APP_NAME}` leaf shared by every login.  
+6. Scatter hard-coded `/tmp/safe-rm` roots outside the cache resolver.  
+7. Leave the resolvers dead with no call sites while claiming storage is product law.  
+8. Echo a tier path without creating it.  
+9. Use predictable `$$` scratch **file** names instead of `util_mktemp` / `mktemp` XXXXXX. The cache **directory** itself includes `$$`.  
+10. Warn or error only because a higher cache tier was skipped.  
+11. Drop `${login}` or `$$` from a volatile cache leaf, or put the login back on `/dev/shm/${APP_NAME}-${login}` outside `cache/`. Put `${login}` or `$$` on a home leaf or on persistence.  
+12. Exec a binary from the cache folder, `/tmp`, or `/dev/shm` on Termux.  
+13. Hardcode an app name, a login name, or a process id into a cache path.
 
-**Violating this rule is a critical storage isolation regression.**
-
----
-
-## 5. Definition of done (shell CLI storage)
-
-Storage resolve work for selfmanaged is **not done** if any of the following fail:
-
-1. Exactly one authoritative resolver (`util_resolve_storage`) returns the chosen path on stdout after `mkdir -p` of that root.  
-2. Resolve priority matches this requirement (writable `/dev/shm` → `/tmp` → `STORAGE_DIR` fallback).  
-3. Paths include `${APP_NAME}` and `${USERNAME}` isolation; no shared world-writable single dump for all users.  
-4. `app_main` sets `EFFECTIVE_STORAGE_DIR` / exports `TMPDIR` from the resolver once early.  
-5. `app_about` human + JSON expose effective storage fields and **omit** `CHECKSUM`.  
-6. User-visible storage failures use Output SSOT (`out_die` / structured error).  
-7. Tests cover about storage fields / isolation / override as designed (`tests/test_cli.sh`).  
-8. Implementation changes cite this requirement key `requirement-shell-cli-storage`.
+**Violating this rule is a critical cache isolation / honesty regression.**
 
 ---
 
-## Under command line for normal user only
+## 5. Acceptance criteria
 
-This product may run on Termux, Git Bash, Windows cmd, or the same class (this login only).
-
-**This requirement:** scratch roots stay **per this login** (`APP_NAME` + username). **MUST NOT** create world-writable shared dumps or `/etc` dests because storage failed. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
-
-| MUST | MUST NOT |
-|------|----------|
-| Isolated scratch under this login | Elevate to “fix” a missing `/dev/shm` or `/tmp` |
-
----
-
-## 6. Related artifacts
-
-| Artifact | Role |
-|----------|------|
-| `docs/requirements/index.md` | Registry SSOT |
-| `docs/requirements/requirement-shell-modular-function-design.md` | `util_*` ownership |
-| `docs/requirements/requirement-shell-output-requirements.md` | about JSON via `out_json` |
-| `docs/requirements/requirement-shell-self-management.md` | about lifecycle |
-| `./src/selfmanaged` | Implementation under test |
-| `tests/test_cli.sh` | Storage diagnostics tests |
+| ID | Criterion |
+|----|-----------|
+| AC-1 | Exactly one authoritative cache resolver creates and returns the cache root |
+| AC-2 | Linux preferred leaf is `/dev/shm/cache/cache-${APP_NAME}-${login}-$$` when that directory is usable. Git Bash and Mac preferred leaf is `/tmp/cache/cache-${APP_NAME}-${login}-$$` |
+| AC-3 | `app_main` sets `EFFECTIVE_STORAGE_DIR` / `TMPDIR` / `PERSISTENT_STORAGE_DIR` early |
+| AC-4 | `about` human prints Cache folder used, preferred, 1st fallback, 2nd fallback when present, and Persistence storage; JSON has `cache_used` / `cache_preferred` / `cache_fallback` / `cache_fallback_2` / `persistence_storage` |
+| AC-5 | Scratch files use `util_mktemp` / `mktemp` XXXXXX; the cache directory name may include `$$`; scratch file names must not |
+| AC-6 | Live cache path is not `/dev/shm/${APP_NAME}` or `/dev/shm/${APP_NAME}-${USERNAME}` |
+| AC-7 | Persistence path is `${HOME}/.local/${APP_NAME}` and the directory exists after resolve |
+| AC-8 | Skipping a cache tier prints no warning and no error. Git Bash has no 2nd fallback. Mac 2nd fallback is `${HOME}/cache/cache-${APP_NAME}-$$`. Home leaves omit `${login}` |
 
 ---
 
-**Last Updated**: 2026-09-06  
-**Owner**: selfmanaged project maintainers  
-**Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 4, 5, 11, 19, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).
+## 6. Related requirements (peer keys only)
+
+| Key | Relationship |
+|-----|--------------|
+| `requirement-shell-cli-interface` | About command; cache lines are named here |
+| `requirement-shell-output-requirements` | `out_*`; resolver stdout is a data return |
+| `requirement-shell-modular-function-design` | `util_*` ownership |
+| `requirement-domain-safe-rm` | Remove guard. Not a cache tier |
+| `docs/requirements/index.md` | Registry |
+
+---
+
+## Design-time verification
+
+| TP family / ID | Suite | Status |
+|----------------|-------|--------|
+| **TP-CACHE-01** | `tests/run_dry_run.sh` | **have** — about JSON cache + persistence fields + human labels; no Storage (effective) / Storage (fallback) |
+| **TP-CACHE-02** | same | **have** — Linux preferred `/dev/shm/cache/cache-${APP_NAME}-${login}-$$`; 1st `/tmp/cache/...`; 2nd `${HOME}/.cache/cache-${APP_NAME}-$$`; Git Bash and Mac chains; silent skip of preferred; leaf mode 0700; persistence `${HOME}/.local/${APP_NAME}`; live dir exists; not `/dev/shm/${APP_NAME}-${login}` |
+| **TP-CACHE-03** | same | **have** — `util_mktemp` writes `mktemp` names under the cache leaf and refuses a `$$` file-name template |
+
+The suite does not assign `HOME` to a scratch directory. `about` is not a remove path.
+
+**Map:** `reviews/test-plan.md`
+
+## 7. Status history
+
+| Date | Status | Note |
+|------|--------|------|
+| 2026-09-06 | Active 1.0.1 | Bootstrap wire: `/dev/shm/${APP_NAME}-${USERNAME}` then `/tmp` then `XDG_CACHE_HOME`. About said Storage (effective) |
+| 2026-09-27 | Active 1.1.0 | Per-login per-process cache leaves. Linux shm → tmp → `${HOME}/.cache`. Git Bash tmp → AppData Local Temp. Mac tmp → Library/Caches → `${HOME}/cache`. Silent tier miss. Persistence `${HOME}/.local/${APP_NAME}`. `about` prints used / preferred / 1st / 2nd. Ship unit `src/safe-rm` |
+
+---
+
+**Last Updated**: 2026-09-27  
+**Owner**: project maintainers  
+**Alignment**: Registry `docs/requirements/index.md`; **CIAO** (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| **1.0.1** (current) | Yes — report security issues against this release |
+| **1.0.2** (current) | Yes — report security issues against this release |
+| 1.0.1 | Yes |
 | 1.0.0 | Yes |
 
 ## Remove guard
@@ -31,7 +32,7 @@ This project follows **[CIAO](https://github.com/cloudgen/ciao)** / **CIAO-Lite*
 | Letter | Principle | Security application |
 |--------|-----------|----------------------|
 | **C** | **Caution** | Assume hostile input, hostile networks, and misconfiguration. Validate install paths, checksums, and privilege boundaries; fail closed on integrity mismatch when a digest is present. |
-| **I** | **Intentional** | Privilege typing (Type 0 self-management), channel URL (`SCRIPT_URL`), checksum modes, and per-user scratch storage resolve are deliberate and documented—not accidental. Prefer clear “why” over silent magic. |
+| **I** | **Intentional** | Privilege typing (Type 0 self-management), channel URL (`SCRIPT_URL`), checksum modes, and the cache folder (per login, per process, with a separate persistence directory) are deliberate and documented—not accidental. Prefer clear “why” over silent magic. |
 | **A** | **Anti-fragile** | Survive harsh environments (minimal containers, missing tools, non-interactive `curl \| sh`). Prefer automatic SHA-256 sidecar checks when available, least privilege for day-to-day use, and recoverable failure over brittle trust. |
 | **O** | **Over-protect** | Defense in depth on critical paths (integrity verify before install/update, isolated scratch roots, CIAO Protection Zones in the ship unit, loud failure). Do not “simplify away” safety for brevity. |
 
