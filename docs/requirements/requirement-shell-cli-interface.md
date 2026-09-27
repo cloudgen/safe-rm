@@ -73,7 +73,7 @@ Additional flags **MAY** be added only when documented here (or a superseding re
 
 1. **Single entry:** A single main dispatcher (e.g. `app_main`) **MUST** parse global flags and route commands.
 2. **Unknown command:** **MUST** fail loudly with a clear error and pointer to `help` (via output SSOT).
-3. **Zero-arg install-ensure:** Empty argv **MUST** mean CLI self-install-ensure (not help). Not installed → `inst_self_install` (TTY may confirm via `inst_maybe_install`; non-interactive / quiet / json auto). Already installed (global or local) → success no-op (“already installed”), not help and not blind reinstall. How (copy vs download, dest mode): `requirement-shell-cli-self-install.md`. Full empty-argv matrix: `requirement-shell-cli-zero-arguments.md`.
+3. **Zero-arg split:** Interactive empty argv (`TTY=1`, not quiet, not json) **MUST** open the numbered menu (`requirement-shell-cli-default-interaction.md`). Non-interactive / quiet / json empty argv **MUST** mean CLI self-install-ensure (not help, not the menu). Already installed on that path → success no-op (“already installed”), not help and not blind reinstall. How (copy vs download, dest mode): `requirement-shell-cli-self-install.md`. Full empty-argv matrix: `requirement-shell-cli-zero-arguments.md`.
 4. **Idempotent install skip:** Self-install **MUST** no-op when already installed unless force/reinstall policy is set.
 5. **No raw user I/O:** User-facing messages **MUST** go through the centralized `out_*` system (see output template/term).
 
@@ -144,7 +144,9 @@ When specializing product **B** from this bootstrap (**A → B only**):
 
 | Command | Type | Handler (current) | Required behavior |
 |---------|------|-------------------|-------------------|
-| *(no args — empty argv)* | Type 0 | `app_main` → `inst_maybe_install` / `inst_self_install` | **Type O CLI self-install-ensure** (not Type N help): not-installed / local / global; never help; copy when `$0` is the script. See `requirement-shell-cli-zero-arguments.md` · `requirement-shell-cli-self-install.md` |
+| *(no command — 0-argv)* | Type 0 | `app_main` → `app_default` or `inst_self_install` | **Interactive**, including `safe-rm --debug` (`--debug` is not a command): main menu. **Non-interactive / quiet / json:** Type O CLI self-install-ensure (not help, not the menu). See `requirement-shell-cli-zero-arguments.md` · `requirement-shell-cli-default-interaction.md` |
+| `menu` | Type 0 | `app_default` | Numbered list on a TTY (front **1** / **8** / **9**; remove-guard **11**; self-management **82–87**). Off a TTY: help. Sample: `safe-rm menu` |
+| `main` | Type 0 | `app_default` | Alias of `menu` |
 | `self-install` | Type 0 | `inst_self_install` | Place **this CLI** (copy when `$0` is a script; download when piped). Dest **0700** local / **0755** global. Dual mention: `requirement-shell-cli-self-install.md`. Sample: `selfmanaged self-install` |
 | `install` | Type 0 | `inst_self_install` | **Alias of `self-install`** (this product has no payload). Same copy/download/dest-mode contract. Sample: `selfmanaged install` |
 | `version` | Type 0 | `app_main` / `app_version` | Print local version; JSON object when `--json` |
@@ -153,6 +155,9 @@ When specializing product **B** from this bootstrap (**A → B only**):
 | `self-update` | Type 0 | `inst_self_update` | Fetch remote version; reinstall when policy allows; reuse install primitives |
 | `self-uninstall` | Type 0 | `inst_self_uninstall` | Remove managed binary; PATH cleanup only if `~/.local/bin` empty (user installs) |
 | `help` | Type 0 | `app_help` | Full usage in human mode; short JSON note in JSON mode; Environment lists channel vars only — **not** `CHECKSUM` |
+| `setup` | domain | `srm_cmd_setup` | Admin login checks the before/after table and swaps when needed. Sample: `safe-rm setup`. Law: `requirement-domain-safe-rm.md` |
+| `restore` | domain | `srm_cmd_restore` | Put `origin-rm` back as `rm` and remove the `safe-rm` link. Sample: `safe-rm restore`. Law: `requirement-domain-safe-rm.md` |
+| `-restore` | domain | `srm_cmd_restore` | 2023 token when this program is the `rm` people type |
 
 #### Global flags (normative wiring for this project)
 
@@ -166,7 +171,7 @@ When specializing product **B** from this bootstrap (**A → B only**):
 #### Dispatcher acceptance criteria (this project)
 
 1. Unknown token after flag parse → `out_die` with pointer to `selfmanaged help`.  
-2. Zero-arg → CLI self-install-ensure: not installed → `inst_self_install`; already installed (local or global) → already-installed success (not help); failures non-zero.  
+2. Zero-arg → interactive: numbered menu. Non-interactive / quiet / json: CLI self-install-ensure (not help, not the menu); failures non-zero.  
 3. Command routing table in `app_main` **must** include every row in the command table above.  
 4. Help text **must** stay aligned with that table (no orphan commands, no listed-but-unrouted commands).  
 5. User-facing strings **must not** use raw `echo`/`printf` outside the `out_*` system (protected low-level helpers excepted only if already CIAO-marked and not for general messages).
@@ -175,7 +180,7 @@ When specializing product **B** from this bootstrap (**A → B only**):
 
 - Type 1: `prerequisites`, `create-user`, Docker host install, etc.  
 - Type 2: app `start`/`stop`/`configure` under a system user  
-- The remove guard (`rm`, `--dry-run`) is owned by `requirement-domain-safe-rm.md`. This file keeps the Type 0 menu and does not restate the refuse table.  
+- The remove guard (`rm`, `--dry-run`, `setup`, `restore`, the protected-rm swap) is owned by `requirement-domain-safe-rm.md`. This file keeps the Type 0 menu and does not restate the refuse table. The swap is the one admin step on a Linux host. It is unused on Termux, Git Bash, and Windows cmd. Tests use a `/tmp/safe-rm-swap.*` directory and do not remove a directory.  
 
 ### 2.7 Why This Requirement Exists (Direct CIAO Alignment)
 

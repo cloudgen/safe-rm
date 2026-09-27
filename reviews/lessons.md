@@ -2,7 +2,7 @@
 
 **Prior-report failure modes** to re-check on every product review.  
 **Mandatory load** before findings.  
-**Last update:** 2026-09-17 (L-DEST-0711-01)
+**Last update:** 2026-09-27 (L-MENU-01)
 
 | L-ID | Failure mode | Re-check | Source | Open? |
 |------|--------------|----------|--------|-------|
@@ -22,6 +22,7 @@
 | L-ID-01 | APP_NAME only `:=` without hard-assign | `APP_NAME="selfmanaged"` present | SM-ID-01 | **Closed** (2026-07-16) |
 | L-CITE-TERM-01 | Bootstrap footer cites terminologies | Footer cites requirement-shell-cli-* | origin 2026-07-16 | **Closed** (2026-07-16) |
 | L-JSON-RAW-01 | `out_json` lacks `@key` raw nested path | `@key` supported in out_json; suite asserts unquoted insert | timer origin map | **Closed** (impl 2026-07-16; suite 2026-09-06 TP-JSON-RAW-01) |
+| L-MENU-01 | Specialized safe-rm kept interactive empty argv as an install prompt after origin 1.4.0 opened a numbered menu. The copy in `src/selfmanaged` is still 1.3.1 and has no menu | `src/safe-rm` interactive empty argv opens front **1** remove-guard / **8** / **9**. Under **1**, **11** `rm`. Under **8**, **82–87** and **0** Back. **81** unprinted. Pipe, quiet, and json empty argv still place | `reports/2026-09-27-safe-rm-main-menu-vs-selfmanaged.md` | **Closed** (2026-09-27 ship unit + `tests/run_dry_run.sh` PASS=105) |
 
 ## How to use
 

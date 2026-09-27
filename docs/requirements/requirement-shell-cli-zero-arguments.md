@@ -21,7 +21,7 @@ It defines what happens when the tool is invoked with **no command and no flags*
 curl -fsSL https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged | /bin/sh
 ```
 
-Empty argv means **install-ensure** for three detect cases:
+Interactive empty argv (`TTY=1`, not quiet, not json) opens the numbered menu and does not use the three cases below. Non-interactive empty argv means **install-ensure** for three detect cases:
 
 | Case | Meaning |
 |------|---------|
@@ -34,7 +34,7 @@ Empty argv means **install-ensure** for three detect cases:
 
 ### 1.1 Human-facing
 
-**In one sentence:** If you run `selfmanaged` with **no arguments at all** (the advertised `curl … | sh` one-liner), the program **must place itself or confirm it is already installed** — it must not print help.
+**In one sentence:** If you run this program with **no arguments** at a terminal, it opens the numbered menu. The advertised `curl … | sh` one-liner has no terminal, so it **must place itself or confirm it is already installed** — it must not print help and it must not open the menu.
 
 | Box | Meaning | Example |
 |-----|---------|---------|
@@ -77,12 +77,13 @@ Jargon: **Type O** (letter) means “no arguments = install-ensure.” That is *
 | **Installed (global)** | Executable at `${GLOBAL_BIN}/selfmanaged` (default `GLOBAL_BIN=/usr/local/bin`) observed by install-detect SSOT. |
 | **Force / reinstall** | `FORCE_REINSTALL=1` from `--force` (and related force wiring in `app_main`). Required only for deliberate replace, not for ensure. |
 
-### 2.2 Single meaning of empty argv
+### 2.2 Split meaning of empty argv
 
-1. When **argv is empty**, `app_main` **MUST** run **install-ensure** — **MUST NOT** route to `app_help` / default `COMMAND=help`.  
-2. Explicit `selfmanaged help` remains the only full-usage path for help text.  
-3. Bootstrap **MUST** always call `app_main "$@"` so pipe one-liners reach this contract (no `${0##*/}` product-name gate).  
-4. Empty argv **MUST NOT** require the user to pass `install` or `install --force` merely because a previous ensure already succeeded.
+1. **Interactive 0-argv** (`TTY=1`, `JSON=0`, `QUIET=0`, no command token) **MUST** call `app_default` (the main menu in `requirement-shell-cli-default-interaction.md`). **MUST NOT** install-ensure and **MUST NOT** route to `app_help`. `--debug` is excluded from the command count: `safe-rm --debug` on a terminal is still interactive 0-argv and **MUST** open that menu, with debug on.  
+2. When there is **no command token** and the run is **non-interactive** (no TTY, or `JSON=1`, or `QUIET=1`), `app_main` **MUST** run **install-ensure** (`inst_self_install`) — **MUST NOT** open the menu, **MUST NOT** route to `app_help`. `--debug` does not turn that path into the menu.  
+3. Explicit `help` remains the full-usage path for help text. Off a terminal, `menu` and `main` print that help.  
+4. Bootstrap **MUST** always call `app_main "$@"` so pipe one-liners reach this contract (no `${0##*/}` product-name gate).  
+5. Non-interactive empty argv **MUST NOT** require the user to pass `install` or `install --force` merely because a previous ensure already succeeded.
 
 ### 2.2.1 Specializee contract (bootstrap origin → specialized B)
 
@@ -90,7 +91,7 @@ When this product is used as **bootstrap origin A** for a specialized product **
 
 | Rule | MUST | MUST NOT |
 |------|------|----------|
-| Empty argv on B | Keep **Type O install-ensure** (or document a product-type change with authorized REQ) | Hijack empty argv for domain full-setup / host mutation |
+| Empty argv on B | Keep **non-interactive Type O install-ensure**. Interactive empty argv **MAY** be the numbered menu when that product claims it | Hijack **non-interactive** empty argv for a menu or for domain full-setup; hang a menu under `curl \| sh` |
 | Domain setup verb | Use an explicit command (e.g. `run`, `setup`, domain verb catalog) | Treat bare `curl \| sh` / empty argv as host domain install |
 | Case A helper | If B copies `inst_maybe_install` as first-install SSOT, quiet/json **MUST** call `inst_self_install` and return its status | Copy a helper that `return 0` under quiet/json without placing the binary |
 | Tests | Isolate `HOME`, `USER_BIN`, and **`GLOBAL_BIN`** so host `/usr/local/bin/${APP_NAME}` does not shadow lifecycle CI | Assume empty `HOME` alone hides a real global install |
@@ -99,6 +100,10 @@ When this product is used as **bootstrap origin A** for a specialized product **
 **Rationale:** Specializees that rebind empty argv to interactive host setup break the online-install contract and confuse install-ensure with domain ops. Host-mutating domain work belongs under explicit verbs with privilege gates (see CLI interface specializee contract).
 
 ### 2.3 Normative case matrix
+
+**Interactive empty argv** (`TTY=1`, not quiet, not json) is the numbered menu. It does **not** use the matrix below.
+
+**Non-interactive** empty argv, `FORCE_REINSTALL=0`:
 
 | Case | Detect condition (project) | Empty argv, `FORCE_REINSTALL=0` | Empty argv / install with force |
 |------|----------------------------|--------------------------------|---------------------------------|
@@ -120,7 +125,7 @@ When **no managed binary** is present, empty argv **MUST** place the program (or
 
 | Mode | What a person sees | What MUST happen |
 |------|--------------------|------------------|
-| **Interactive** (real terminal on stdin+stdout, not quiet/json) | A short note and a yes/no question | Yes → `inst_self_install` (copy when `$0` is the script; **MUST NOT** re-download that file); no → skip **without** dumping help |
+| **Interactive** (real terminal on stdin+stdout, not quiet/json) | The numbered list (**1** remove-guard, **8** self-management, **9** Exit) | `app_default`. Place only if the person chooses **87** / `self-install` |
 | **Non-interactive** (no terminal / `curl \| sh`) | An auto-install message | Place the program (`inst_maybe_install` non-TTY branch → `inst_self_install`) |
 | **Quiet or JSON** | No question | `inst_self_install` (no prompt). Failure **MUST** be non-zero. **MUST NOT** return success without placing. |
 | **Failure** (network, checksum, I/O) | An error | Non-zero exit; no fake success; no help-only output |
@@ -129,7 +134,7 @@ When **no managed binary** is present, empty argv **MUST** place the program (or
 
 | Path | Quiet / JSON, not installed | Human TTY, not installed | Pipe, not installed |
 |------|-----------------------------|--------------------------|---------------------|
-| `app_main` empty argv | **MUST** call `inst_self_install` directly | **MAY** call `inst_maybe_install` | **MUST** auto-install (helper non-TTY branch or direct `inst_self_install`) |
+| `app_main` empty argv | **MUST** call `inst_self_install` directly | **MUST** call `app_default` (no place side effect) | **MUST** call `inst_self_install` |
 | `inst_maybe_install` itself | **MUST** call `inst_self_install` and return its status. **MUST NOT** `return 0` without placing | Note + `prompt_yes_no` then `inst_self_install` | Auto-install message + `inst_self_install` |
 
 Empty-argv quiet/json in `app_main` is **not** a license for the helper to no-op. Products copied from this bootstrap that route Case A **only** through the helper **MUST** still place the binary under quiet/json.
@@ -169,8 +174,9 @@ Empty-argv quiet/json in `app_main` is **not** a license for the helper to no-op
 | **Product / binary** | `selfmanaged` (`APP_NAME`) |
 | **Ship unit** | `src/selfmanaged` |
 | **Dispatcher** | `app_main` — empty-argv block **before** flag/command parse default help |
-| **Install ensure** | `inst_self_install` (quiet/json and already-installed no-op; copy when `$0` is a script) |
-| **Friendly first install** | `inst_maybe_install` (TTY confirm / non-TTY auto) when not installed and not quiet/json. Quiet/JSON **MUST** call `inst_self_install` (SM-BUG-01: still place, not skip). |
+| **Install ensure** | `inst_self_install` on non-interactive / quiet / json empty argv (copy when `$0` is a script) |
+| **Interactive empty argv** | `app_default` (numbered menu). No place side effect |
+| **Friendly helper** | `inst_maybe_install` remains for direct callers (TTY confirm / non-TTY auto). Empty argv no longer calls it. Quiet/JSON through the helper **MUST** still call `inst_self_install` |
 | **Detect SSOT** | `inst_is_installed` ← `inst_get_version` |
 | **Global path** | `GLOBAL_BIN` default `/usr/local/bin` |
 | **Local path** | `USER_BIN` default `${HOME}/.local/bin` |
@@ -184,19 +190,13 @@ Empty-argv quiet/json in `app_main` is **not** a license for the helper to no-op
 ```text
 app_main:
   if [ $# -eq 0 ]; then
-    if JSON or QUIET:
-      inst_self_install; exit $?   # Case A/B/C; no prompt
-    elif inst_is_installed:
-      inst_self_install   # Case B/C success no-op
-      exit $?
+    if JSON or QUIET or TTY is not 1:
+      inst_self_install; exit $?   # non-interactive Case A/B/C; no prompt
     else
-      inst_maybe_install     # Case A (TTY confirm / pipe auto) → inst_self_install
-      exit $?
-    # inst_maybe_install MUST still place if JSON/QUIET ever reaches it
-    # (defense in depth; specializee copy of the helper)
+      app_default; exit $?         # interactive numbered menu
     fi
   fi
-  # else parse flags/commands; default COMMAND=help only when argv non-empty and command is help/absent token rules
+  # else parse flags/commands; menu|main → app_default
 ```
 
 #### Message contract (already installed, human)
@@ -231,7 +231,7 @@ app_main:
 
 **Future AI assistants, Grok, or maintainers MUST NOT**:
 
-1. Route empty argv to `app_help` when Case B or C applies (or when Case A should install).  
+1. Route non-interactive empty argv to `app_help`, or open the numbered menu on a pipe / quiet / json empty argv. Interactive empty argv **MUST** be the menu.  
 2. Require `--force` for a healthy already-installed empty-argv re-run (local or global).  
 3. Handle only Case A and leave B/C as accidental help fallthrough.  
 4. Break dual-path detect so local or global installs are misclassified.  
@@ -252,7 +252,7 @@ app_main:
 
 This requirement is satisfied when all of the following hold:
 
-1. Empty argv + not installed → Case A self-install path (TTY may confirm; non-TTY / quiet / json auto). Quiet/json through the helper **MUST** place or fail closed — not `return 0` without install. Script `$0` copies; interpreter `$0` downloads.  
+1. Non-interactive empty argv + not installed → Case A self-install path (quiet / json / pipe auto). Interactive empty argv opens the numbered menu and does not place. Quiet/json through the helper **MUST** place or fail closed — not `return 0` without install. Script `$0` copies; interpreter `$0` downloads.  
 2. Empty argv + local install present + force off → already-installed success; not help; no re-download.  
 3. Empty argv + global install present + force off → already-installed success; not help; no re-download.  
 4. Empty argv + install failure → non-zero exit.  

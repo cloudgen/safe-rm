@@ -59,8 +59,8 @@ When this product is **bootstrap origin A** for specialized product **B** (A→B
 1. When argv is empty and the run is **non-interactive** (no TTY, or `JSON=1`, or `QUIET=1`), `app_main` **MUST** call `inst_self_install` — **MUST NOT** call `inst_perform_install` as the empty-argv default, **MUST NOT** open a menu, **MUST NOT** call `app_help`.  
 2. `selfmanaged self-install` **MUST** call `inst_self_install`.  
 3. `selfmanaged install` **MUST** call `inst_self_install` (alias; this product has no payload). Dual mention: `requirement-shell-cli-interface.md`.  
-4. Interactive empty argv when **not** installed **MAY** confirm via `inst_maybe_install`; a yes **MUST** call `inst_self_install` (copy when `$0` is the script). This product has **no** numbered TTY menu.  
-5. Interactive empty argv when **already** installed **MUST** call `inst_self_install` (success no-op unless `--force`).
+4. Interactive empty argv **MUST** open the numbered menu (`requirement-shell-cli-default-interaction.md`) and **MUST NOT** place as a side effect. Choosing **87** or `self-install` on that menu **MUST** call `inst_self_install` (copy when `$0` is the script).  
+5. `inst_maybe_install` **MAY** still confirm on a TTY when a caller invokes the helper directly. Empty argv **MUST NOT** call it.
 
 ### 2.2 `$0` source
 
@@ -109,8 +109,8 @@ Force off → `out_success` already installed; exit 0; no re-copy; no download. 
 | **Dest mode helper** | `inst_cli_dest_mode` → **0755** root / **0700** non-root |
 | **Download peer** | `inst_perform_install_download_*` + `inst_perform_install_atomic_install` then dest-mode chmod |
 | **PATH** | `path_add_shell` on this path (CLI on PATH) |
-| **Dispatcher** | `app_main` empty-argv NI / quiet / json → `inst_self_install`; command `self-install` same; `install` alias same |
-| **TTY first-shot** | `inst_maybe_install` → `inst_self_install` (no payload; no menu) |
+| **Dispatcher** | `app_main` empty-argv NI / quiet / json → `inst_self_install`; interactive empty argv → `app_default`; command `self-install` same; `install` alias same |
+| **TTY first-shot** | Numbered menu (`app_default`). Place only when the person chooses **87** / `self-install` |
 | **Global bin** | `/usr/local/bin` |
 | **Local bin** | `${HOME}/.local/bin` |
 | **Channel** | `SCRIPT_URL` default `https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged` (pipe / interpreter `$0` only) |
@@ -120,16 +120,12 @@ Force off → `out_success` already installed; exit 0; no re-copy; no download. 
 
 ```sh
 if [ $# -eq 0 ]; then
-    if [ "${JSON}" -eq 1 ] || [ "${QUIET}" -eq 1 ]; then
+    if [ "${JSON}" -eq 1 ] || [ "${QUIET}" -eq 1 ] || [ "${TTY}" -ne 1 ]; then
         inst_self_install
-        exit $?
-    elif inst_is_installed; then
-        inst_self_install
-        exit $?
-    else
-        inst_maybe_install
         exit $?
     fi
+    app_default
+    exit $?
 fi
 ```
 

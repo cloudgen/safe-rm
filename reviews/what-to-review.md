@@ -4,7 +4,7 @@
 **Class:** Bootstrap project — no Active domain requirements expected.  
 **Always load first:** `reviews/lessons.md`
 
-**Last plan update:** 2026-09-06 (SM-PLAN-01 TP-JSON-RAW-01; coding-style REQ; README voice)
+**Last plan update:** 2026-09-27 (main menu vs selfmanaged; L-MENU-01)
 
 ---
 
@@ -65,6 +65,23 @@
 | Helpers | `tests/helpers.sh` (**GLOBAL_BIN** isolate) |
 | TP registry | `reviews/test-plan.md` |
 | Revision plan | `reviews/revision-plan.md` |
+
+---
+
+## Main menu vs selfmanaged (L-MENU-01)
+
+Reference is selfmanaged **1.4.0** (`selfmanaged/src/selfmanaged`), not `src/selfmanaged` **1.3.1**.
+
+| Check | Pass when |
+|-------|-----------|
+| Interactive empty argv | Numbered menu. No install prompt and no place |
+| Pipe / quiet / json empty argv | Still `inst_self_install` (TP-SI-03) |
+| Front board | Header nametag, **1** remove-guard, **8** self-management, **9** Exit. No lifecycle verb and no `rm` row on this board |
+| Under **8** | **82–87** and **0** Back. **81** not printed |
+| Domain | `rm` on its own front category, not beside **8** |
+| `menu` / `main` | Same board on a terminal. Help off a terminal |
+| Bad pick | `out_error` and reprint. Not `out_die` |
+| After a leaf | Front board shows again |
 
 ---
 

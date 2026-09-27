@@ -1,7 +1,7 @@
 # Reviews index — selfmanaged
 
 **Registry** of review plan artifacts and run reports. Keep rows in sync with disk.  
-**Updated:** 2026-09-27 (1.3.1 ship unit `src/selfmanaged`; curl channel `.../main/src/selfmanaged`)
+**Updated:** 2026-09-27 (safe-rm main menu vs selfmanaged 1.4.0)
 
 ## Plan artifacts
 
@@ -26,6 +26,7 @@
 | 2026-08-11 | `reports/2026-08-11-selfmanaged-specializee-revision.md` | GLOBAL_BIN tests + specializee contract + anchors | PASS=102 FAIL=0 | **Pass** (1.2.2) |
 | 2026-09-02 | `reports/2026-09-02-bug-inst-maybe-install-quiet-json-skip.md` | Helper quiet/json skip; REQ coverage + human-facing | PASS=108 FAIL=0 | **Closed** (helper patched) |
 | 2026-09-06 | `reports/2026-09-06-coverage-readme-req-tp-json-raw.md` | README voice; coding-style REQ; TP-JSON-RAW-01; command-line-for-normal-user-only | PASS=117 FAIL=0 | **Closed** (1.2.4) |
+| 2026-09-27 | `reports/2026-09-27-safe-rm-main-menu-vs-selfmanaged.md` | safe-rm numbered main menu vs selfmanaged 1.4.0 | probes only; suite not re-run | **Revise** |
 
 ## Open items summary
 
@@ -40,6 +41,7 @@
 | SM-DOC-01 | P3 | **closed** (2026-07-16) | AGENTS.md + docs maps list nine REQs incl. storage |
 | SM-REV-01/02/03 | — | **closed** (1.2.2) | GLOBAL_BIN isolation; specializee contract; dispatch/help anchors |
 | L-CSUM-01 | partial | vigilance | Suite OK; keep CHECKSUM trust wording honest |
+| L-MENU-01 | bug | **closed** (2026-09-27) | `src/safe-rm` opens the numbered menu on a terminal; pipe / quiet / json still place |
 
 ## Notes
 

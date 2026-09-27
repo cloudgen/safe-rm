@@ -4,11 +4,12 @@
 
 | Version | Supported |
 |---------|-----------|
-| **1.0.0** (current) | Yes — report security issues against this release |
+| **1.0.1** (current) | Yes — report security issues against this release |
+| 1.0.0 | Yes |
 
 ## Remove guard
 
-`safe-rm rm` refuses the login home and anything inside it, anything under `/home`, `/usr/bin` and anything inside it, and the system directories named in the product README. One refused path cancels the whole command. `--dry-run` does not call the system `rm`. This program does not replace `/bin/rm` or `/usr/bin/rm`.
+`rm -rf` of any account home is refused. A folder inside any account home may be removed. `/home`, `/usr/bin`, and the system directories named in the product README are refused. One refused path cancels the whole command. `--dry-run` does not call `origin-rm`. `safe-rm setup` is the admin check of that swap. A login that cannot move `/usr/bin/rm` is refused, and nothing is moved. Tests of the before/after table use a scratch directory and do not delete a directory.
 
 ## Reporting a Vulnerability
 

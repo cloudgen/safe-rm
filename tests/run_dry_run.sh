@@ -67,7 +67,7 @@ assert_eq "TP-SRM-01 sh -n" 0 "$?"
 out=$(sh "$SAFE_RM" version 2>/dev/null)
 ec=$?
 assert_eq "TP-SRM-02 version exit" 0 "$ec"
-assert_contains "TP-SRM-02 version names safe-rm" "$out" "safe-rm version 1.0.0"
+assert_contains "TP-SRM-02 version names safe-rm" "$out" "safe-rm version $(grep '^VERSION="' "$SAFE_RM" | head -n1 | cut -d'"' -f2)"
 
 # TP-SRM-03 help
 out=$(sh "$SAFE_RM" help 2>/dev/null)
@@ -129,6 +129,14 @@ if [ -d "$HOME" ]; then
 else
     t_fail "TP-SRM-07 login home missing"
 fi
+out=$(srm "$HOME/." 2>"$err")
+ec=$?
+assert_eq "TP-SRM-07 home/. exit" 1 "$ec"
+assert_contains "TP-SRM-07 home/. refused" "$(cat "$err")" "Refusing to remove"
+out=$(srm "$HOME/.." 2>"$err")
+ec=$?
+assert_eq "TP-SRM-07 home/.. exit" 1 "$ec"
+assert_contains "TP-SRM-07 home/.. refused" "$(cat "$err")" "Refusing to remove"
 
 # TP-SRM-08 literal tokens
 for token in '$HOME' '${HOME}' '~'; do
@@ -186,16 +194,68 @@ else
     t_fail "TP-SRM-11 / missing"
 fi
 
-# TP-SRM-12 a path inside the login home
+# TP-SRM-12 a folder inside the login home is allowed and remains
 inside="$REPO_ROOT"
 out=$(srm "$inside" 2>"$err")
 ec=$?
-assert_eq "TP-SRM-12 inside-home exit" 1 "$ec"
-assert_contains "TP-SRM-12 inside-home refused" "$(cat "$err")" "login home"
+assert_eq "TP-SRM-12 inside-home exit" 0 "$ec"
+assert_contains "TP-SRM-12 inside-home allowed" "$out" "Removal is allowed"
+assert_contains "TP-SRM-12 inside-home nothing removed" "$out" "Nothing was removed"
 if [ -d "$inside" ]; then
     t_pass "TP-SRM-12 project directory still exists"
 else
     t_fail "TP-SRM-12 project directory missing"
+fi
+cache="${HOME}/.cache"
+cache_existed=0
+[ -e "$cache" ] && cache_existed=1
+out=$(srm "$cache" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-12 cache exit" 0 "$ec"
+if [ "$cache_existed" -eq 1 ]; then
+    assert_contains "TP-SRM-12 cache allowed" "$out" "Removal is allowed"
+    if [ -e "$cache" ]; then
+        t_pass "TP-SRM-12 cache still exists"
+    else
+        t_fail "TP-SRM-12 cache was removed"
+    fi
+else
+    assert_contains "TP-SRM-12 cache would be allowed" "$out" "would be allowed"
+    if [ -e "$cache" ]; then
+        t_fail "TP-SRM-12 cache was created"
+    else
+        t_pass "TP-SRM-12 cache still absent"
+    fi
+fi
+out=$(srm '${HOME}/.cache' 2>"$err")
+ec=$?
+assert_eq "TP-SRM-12 literal cache exit" 0 "$ec"
+assert_contains "TP-SRM-12 literal cache allowed" "$out" "allowed"
+
+# TP-SRM-20 another account home from /etc/passwd is refused
+other=$(awk -F: -v h="$HOME" '$1 !~ /^#/ && $6 ~ /^\// && $6 != "/" && $6 != h { print $6; exit }' /etc/passwd)
+if [ -z "$other" ]; then
+    t_fail "TP-SRM-20 no other account home in /etc/passwd"
+else
+    other_existed=0
+    [ -e "$other" ] && other_existed=1
+    out=$(srm "$other" 2>"$err")
+    ec=$?
+    assert_eq "TP-SRM-20 other home exit" 1 "$ec"
+    assert_contains "TP-SRM-20 other home names passwd" "$(cat "$err")" "/etc/passwd"
+    if [ "$other_existed" -eq 1 ]; then
+        if [ -e "$other" ]; then
+            t_pass "TP-SRM-20 other home still exists"
+        else
+            t_fail "TP-SRM-20 other home was removed"
+        fi
+    else
+        if [ -e "$other" ]; then
+            t_fail "TP-SRM-20 other home was created"
+        else
+            t_pass "TP-SRM-20 other home still absent"
+        fi
+    fi
 fi
 
 # TP-SRM-13 one allowed path plus one refused path removes nothing
@@ -247,6 +307,165 @@ out=$(sh "$SAFE_RM" --quiet --dry-run rm --dry-run /usr/bin 2>"$err")
 ec=$?
 assert_eq "TP-SRM-19 quiet exit" 1 "$ec"
 assert_contains "TP-SRM-19 quiet still shows error" "$(cat "$err")" "[ERROR]"
+
+# Numbered menu. These probes answer 9 / 0 and do not place the program.
+ver=$(grep '^VERSION="' "$SAFE_RM" | head -n1 | cut -d'"' -f2)
+
+# TP-CLI-EMPTY-01 / TP-CLI-17 / TP-CLI-SRM-01 front board
+out=$(printf '9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-EMPTY-01 menu exit" 0 "$ec"
+out_dbg=$(printf '9\n' | TTY=1 sh "$SAFE_RM" --debug 2>&1)
+ec_dbg=$?
+assert_eq "TP-CLI-EMPTY-01 --debug menu exit" 0 "$ec_dbg"
+assert_contains "TP-CLI-EMPTY-01 --debug opens the menu" "$out_dbg" "remove-guard"
+case "$out_dbg" in
+    *"not installed yet"*) t_fail "TP-CLI-EMPTY-01 --debug offered install" ;;
+    *) t_pass "TP-CLI-EMPTY-01 --debug does not offer install" ;;
+esac
+assert_contains "TP-CLI-EMPTY-01 names remove-guard" "$out" "remove-guard"
+assert_contains "TP-CLI-EMPTY-01 names self-management" "$out" "self-management"
+assert_contains "TP-CLI-EMPTY-01 exit row" "$out" "9. Exit"
+assert_contains "TP-CLI-17 bold short" "$out" "$(printf '\033[1mremove-guard\033[0m')"
+assert_contains "TP-CLI-17 italic explain" "$out" "$(printf '\033[3;37mcheck a path and remove it only when it is allowed\033[0m')"
+assert_contains "TP-CLI-17 italic version" "$out" "$(printf '\033[3m%s\033[0m' "$ver")"
+case "$out" in
+    *"not installed yet"*) t_fail "TP-CLI-EMPTY-01 still offers install" ;;
+    *) t_pass "TP-CLI-EMPTY-01 does not offer install" ;;
+esac
+case "$out" in
+    *"11."*) t_fail "TP-CLI-SRM-01 front lists 11" ;;
+    *) t_pass "TP-CLI-SRM-01 front omits 11" ;;
+esac
+case "$out" in
+    *"82."*) t_fail "TP-CLI-SRM-01 front lists a lifecycle row" ;;
+    *) t_pass "TP-CLI-SRM-01 front omits lifecycle rows" ;;
+esac
+
+out=$(printf '9\n' | TTY=1 sh "$SAFE_RM" --json menu 2>&1)
+ec=$?
+assert_eq "TP-CLI-17 menu --json on a TTY exit" 0 "$ec"
+assert_contains "TP-CLI-17 menu --json still draws the list" "$out" "self-management"
+case "$out" in
+    *'"command":"help"'*) t_fail "TP-CLI-17 menu --json on a TTY is JSON help" ;;
+    *) t_pass "TP-CLI-17 menu --json on a TTY is not JSON help" ;;
+esac
+
+# TP-CLI-19 bad pick reprints this layer
+out=$(printf '3\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-19 bad pick exit" 0 "$ec"
+assert_contains "TP-CLI-19 names the pick" "$out" "Not a menu choice '3'"
+case "$out" in
+    *"Unknown command"*) t_fail "TP-CLI-19 treated as unknown argv" ;;
+    *) t_pass "TP-CLI-19 is not unknown argv" ;;
+esac
+n=$(printf '%s\n' "$out" | grep -c 'this CLI install, version, update, uninstall' || true)
+assert_eq "TP-CLI-19 reprints the front board" "2" "$n"
+
+# TP-CLI-21 finished 82 redisplays the front board
+out=$(printf '8\n82\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-21 version leaf exit" 0 "$ec"
+assert_contains "TP-CLI-21 version ran" "$out" "$ver"
+n=$(printf '%s\n' "$out" | grep -c 'this CLI install, version, update, uninstall' || true)
+assert_eq "TP-CLI-21 front board after the leaf" "2" "$n"
+
+# TP-CLI-22 self-management rows; off-TTY menu is help
+out=$(printf '8\n0\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-22 submenu exit" 0 "$ec"
+assert_contains "TP-CLI-22 lists 87 self-install" "$out" "87."
+assert_contains "TP-CLI-22 lists back" "$out" "0. Back"
+case "$out" in
+    *"81."*) t_fail "TP-CLI-22 printed reserved 81" ;;
+    *) t_pass "TP-CLI-22 omits reserved 81" ;;
+esac
+out=$(sh "$SAFE_RM" menu </dev/null 2>&1)
+ec=$?
+assert_eq "TP-CLI-22 off-tty menu exit" 0 "$ec"
+assert_contains "TP-CLI-22 off-tty menu is help" "$out" "Usage:"
+case "$out" in
+    *"82."*) t_fail "TP-CLI-22 off-tty menu drew 82" ;;
+    *) t_pass "TP-CLI-22 off-tty menu does not draw 82" ;;
+esac
+
+# TP-CLI-SRM-01 rm lives under 1 as 11
+out=$(printf '1\n0\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-SRM-01 remove-guard exit" 0 "$ec"
+assert_contains "TP-CLI-SRM-01 lists 11 rm" "$out" "11."
+assert_contains "TP-CLI-SRM-01 remove-guard back" "$out" "0. Back"
+
+# TP-SRM-SWAP-01 layout only. The fixture rm is never executed.
+# This block does not remove a directory. It moves one regular file inside
+# /tmp/safe-rm-swap.* and puts it back.
+usr_before=$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)
+out=$(sh "$SAFE_RM" setup 2>"$err")
+ec=$?
+assert_eq "TP-SRM-SWAP-01 non-admin setup exit" 1 "$ec"
+assert_contains "TP-SRM-SWAP-01 non-admin moved nothing" "$(cat "$err")" "Nothing was moved"
+usr_after=$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)
+assert_eq "TP-SRM-SWAP-01 system rm unchanged" "$usr_before" "$usr_after"
+
+SWAP=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
+printf '#!/bin/sh\nexit 0\n' > "$SWAP/rm"
+chmod 0755 "$SWAP/rm"
+origin_before=$(stat -c '%d:%i' "$SWAP/rm")
+out=$(SRM_SWAP_ROOT="$SWAP" sh "$SAFE_RM" setup 2>"$err")
+ec=$?
+assert_eq "TP-SRM-SWAP-01 setup exit" 0 "$ec"
+assert_contains "TP-SRM-SWAP-01 moved rm" "$out" "Moved ${SWAP}/rm to ${SWAP}/origin-rm"
+if [ -L "$SWAP/rm" ]; then
+    t_pass "TP-SRM-SWAP-01 rm is a symlink"
+else
+    t_fail "TP-SRM-SWAP-01 rm is not a symlink"
+fi
+assert_contains "TP-SRM-SWAP-01 link target" "$(readlink "$SWAP/rm")" "${SWAP}/safe-rm"
+if [ -f "$SWAP/safe-rm" ]; then
+    t_pass "TP-SRM-SWAP-01 safe-rm installed"
+else
+    t_fail "TP-SRM-SWAP-01 safe-rm missing"
+fi
+origin_after=$(stat -c '%d:%i' "$SWAP/origin-rm" 2>/dev/null || true)
+assert_eq "TP-SRM-SWAP-01 origin-rm is the original file" "$origin_before" "$origin_after"
+if [ -d "$SWAP/origin-rm" ]; then
+    t_fail "TP-SRM-SWAP-01 origin-rm is a directory"
+else
+    t_pass "TP-SRM-SWAP-01 origin-rm is not a directory"
+fi
+out=$(SRM_SWAP_ROOT="$SWAP" sh "$SAFE_RM" setup 2>"$err")
+ec=$?
+assert_eq "TP-SRM-SWAP-01 second setup exit" 0 "$ec"
+assert_contains "TP-SRM-SWAP-01 second setup sees origin" "$out" "Already swapped"
+origin_again=$(stat -c '%d:%i' "$SWAP/origin-rm" 2>/dev/null || true)
+assert_eq "TP-SRM-SWAP-01 second setup did not move again" "$origin_after" "$origin_again"
+out=$(SRM_SWAP_ROOT="$SWAP" sh "$SAFE_RM" restore 2>"$err")
+ec=$?
+assert_eq "TP-SRM-SWAP-01 restore exit" 0 "$ec"
+assert_contains "TP-SRM-SWAP-01 restored" "$out" "Restored ${SWAP}/rm"
+if [ -f "$SWAP/rm" ] && [ ! -L "$SWAP/rm" ]; then
+    t_pass "TP-SRM-SWAP-01 rm is the original file again"
+else
+    t_fail "TP-SRM-SWAP-01 rm was not restored"
+fi
+restored=$(stat -c '%d:%i' "$SWAP/rm" 2>/dev/null || true)
+assert_eq "TP-SRM-SWAP-01 restored inode" "$origin_before" "$restored"
+if [ -e "$SWAP/origin-rm" ]; then
+    t_fail "TP-SRM-SWAP-01 origin-rm still exists"
+else
+    t_pass "TP-SRM-SWAP-01 origin-rm removed by restore"
+fi
+if [ -e "$SWAP/safe-rm" ]; then
+    t_fail "TP-SRM-SWAP-01 safe-rm still exists"
+else
+    t_pass "TP-SRM-SWAP-01 safe-rm removed by restore"
+fi
+case "$SWAP" in
+    /tmp/safe-rm-swap.*)
+        /bin/rm -rf -- "$SWAP"
+        ;;
+esac
 
 printf '\n== summary ==\n'
 printf 'PASS=%s FAIL=%s\n' "$PASS" "$FAIL"

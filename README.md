@@ -1,29 +1,32 @@
 # safe-rm
 
-![Version](https://img.shields.io/badge/Version-1.0.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.0.1-blue?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 [![CIAO](https://img.shields.io/badge/Philosophy-CIAO%20v2.10.*-purple.svg)](https://github.com/cloudgen/ciao)
 [![Stars](https://img.shields.io/github/stars/cloudgen/safe-rm?style=flat-square)](https://github.com/cloudgen/safe-rm)
 
-**safe-rm** is a POSIX `/bin/sh` program you install for yourself. It can place itself on your PATH, update itself, and remove itself. Its extra job is a guarded `rm`: it refuses a login home, anything under `/home`, `/usr/bin`, and other system directories, and it says so in an error that tells you to stop.
+**safe-rm** is a POSIX `/bin/sh` program. `rm -rf` is too dangerous to leave as the raw binary, so setup moves that binary aside to `origin-rm` and points `rm` at this guard. It keeps the selfmanaged lifecycle: place itself, update itself, remove itself, and the numbered menu. `rm -rf` of any account home is refused, because that deletes the whole home. A folder inside any account home, such as a cache directory, may be removed. A refusal is an `out_*` error that tells you to stop.
 
-The program people install is `src/safe-rm`. The architecture (self-install, `out_*` messages, checksum, empty command line means install) comes from the **selfmanaged** bootstrap. This product does not replace `/bin/rm` or `/usr/bin/rm`.
+The program people install is `src/safe-rm`. The lifecycle and `out_*` come from the **selfmanaged** bootstrap. The swap, `origin-rm`, and `restore` are the 2023 safe-rm setup. `safe-rm setup` is for an admin login. It checks `/usr/bin/origin-rm` and `/bin/origin-rm`, moves the original binary there, and points `rm` at this program. `safe-rm restore` puts that binary back. The test of that table uses a scratch directory under `/tmp` and does not delete a directory.
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
 | See whether a folder may be removed | Nothing is deleted. You learn whether the path exists and whether removal is allowed | `safe-rm rm --dry-run /tmp/my-folder` |
 | Remove an ordinary folder | Runs only when every path is allowed | `safe-rm rm -r /tmp/my-folder` |
-| Touch a login home or `/usr/bin` | The command stops. Nothing is removed | `safe-rm rm --dry-run "$HOME"` |
+| Touch a home directory or `/usr/bin` | The command stops. Nothing is removed | `safe-rm rm --dry-run "$HOME"` |
+| Remove a folder inside any account home | Allowed. The home directory itself stays refused | `safe-rm rm --dry-run "$HOME/.cache"` |
 
-## What is refused
+## Which paths the guard checks
 
-| Path | Why |
-|------|-----|
-| The login home, and anything inside it | A recursive remove here destroys projects and local files |
-| `/home` and anything inside `/home` | That is a login's files, including another user's home |
-| The text `$HOME`, `${HOME}`, or `~` | Those stand for a login home even when the shell did not expand them |
-| `/usr/bin` and anything inside it | Removing it breaks programs. A symlink that lands on `/usr/bin` is the same refusal |
-| `/`, `/usr`, `/bin`, `/sbin`, `/etc`, `/var`, `/boot`, `/root`, `/lib`, `/lib64`, `/opt`, `/dev`, `/proc`, `/sys` | System directories |
+| Path | Verdict |
+|------|---------|
+| Any account home (`rm -rf` of that directory) | Refused. Removing the home directory deletes everything in it |
+| A named folder inside any account home, such as a cache directory | Allowed. That folder is not the home directory |
+| `/home` | Refused. It is the parent of the homes |
+| The text `$HOME`, `${HOME}`, or `~` | Refused. Those stand for the login home even when the shell did not expand them |
+| The text `$HOME/...`, `${HOME}/...`, or `~/...` | Allowed. Those stand for a folder inside the login home |
+| `/usr/bin` and anything inside it | Refused. Removing it breaks programs. A symlink that lands on `/usr/bin` is the same refusal |
+| `/`, `/usr`, `/bin`, `/sbin`, `/etc`, `/var`, `/boot`, `/root`, `/lib`, `/lib64`, `/opt`, `/dev`, `/proc`, `/sys` | Refused. System directories |
 
 If one path in the command is refused, **no** path is removed. The error says `STOP` and tells you not to retry with `rm`, `/bin/rm`, or `/usr/bin/rm`.
 
@@ -43,7 +46,7 @@ Human output says whether the path exists and whether removal is allowed. JSON i
 
 ## Install
 
-Runtime version: `VERSION="1.0.0"` in `src/safe-rm`.
+Runtime version: `VERSION="1.0.1"` in `src/safe-rm`.
 
 Channel default:
 
@@ -60,15 +63,36 @@ safe-rm about
 
 - Non-root install lands in `~/.local/bin/safe-rm` (mode `0700`)
 - Root install lands in `/usr/local/bin/safe-rm` (mode `0755`)
-- Empty command line means install-ensure, not help and not a remove
+- On a terminal, no arguments opens the numbered list (same as `safe-rm menu`)
+- A pipe, `--quiet`, or `--json` with no arguments still places the program
 - Online install checks `src/safe-rm.sha256` when the companion is on the same channel
+
+At a terminal the front board is:
+
+```text
+safe-rm(1.0.1) — Guarded rm that refuses login homes and system directories
+1. remove-guard: check a path and remove it only when it is allowed
+8. self-management: this CLI install, version, update, uninstall
+9. Exit
+```
+
+**1** opens:
+
+```text
+safe-rm(1.0.1) — remove-guard
+11. rm: check each path and remove only when every path is allowed
+0. Back
+```
+
+**11** asks for one path, then runs the same guard as `safe-rm rm`. **8** opens version, about, version-check, self-update, self-uninstall, and self-install (**82–87**). **81** is not listed. **9** leaves. **0** steps back. A wrong number reprints that board.
 
 Messages go through `out_*` (`--quiet`, `--json`, `--debug`). Do not look for a second printer.
 
 ## Usage
 
 ```sh
-safe-rm                  # no arguments: install-ensure
+safe-rm                  # terminal: numbered menu; pipe: install-ensure
+safe-rm menu             # same menu; help when there is no terminal
 safe-rm help
 safe-rm about
 safe-rm version

@@ -1,28 +1,30 @@
 **file**: docs/requirements/requirement-domain-safe-rm.md
 **id**: RQ-DOMAIN-SAFE-RM
-**Status**: Active (Version 1.0.0)
+**Status**: Active (Version 1.1.2)
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
 
-This requirement is the **current domain SSOT** for **safe-rm**: a guarded remove on top of the inherited Type 0 self-install CLI. It exists because an agent once ran a recursive remove of the login home after a command-scoped `HOME=` prefix. The prefix did not apply to the later remove, and the login home was the target.
+This requirement is the **current domain SSOT** for **safe-rm**. The 2023 program already moved the system `rm` aside to `origin-rm` and made `rm` run the guard, because `rm -rf` is too dangerous to leave as the raw binary. Bootstrap from selfmanaged keeps that setup and adds the selfmanaged lifecycle (self-install, self-update, self-uninstall, version, about, help, the numbered menu). The improvement over 2023 is a reviewed blacklist and product sentences through `out_*`.
 
-**Scope:** the `rm` verb, `--dry-run`, refuse classes, messages that tell the operator to stop, and the help/about rows for that guard.
-**Out of scope:** Type 0 install, checksum, and storage (peer shell requirements). Replacing `/usr/bin/rm` or `/bin/rm`. Any remove that the tests perform without `--dry-run`.
+It also exists because an agent once ran a recursive remove of the login home after a command-scoped `HOME=` prefix. The prefix did not apply to the later remove, and the login home was the target.
+
+**Scope:** the protected-`rm` setup (`origin-rm`, the `rm` link, `restore`), the `rm` verb, `--dry-run`, refuse classes, messages that tell the operator to stop, and the help/about rows for that guard.
+**Out of scope:** Checksum and storage (peer shell requirements). Any remove that the tests perform without `--dry-run`. Dropping the 2023 swap because the selfmanaged shell usually avoids `sudo`.
 
 ### 1.1 Human-facing
 
-**In one sentence:** `safe-rm rm` checks each path and refuses a login home, anything under `/home`, `/usr/bin`, and other system directories; `--dry-run` only tells you whether the folder exists and whether removal would be allowed.
+**In one sentence:** After setup, the remover is `/usr/bin/origin-rm` or `/bin/origin-rm` (the original binary that was moved); `/usr/bin/rm` and `/bin/rm` are this guard; `rm -rf` of any account home is refused, a folder inside any account home may be removed, and `--dry-run` does not call the remover.
 
 | Box | Meaning | Example |
 |-----|---------|---------|
-| You / this login | The person or agent who types the command | `safe-rm rm --dry-run /tmp/my-folder` |
-| The other role | The system `rm` at `/bin/rm` or `/usr/bin/rm`, called only after every path is allowed and `--dry-run` is off | Not used by the dry-run suite |
-| Not this file | Install, self-update, and the `out_*` printer | Peer shell requirements |
+| You / this login | The person or agent who types `rm` | `rm -rf` of a cache folder inside a home |
+| The other role | The remover: `/usr/bin/origin-rm` or `/bin/origin-rm`. Called only after every path is allowed and `--dry-run` is off | Not used by the dry-run suite |
+| Not this file | Self-update checksum and the `out_*` printer | Peer shell requirements |
 
 | Includes | Excludes |
 |----------|----------|
-| Refuse rules, dry-run report, stop text | Swapping the system `rm` for this program |
+| Swap of system `rm` to this guard, `restore`, refuse rules, dry-run report | Leaving the raw `rm` binary as the command people type |
 | One JSON object for `rm` when `--json` is set | A second printer beside `out_*` |
 
 | Surface | What you open | What for |
@@ -34,23 +36,56 @@ This requirement is the **current domain SSOT** for **safe-rm**: a guarded remov
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
 | Ask before deleting | The program reports existence and the verdict and deletes nothing | `safe-rm rm --dry-run <path>` |
-| Hit a dangerous path | The program exits non-zero, names the path, and tells you not to retry with `rm` | `safe-rm rm --dry-run <dangerous-path>` |
+| Hit a home directory | The program exits non-zero and removes nothing. A folder inside that home is a different path | `safe-rm rm --dry-run` on the home, then on a folder inside it |
+| Put the original binary back | `origin-rm` becomes `rm` again and the guard link is removed | `safe-rm restore` |
 
 ---
 
 ## 2. Core Rules / Requirements (Mandatory)
 
+### 2.0 What "rm" means in this file
+
+Two different files. Do not mix them.
+
+| Word in this file | Path | What it is |
+|-------------------|------|------------|
+| **the remover** | `/usr/bin/origin-rm`, or `/bin/origin-rm` when the original binary was moved there | The original `rm` binary after the swap. **This is what deletes.** When this requirement says the real remove, it means one of these two paths. |
+| **the command people type** | `/usr/bin/rm` and `/bin/rm` after setup | A symlink to this program. It checks the path. It does not delete. |
+
+1. The real delete **MUST** exec `/usr/bin/origin-rm` when that file is executable. Otherwise it **MUST** exec `/bin/origin-rm` when that file is executable.  
+2. The real delete **MUST NOT** exec `/usr/bin/rm` or `/bin/rm`. After setup those paths are this program, and calling them would run the guard again.  
+3. When `/bin/rm` and `/usr/bin/rm` were the same file, one `origin-rm` exists. Calling either origin path that names that file is the same remover.  
+4. `--dry-run` **MUST NOT** exec `/usr/bin/origin-rm` or `/bin/origin-rm`.
+
+### 2.0.1 Before swapped and after swapped
+
+Setup **MUST** turn the Before column into the After column. `restore` **MUST** turn After back into Before. When `/bin` and `/usr/bin` are the same directory, `/bin/rm` and `/usr/bin/rm` are one file, and one `origin-rm` covers both.
+
+| Path | Before swapped | After swapped |
+|------|----------------|---------------|
+| `/usr/bin/rm` | The original `rm` binary. This file deletes. | A symlink to `/usr/bin/safe-rm`. This is the guard. It does not delete. |
+| `/bin/rm` | The original `rm` binary. Same file as `/usr/bin/rm` when the directories are the same. | A symlink to the `safe-rm` in that same directory. This is the guard. It does not delete. |
+| `/usr/bin/origin-rm` | Absent | The original binary moved from `/usr/bin/rm`. **This is the remover.** |
+| `/bin/origin-rm` | Absent | The original binary moved from `/bin/rm` when that file was not already `/usr/bin/rm`. Absent when one move covered both. **When this file exists, it is the remover.** |
+| `/usr/bin/safe-rm` | Absent | This program, mode `0755`. |
+| `/bin/safe-rm` | Absent | This program, mode `0755`, when `/bin` is a different directory from `/usr/bin`. Otherwise the same file as `/usr/bin/safe-rm`. |
+
 ### 2.1 Specialized CLI subcommands
 
 | Verb | Privilege | Meaning |
 |------|-----------|---------|
-| `rm` | Invoking user. No admin privilege and no dedicated account | Check every operand path. Remove only when every path is allowed and `--dry-run` is off |
+| `rm` | The person who typed `rm`. The check itself does not switch account | Check every operand path. Remove only when every path is allowed and `--dry-run` is off, by exec of `/usr/bin/origin-rm` or `/bin/origin-rm` (§2.0) |
+| `restore` | Admin privilege on a Linux host that owns the system `rm`. Unused on Termux, Git Bash, and Windows cmd | Put `origin-rm` back as `rm` and remove the `safe-rm` link. The 2023 token `-restore` is the same verb when this program is the `rm` people type |
+| protected-rm setup | Admin login only. Who: `requirement-actor-role-subject.md`. Runs when this program is placed, and again when `rm` is still the raw binary | Check `/usr/bin/origin-rm` and `/bin/origin-rm`. If the original binary is already there, stop. Otherwise move `rm` to that path and point `rm` at this program |
 
-Empty argv stays install-ensure. It is not `rm`.
+Interactive empty argv opens the numbered menu. It is not `rm`. A pipe, quiet, or json run with no arguments stays install-ensure of this CLI and then the protected-rm setup. It is not a raw `rm`.
+
+Sample: `safe-rm restore`  
+Sample: `safe-rm rm --dry-run <path>`
 
 | Flag | Where | Behavior |
 |------|--------|----------|
-| `--dry-run` | Before `rm` or after `rm` | Do not call the system `rm`. For each path, say whether it exists and whether removal is allowed |
+| `--dry-run` | Before `rm` or after `rm` | Do not exec `/usr/bin/origin-rm` or `/bin/origin-rm`. For each path, say whether it exists and whether removal is allowed |
 | `--` | After `rm` | End of options. Later operands are paths |
 | `-r`, `-R`, `-f`, `-v`, `-i`, `-d`, `-I` and the long forms `--recursive`, `--force`, `--dir`, `--verbose`, `--one-file-system`, `--interactive` | After `rm` | Accepted as system-rm flags. Ignored for the actual remove while `--dry-run` is set |
 | `--quiet`, `--json`, `--debug` | Global or after `rm` | Same contracts as the output requirement |
@@ -58,12 +93,12 @@ Empty argv stays install-ensure. It is not `rm`.
 Rules:
 
 1. If any path is refused, remove **no** path, including paths that would have been allowed.
-2. `--dry-run` never calls `/bin/rm` or `/usr/bin/rm`.
+2. `--dry-run` never execs `/usr/bin/origin-rm`, `/bin/origin-rm`, `/usr/bin/rm`, or `/bin/rm`.
 3. A prompt flag (`-i` or `--interactive` other than `never`) in real mode with no terminal is a fatal error. The command must not wait.
 4. No operands is a fatal error. Nothing is removed.
 5. Unknown tokens that are not `rm`, a known flag, or a path after `rm` still fail via `out_die` and point at `safe-rm help`.
 6. Product sentences use `out_info`, `out_success`, `out_error`, and `out_die`. The guard does not use `echo` or `printf` for those sentences.
-7. Exit `0` when every path is allowed (dry-run or a completed real remove). Exit `1` when any path is refused, a path is missing in a way the system `rm` rejects, or the invocation is invalid.
+7. Exit `0` when every path is allowed (dry-run or a completed real remove). Exit `1` when any path is refused, a path is missing in a way `/usr/bin/origin-rm` or `/bin/origin-rm` rejects, or the invocation is invalid.
 
 ### 2.2 Specialized features
 
@@ -75,16 +110,17 @@ Resolve the path first (physical directory, symlink target when the path exists;
 |-------|--------|--------|
 | `DENY-EMPTY` | Empty operand | Refuse |
 | `DENY-STDIN` | Operand is exactly `-` | Refuse |
-| `DENY-LOGIN-HOME` | Operand text is `$HOME`, `${HOME}`, `~`, or those forms with a suffix; or the resolved path is the login home or anything inside it | Refuse |
-| `DENY-HOME-USER` | Resolved path is `/home` or anything inside `/home` | Refuse |
-| `DENY-HOME-ANCESTOR` | Resolved path is a strict ancestor of the login home | Refuse |
+| `DENY-LOGIN-HOME` | Operand text is exactly `$HOME`, `${HOME}`, or `~`; or the resolved path is the login home directory itself | Refuse |
+| `DENY-ACCOUNT-HOME` | Resolved path is an account home recorded in `/etc/passwd` (sixth field; also `getent passwd` when that list is present), the directory itself | Refuse |
+| `DENY-HOME-USER` | Resolved path is exactly `/home` | Refuse |
+| `DENY-HOME-ANCESTOR` | Resolved path is a strict ancestor of an account home | Refuse |
 | `DENY-USR-BIN` | Resolved path is `/usr/bin` or anything inside `/usr/bin` (a symlink such as `/bin` that lands on `/usr/bin` uses this class) | Refuse |
 | `DENY-ROOT` | Resolved path is `/` | Refuse |
 | `DENY-HOST` | Resolved path is exactly `/usr`, `/bin`, `/sbin`, `/etc`, `/var`, `/boot`, `/root`, `/lib`, `/lib64`, `/opt`, `/dev`, `/proc`, or `/sys` | Refuse |
 | `DENY-UNRESOLVED` | The path cannot be resolved | Refuse |
 | `ALLOW` | Anything else | May be removed when `--dry-run` is off |
 
-A path inside the login home is refused even when it is not the home directory itself. That covers a recursive remove of the home's children.
+`rm -rf` of any account home directory is refused, because that path is the whole home. A named folder strictly inside any account home is allowed, including a cache directory. That folder does not, by itself, mean the home is being wiped. The text `$HOME/...`, `${HOME}/...`, and `~/...` is expanded and then classified, so a suffix is a folder inside that home. `/etc/passwd` stores every account's home in the sixth field. Each of those directories, and only the directory itself, is refused. `/home` itself stays refused because it is the parent of the homes. A path strictly inside another account's home is allowed. The reviewed blacklist still refuses `/`, `/usr/bin` and anything inside it, and the named system directories below.
 
 #### Dry-run report
 
@@ -104,15 +140,29 @@ With `--json`, stdout is one object from `out_json`. Stderr carries `out_json_er
 
 A refused dry-run uses `"ok":"false"`, `"removed":"false"`, `"verdict":"refuse"`, and a `class` from the table above. The fatal `message` starts with `Stopped.`
 
+#### Protected rm (2023 setup, kept)
+
+`rm -rf` on the raw system binary is the danger this product exists to close. Setup does all of the following, and it is idempotent. The disk after a finished setup **MUST** match §2.0.1 After swapped.
+
+1. For `/usr/bin` and, when it is a different file, `/bin`: if `rm` there is a regular file and `origin-rm` is absent in that same directory, move `rm` to `origin-rm`. When `/bin/rm` and `/usr/bin/rm` are the same file, one move covers both.
+2. Copy this program to `safe-rm` in that directory when `safe-rm` is absent, mode `0755`.
+3. Point `rm` at `safe-rm`. If `rm` is missing, or is a symlink that does not name this program, replace that link.
+
+The lasting result is: `/usr/bin/rm` and `/bin/rm` are this guard, and the remover is `/usr/bin/origin-rm` or `/bin/origin-rm`. Setup **MUST NOT** point `/usr/bin/rm` or `/bin/rm` back at `origin-rm`. The 2023 script did that in the step after the move, and the later link to `safe-rm` then never ran. That order is a defect. Do not copy it.
+
+`restore` and `-restore`: when `origin-rm` exists, remove the `rm` symlink, move `origin-rm` back to `rm`, and remove `safe-rm`. Say that the original binary is restored, through `out_*`.
+
+On Termux, Git Bash, and Windows cmd this setup does not run and does not call `sudo`. The guard still refuses a home directory when the program is invoked by name.
+
 #### Real remove
 
-When `--dry-run` is off and every path is allowed, call `/bin/rm` or `/usr/bin/rm` if that file is executable and is not this program. Pass the accepted flags and one path at a time after `--`. Do not call `sudo`. Do not replace `/usr/bin/rm` or `/bin/rm`.
+When `--dry-run` is off and every path is allowed, exec the remover from §2.0: `/usr/bin/origin-rm` if that file is executable, otherwise `/bin/origin-rm`. Pass the accepted flags and one path at a time after `--`. **MUST NOT** exec `/usr/bin/rm` or `/bin/rm`. Those paths are this guard after setup. **MUST NOT** exec the remover for a refused path.
 
 #### Non-goals
 
-- This program does not install itself as `/usr/bin/rm` or `/bin/rm`.
 - Tests for this verb do not run real mode. They use `--dry-run` so a system directory cannot be removed by the suite.
 - The guard does not keep a database of paths.
+- Product sentences do not use the 2023 `printf` lines. They use `out_*`.
 
 ### 2.3 Specialized project help items
 
@@ -123,7 +173,8 @@ When `--dry-run` is off and every path is allowed, call `/bin/rm` or `/usr/bin/r
 | `rm` | Check each path. Remove only when every path is allowed |
 | `rm --dry-run` | Remove nothing. Say whether each path exists and whether it may be removed |
 | `--dry-run` | The same switch may appear before or after `rm` |
-| Stop line | Do not retry with `rm`, `/bin/rm`, or `/usr/bin/rm` |
+| `restore` | Put `origin-rm` back as `rm` |
+| Stop line | The home directory was refused. Do not retry that path with the raw binary |
 
 ### 2.4 Specialized project about items
 
@@ -146,10 +197,12 @@ JSON `about` includes `"remove_guard":"on"` and `"dry_run_switch":"--dry-run"`.
 | `TP-SRM-06` | Dry-run of a missing temporary path is allowed and the path stays absent |
 | `TP-SRM-07` | Dry-run of the login home is refused and the home remains |
 | `TP-SRM-08` | Dry-run of the text `$HOME`, `${HOME}`, and `~` is refused |
-| `TP-SRM-09` | Dry-run of `/home` and `/home/safe-rm-no-such-user` is refused and does not create the fake path |
+| `TP-SRM-09` | Dry-run of `/home` is refused. A first-level name under `/home` that is not an account home stays refused. A folder strictly inside another account home is allowed |
+| `TP-SRM-SWAP-01` | Layout only, under `/tmp/safe-rm-swap.*`. Setup moves that fixture's regular `rm` to `origin-rm` and points `rm` at `safe-rm`. A second setup does not move it again. `restore` puts the file back. The test does not execute `rm` and does not remove a directory. A non-admin `setup` without that fixture moves nothing |
 | `TP-SRM-10` | Dry-run of `/usr/bin` and `/usr/bin/sh` is refused and both remain |
 | `TP-SRM-11` | Dry-run of `/` is refused and `/` remains |
-| `TP-SRM-12` | Dry-run of this project directory (inside the login home) is refused and the directory remains |
+| `TP-SRM-12` | Dry-run of a folder inside the login home (this project directory and `${HOME}/.cache`) is allowed and the folder remains |
+| `TP-SRM-20` | Dry-run of another account home from `/etc/passwd` is refused and that path is not created or removed |
 | `TP-SRM-13` | One allowed path plus `/usr/bin` refuses the whole command and the allowed path remains |
 | `TP-SRM-14` | `--json` dry-run allow: `dry_run` true, `removed` false, `verdict` allow, `exists` true |
 | `TP-SRM-15` | `--json` dry-run refuse: `verdict` refuse, `removed` false, stderr says `STOP` |
@@ -169,16 +222,17 @@ Runner: `tests/run_dry_run.sh`. It does not point `HOME` at a scratch directory.
 | Companion | `src/safe-rm.sha256` |
 | Version | `1.0.0` |
 | Prefix | `srm_` |
-| Bootstrap origin | `selfmanaged` Type 0 architecture. That ship unit stays `src/selfmanaged`. Direction is origin to this product |
+| Bootstrap origin | `selfmanaged` Type 0 architecture kept in full (self-install, self-update, self-uninstall, version, about, help, numbered menu, `out_*`). The 2023 safe-rm setup is kept as well: `origin-rm`, `rm` → this program, `restore` |
 | Channel default | `REPO_USER=cloudgen`, `REPO_NAME=safe-rm`, `SCRIPT_RELPATH=src/safe-rm` |
-| Dispatcher anchors | `--dry-run` flag, `rm` command, `srm_cmd_rm` route |
+| Dispatcher anchors | `--dry-run` flag, `rm` command, `srm_cmd_rm` route. `restore` is **not** routed yet |
+| Honesty | **Implemented** for `setup` / `restore`. Tests pass `SRM_SWAP_ROOT=/tmp/safe-rm-swap.*` so they never touch `/usr/bin` or `/bin`. A non-admin setup without that variable refuses and moves nothing. The real delete still execs `/usr/bin/origin-rm` or `/bin/origin-rm` when that file exists (§2.0). Dry-run never execs it |
 
 ---
 
 ## 3. Design Principles (CIAO / CIAO-Lite)
 
 - **Caution:** Resolve the path, then refuse. One refused path cancels the whole command.
-- **Intentional:** The stop sentence tells the operator not to retry with the system `rm`.
+- **Intentional:** The 2023 setup stays. Specialize adds the selfmanaged lifecycle and the reviewed blacklist. It does not replace that setup.
 - **Anti-fragile:** `--dry-run` is the way to see the verdict without a remove. A missing system `rm` fails closed.
 - **Over-protect:** The dry-run branch returns before `srm_exec_one`. `srm_exec_one` also refuses to run when dry-run is set.
 
@@ -190,11 +244,13 @@ Runner: `tests/run_dry_run.sh`. It does not point `HOME` at a scratch directory.
 
 1. Call the system `rm` from the `--dry-run` path.
 2. Remove any path after one path in the same command was refused.
-3. Replace `/bin/rm` or `/usr/bin/rm` with this program.
+3. Leave the raw system `rm` as the command people type after setup, or point `rm` back at `origin-rm` and stop there.
 4. Point `HOME` at a scratch directory in order to test this command.
 5. Add a test that invokes `rm` without `--dry-run`.
 6. Print the refusal with `echo` or `printf` instead of `out_*`.
-7. Treat a folder inside the login home as allowed.
+7. Allow an account home directory itself, including the login home.
+8. Refuse a named folder strictly inside an account home, such as a cache directory, unless that folder is itself an account home.
+9. Exec `/usr/bin/rm` or `/bin/rm` for the real delete. The real delete execs `/usr/bin/origin-rm` or `/bin/origin-rm` (§2.0).
 
 **Violating this rule is a critical remove-guard regression.**
 
@@ -204,11 +260,11 @@ Runner: `tests/run_dry_run.sh`. It does not point `HOME` at a scratch directory.
 
 This product may run on Termux, Git Bash, Windows cmd, or the same class (this login only).
 
-**This requirement:** `rm` stays **normal user privilege**. It does not ask for admin privilege and it does not switch to a dedicated account. It does not wrap `sudo`.
+**This requirement:** On Termux, Git Bash, and Windows cmd the protected-rm swap does not run and does not call `sudo`. The home-directory refusal still applies when this program is invoked by name. On a Linux host the swap is the setup: it moves the system `rm` to `origin-rm` and points `rm` at this program. That is the one admin step. It is not a general admin shell, and it does not create a dedicated account.
 
 | MUST | MUST NOT |
 |------|----------|
-| Refuse the login home and `/usr/bin` the same way on this login | Enable admin-privilege install of a replacement system `rm` |
+| Refuse any account home directory the same way on this login | Run the swap, or call `sudo`, when Termux, Git Bash, or Windows cmd is detected |
 | Keep `--dry-run` as a local check | Wrap `apt` or `pkg` from this verb |
 
 ---
@@ -224,6 +280,15 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | `tests/run_dry_run.sh` | `TP-SRM-*` |
 
 ---
+
+## 6. Revision history
+
+| Date | Change |
+|------|--------|
+| 2026-09-27 | 1.0.0: guarded `rm` and `--dry-run`. The ship text said this program does not replace `/bin/rm` or `/usr/bin/rm`. |
+| 2026-09-27 | 1.1.0: restore the 2023 intention. Setup swaps the system `rm` to this guard and keeps the original binary as `origin-rm`. `restore` puts it back. Any account home directory is refused. A folder inside any account home is allowed. Selfmanaged lifecycle and `out_*` stay. Ship unit is still the gap named in Implementation Notes. |
+| 2026-09-27 | 1.1.1: §2.0. The remover is `/usr/bin/origin-rm` or `/bin/origin-rm`. `/usr/bin/rm` and `/bin/rm` after setup are this guard and are not exec'd for the delete. |
+| 2026-09-27 | 1.1.2: §2.0.1 table of each path before the swap and after the swap. `restore` reverses that table. |
 
 **Last Updated**: 2026-09-27
 **Owner**: safe-rm project maintainers

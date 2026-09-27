@@ -76,6 +76,7 @@ It defines the centralized output system and stdout/stderr channel contracts for
 | `out_error` | Error | stderr | **Always show** (human) | Prefer `out_json_error` / `out_die` for structure |
 | `out_die` | Fatal error + exit 1 | stderr (+ JSON error when JSON) | Always | Emits JSON error then exits |
 | `out_plain` | Plain text, no prefix | stdout | Suppress under quiet | Suppress under JSON |
+| `out_menu_choice` | Numbered row `N. short: explain` (bold short, italic gray explain on a TTY) | stdout | Suppress under quiet | Suppress under JSON |
 | `out_msg_n` | Prompt fragment without newline | stdout | Suppress under quiet/json | Never for machines |
 | `out_empty_line` / `out_double_line` | Visual separators | stdout | Suppress under quiet | Suppress under JSON |
 | `out_json` | Machine success/status object | stdout | N/A (JSON path) | Only when `JSON=1` |

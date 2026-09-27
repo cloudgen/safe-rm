@@ -2,7 +2,7 @@
 
 Maps **baseline coverage** and **finding lock-in (TP-*)** to `tests/`.  
 **Suite entry:** `./tests/run.sh`  
-**Last update:** 2026-09-17 (TP-SI-01..06 **have**)
+**Last update:** 2026-09-27 (menu parity on `src/safe-rm`; dry-run suite PASS=105 FAIL=0)
 
 Status: **have** = automated today · **TODO** = needed · **n/a** = not applicable / product choice
 
@@ -79,6 +79,13 @@ Status: **have** = automated today · **TODO** = needed · **n/a** = not applica
 | TP-SI-06 | shell-cli-self-install | Help lists `self-install` | **have** | `tests/test_cli.sh` |
 | TP-SI-07 | L-DEST-0711-01 | No live `chmod +x`; `inst_cli_dest_mode` names 0755/0700 | **have** | `tests/test_cli.sh` |
 | TP-SI-08 | L-DEST-0711-01 | Isolated GLOBAL_BIN dest **0755**; leftover **0711** healed | **have** | `tests/test_cli.sh` |
+| TP-CLI-EMPTY-01 | L-MENU-01 | Interactive empty argv (`TTY=1`, not quiet, not json) opens the numbered menu and does not place. Non-interactive empty argv stays TP-SI-03 on the bootstrap snapshot | **have** | `tests/run_dry_run.sh` (ship unit `src/safe-rm`) |
+| TP-CLI-17 | L-MENU-01 | TTY row is bold short name + italic gray explain; header nametag | **have** | `tests/run_dry_run.sh` |
+| TP-CLI-19 | L-MENU-01 | Bad pick reprints that layer; process stays up (`out_error`, not `out_die`) | **have** | `tests/run_dry_run.sh` |
+| TP-CLI-21 | L-MENU-01 | Finished **82** redisplays the front board | **have** | `tests/run_dry_run.sh` |
+| TP-CLI-22 | L-MENU-01 | Off-TTY `menu` is help. Under **8**, **87** is listed and **81** is omitted | **have** | `tests/run_dry_run.sh` |
+| TP-CLI-SRM-01 | L-MENU-01 | Front board has the remove-guard category plus **8** and **9**. `rm` is **11** under **1**, not on the front board | **have** | `tests/run_dry_run.sh` |
+| TP-SRM-SWAP-01 | domain 1.1.2 | Setup moves a fixture `rm` to `origin-rm` and points `rm` at this program. Second setup does not move again. `restore` reverses it. Non-admin setup moves nothing. No real directory remove | **have** | `tests/run_dry_run.sh` (`SRM_SWAP_ROOT=/tmp/safe-rm-swap.*`) |
 
 ---
 

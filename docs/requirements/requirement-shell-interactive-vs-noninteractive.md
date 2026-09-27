@@ -149,8 +149,8 @@ interactive   non-interactive
 
 | Command / path | Interactive (TTY, not quiet/json) | Non-interactive / quiet / json |
 |----------------|-----------------------------------|--------------------------------|
-| Zero-arg, **not** installed (letter **O**: no-args = install-ensure) | `inst_maybe_install`: show note + `prompt_yes_no`; yes → `inst_self_install` (copy when `$0` is the script) | Quiet/json: `inst_self_install` without prompt (dispatcher **and** helper). Non-TTY human path: auto-install message + `inst_self_install` |
-| Zero-arg, **already** installed local or global (**Type O**) | `inst_self_install` success no-op (“already installed”); **not** help; no re-copy/re-download without force | Same (quiet/json: structured success no-op) |
+| Zero-arg, interactive (`TTY=1`, not quiet/json) | Numbered menu (`app_default`). No place side effect | — |
+| Zero-arg, non-interactive / quiet / json | — | `inst_self_install` (place, or already-installed success). **MUST NOT** open the menu. **MUST NOT** print help |
 | `self-install` / `install` (alias) | Place CLI with human `out_*` messages; copy when `$0` is the script | No prompt; honor force for replace; JSON structured results |
 | `self-uninstall` | `prompt_yes_no` unless `--force` | Without force: fail closed with explicit “requires --force” (JSON: `out_json_error` / `confirm_required`); never pretend user cancelled; with `--force`: remove without confirm |
 | `self-update` / `version-check` | Human status messages | No prompts; fail loud if `SCRIPT_URL` missing; JSON structured results |

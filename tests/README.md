@@ -29,8 +29,12 @@ Requires: `sh`, `curl`, `python3` (local HTTP channel), `sha256sum`, `grep`.
 |------|----------------|
 | `TP-SRM-01` .. `TP-SRM-04` | Syntax, version, help, companion digest |
 | `TP-SRM-05` .. `TP-SRM-06` | Allowed temporary paths stay unremoved |
-| `TP-SRM-07` .. `TP-SRM-13` | Login home, `/home`, `/usr/bin`, `/`, and a mixed command are refused and still present |
+| `TP-SRM-07` .. `TP-SRM-11`, `TP-SRM-13` | Login home, `/home`, `/usr/bin`, `/`, and a mixed command are refused and still present |
+| `TP-SRM-12` | A folder inside the login home is allowed and still present |
+| `TP-SRM-20` | Another account home from `/etc/passwd` is refused and still present |
 | `TP-SRM-14` .. `TP-SRM-19` | JSON, missing operand, unknown command, about, quiet |
+| `TP-CLI-EMPTY-01`, `TP-CLI-17`, `TP-CLI-19`, `TP-CLI-21`, `TP-CLI-22`, `TP-CLI-SRM-01` | Main menu, including `safe-rm --debug`. No install. No real remove |
+| `TP-SRM-SWAP-01` | Before/after swap inside `/tmp/safe-rm-swap.*` only. The fixture `rm` is never executed. Non-admin setup leaves `/usr/bin/rm` unchanged |
 
 ## Specializee porting checklist (A → B)
 

@@ -12,7 +12,8 @@
 # Project requirements (docs/requirements/ only — never cite templates here):
 # - requirement-shell-cli-interface.md
 # - requirement-shell-cli-self-install.md    (self-install; $0 copy vs download; dest 0755/0700)
-# - requirement-shell-cli-zero-arguments.md  (Type O empty argv = install-ensure)
+# - requirement-shell-cli-zero-arguments.md  (TTY empty argv = menu; off-TTY Type O ensure)
+# - requirement-shell-cli-default-interaction.md  (numbered TTY menu)
 # - requirement-shell-cli-storage.md         (util_resolve_storage + about fields)
 # - requirement-shell-idempotency.md
 # - requirement-shell-self-management.md
@@ -47,10 +48,10 @@ APP_NAME="safe-rm"
 : "${APP_NAME:=safe-rm}"
 : "${APP_DESC:=Guarded rm that refuses login homes and system directories}"
 : "${SHORT_DESCRIPTION:=${APP_DESC}}"
-: "${DESCRIPTION:=POSIX /bin/sh program you install for yourself. It keeps self-install and self-update, and it refuses to remove a login home or anything inside it, anything under /home, /usr/bin, or other system directories. --dry-run reports whether a path exists and whether removal is allowed, and removes nothing.}"
+: "${DESCRIPTION:=POSIX /bin/sh program you install for yourself. It keeps self-install and self-update, and it refuses to remove the login home itself, every account home in /etc/passwd, /home, another login's folder under /home, /usr/bin, or other system directories. A named folder inside the login home, such as a cache directory, may be removed. --dry-run reports whether a path exists and whether removal is allowed, and removes nothing.}"
 # Product version SSOT (semver). Extractors use: grep '^VERSION="'
-VERSION="1.0.0"
-: "${VERSION:=1.0.0}"
+VERSION="1.0.1"
+: "${VERSION:=1.0.1}"
 
 # Runtime flags (safe defaults)
 : "${QUIET:=0}"
@@ -158,6 +159,8 @@ out_text() {
             ;;
     esac
 
+    local extra="${3-}"
+    local extra2="${4-}"
     local RED='' GREEN='' YELLOW='' BLUE='' NC=''
     [ "${TTY:-0}" -eq 1 ] && [ "${QUIET}" -eq 0 ] && [ "${JSON}" -eq 0 ] && {
         RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
@@ -169,6 +172,13 @@ out_text() {
         out_debug)   printf >&2 "${BLUE}[DEBUG]${NC} %s\n" "${msg}" ;;
         out_info)    printf "${GREEN}[INFO]${NC} %s\n" "${msg}" ;;
         out_success) printf "${GREEN}[OK]${NC} %s\n" "${msg}" ;;
+        menu_choice)
+            if [ "${TTY:-0}" -eq 1 ]; then
+                printf '%s. \033[1m%s\033[0m: \033[3;37m%s\033[0m\n' "${msg}" "${extra}" "${extra2}"
+            else
+                printf '%s. %s: %s\n' "${msg}" "${extra}" "${extra2}"
+            fi
+            ;;
         plain)       printf "%s\n" "${msg}" ;;
         plain_n)     printf "%s" "${msg}" ;;
         *)           printf "%s\n" "${msg}" ;;
@@ -289,6 +299,57 @@ out_die() { out_json_error "$*"; out_text out_error "$*"; exit 1; }
 
 out_plain() {
     out_text plain "$*"
+}
+
+# =============================================================================
+# out_menu_choice() - Numbered menu row (default CLI main menu style)
+# =============================================================================
+#
+# GENERAL PURPOSE:
+# Print one numbered row as "N. short: explain". On a TTY the short name is
+# bold (SGR 1) and the explain is italic light gray (SGR 3+37). The number
+# stays plain. Exit and Back pass no explain and print "N. label" only.
+#
+# ALIGNMENT:
+# - requirement-shell-cli-default-interaction.md
+# - requirement-shell-output-requirements.md
+#
+# Last updated: 2026-09-27
+# =============================================================================
+out_menu_choice() {
+    _mc_n="${1-}"
+    _mc_short="${2-}"
+    _mc_long="${3-}"
+    if [ -n "${_mc_long}" ]; then
+        out_text menu_choice "${_mc_n}" "${_mc_short}" "${_mc_long}"
+    else
+        out_plain "${_mc_n}. ${_mc_short}"
+    fi
+    unset _mc_n _mc_short _mc_long
+}
+
+# =============================================================================
+# util_app_ident() - APP_NAME(VERSION) nametag for menu headers
+# =============================================================================
+#
+# GENERAL PURPOSE:
+# Return the header nametag. TTY: bold name, italic version. Off-TTY: plain.
+# Class B return-via-stdout. Callers print it through out_info.
+#
+# ALIGNMENT:
+# - requirement-shell-cli-default-interaction.md
+#
+# Last updated: 2026-09-27
+# =============================================================================
+util_app_ident() {
+    : "${APP_NAME:=safe-rm}"
+    : "${VERSION:=0}"
+    : "${TTY:=0}"
+    if [ "${TTY}" -eq 1 ]; then
+        printf '\033[1m%s\033[0m(\033[3m%s\033[0m)' "${APP_NAME}" "${VERSION}"
+    else
+        printf '%s(%s)' "${APP_NAME}" "${VERSION}"
+    fi
 }
 
 # =============================================================================
@@ -2653,7 +2714,7 @@ app_about() {
     out_info "Storage (fallback config field): ${STORAGE_DIR}"
 
     # --- DOMAIN_ABOUT_FIELDS (specializee injection) ---
-    out_info "Remove guard:      on (refuses the login home and anything inside it, /home, /usr/bin, and system directories)"
+    out_info "Remove guard:      on (refuses the login home itself and every account home in /etc/passwd; a named folder inside the login home may be removed; also refuses /home, /usr/bin, and system directories)"
     out_info "Dry-run:           ${APP_NAME} rm --dry-run <path>"
     # --- end DOMAIN_ABOUT_FIELDS ---
 
@@ -2696,7 +2757,7 @@ app_version() {
 
 app_help() {
     : "${SHORT_DESCRIPTION:=${APP_DESC:-Guarded rm that refuses login homes and system directories}}"
-    : "${DESCRIPTION:=POSIX /bin/sh program you install for yourself. It keeps self-install and self-update, and it refuses to remove a login home or anything inside it, anything under /home, /usr/bin, or other system directories. --dry-run reports whether a path exists and whether removal is allowed, and removes nothing.}"
+    : "${DESCRIPTION:=POSIX /bin/sh program you install for yourself. It keeps self-install and self-update, and it refuses to remove the login home itself, every account home in /etc/passwd, /home, another login's folder under /home, /usr/bin, or other system directories. A named folder inside the login home, such as a cache directory, may be removed. --dry-run reports whether a path exists and whether removal is allowed, and removes nothing.}"
 
     if [ "${JSON}" -eq 1 ]; then
         out_json "success" "Help text available in human-readable mode. Run without --json." \
@@ -2726,6 +2787,10 @@ app_help() {
     out_plain "  self-update          Update ${APP_NAME} to a newer remote version"
     out_plain "  self-uninstall       Remove ${APP_NAME} (safe PATH cleanup)"
     out_plain "  help                 Show this help"
+    out_plain "  setup                Check origin-rm. An admin login moves the original rm there and points rm at this program"
+    out_plain "  restore              Put origin-rm back as rm. Same as -restore"
+    out_plain "  menu                 Numbered list on a terminal (1 remove-guard, 8 self-management, 9 Exit). Help off a terminal"
+    out_plain "  main                 Same as menu"
     out_empty_line
 
     # --- DOMAIN_HELP_ROWS (specializee injection) ---
@@ -2764,6 +2829,9 @@ app_help() {
         out_plain "  SCRIPT_URL           (not set)"
     fi
     out_plain "                       Canonical install channel (override via env; needed for version-check/self-update)"
+    out_empty_line
+    out_info "On a terminal with no arguments the numbered list opens (same as menu)."
+    out_info "A pipe, quiet, or json run with no arguments still places this program."
     out_empty_line
 }
 
@@ -2921,10 +2989,13 @@ srm_msg_refuse() {
             printf '%s\n' "Refusing to remove ${_path}. That path is /usr/bin or something inside it. Removing it breaks programs on this machine. STOP. Do not retry with rm, /bin/rm, or /usr/bin/rm. Next: stop."
             ;;
         DENY-LOGIN-HOME)
-            printf '%s\n' "Refusing to remove ${_path}. That path is the login home or is inside the login home. Removing it destroys files and projects. STOP. Do not retry with rm, /bin/rm, or /usr/bin/rm. Next: ${APP_NAME} rm --dry-run on a folder outside the login home, such as a temporary directory, or stop."
+            printf '%s\n' "Refusing to remove ${_path}. That path is the login home. Removing it destroys files and projects. STOP. Do not retry with rm, /bin/rm, or /usr/bin/rm. Next: ${APP_NAME} rm --dry-run on a folder inside the login home, such as a cache directory, or stop."
             ;;
         DENY-HOME-USER)
-            printf '%s\n' "Refusing to remove ${_path}. That path is /home or a folder inside /home. Removing it destroys a login's files. STOP. Do not retry with rm, /bin/rm, or /usr/bin/rm. Next: ${APP_NAME} rm --dry-run on a folder outside /home, or stop."
+            printf '%s\n' "Refusing to remove ${_path}. That path is /home or a folder under /home outside this login home. Removing it destroys a login's files. STOP. Do not retry with rm, /bin/rm, or /usr/bin/rm. Next: ${APP_NAME} rm --dry-run on a folder inside this login home, or stop."
+            ;;
+        DENY-ACCOUNT-HOME)
+            printf '%s\n' "Refusing to remove ${_path}. That path is an account home recorded in /etc/passwd. Removing it destroys that login's files, the same way removing the login home does. STOP. Do not retry with rm, /bin/rm, or /usr/bin/rm. Next: ${APP_NAME} rm --dry-run on a folder inside this login home, such as a cache directory, or stop."
             ;;
         DENY-HOME-ANCESTOR)
             printf '%s\n' "Refusing to remove ${_path}. That path contains the login home. Removing it destroys files and projects. STOP. Do not retry with rm, /bin/rm, or /usr/bin/rm. Next: stop."
@@ -2964,6 +3035,89 @@ srm_msg_allow() {
     fi
 }
 
+# Rewrite an unexpanded login-home token to the login home path (class B).
+# Exact $HOME, ${HOME}, and ~ stay the home directory. A suffix is a folder
+# inside that home. Other operands are unchanged.
+srm_expand_home_operand() {
+    _op=${1-}
+    _h=${HOME-}
+    if [ -z "$_h" ]; then
+        printf '%s\n' "$_op"
+        return 0
+    fi
+    case "$_op" in
+        '$HOME'|'${HOME}'|'~')
+            printf '%s\n' "$_h"
+            ;;
+        '$HOME'/*)
+            _rest=${_op#"\$HOME/"}
+            printf '%s\n' "${_h}/${_rest}"
+            ;;
+        '${HOME}'/*)
+            _rest=${_op#'${HOME}'/}
+            printf '%s\n' "${_h}/${_rest}"
+            ;;
+        '~'/*)
+            _rest=${_op#"~/"}
+            printf '%s\n' "${_h}/${_rest}"
+            ;;
+        *)
+            printf '%s\n' "$_op"
+            ;;
+    esac
+}
+
+# Record every account home from /etc/passwd and getent passwd (class B side effect).
+# The sixth field is the home directory. Empty and "/" are skipped.
+srm_load_account_homes() {
+    _dest=${1-}
+    _raw="${_dest}.raw"
+    : > "$_raw"
+    if [ -r /etc/passwd ]; then
+        while IFS= read -r _line; do
+            printf '%s\n' "$_line" >> "$_raw"
+        done < /etc/passwd
+    fi
+    if command -v getent >/dev/null 2>&1; then
+        getent passwd >> "$_raw" 2>/dev/null || true
+    fi
+    : > "$_dest"
+    while IFS=: read -r _aname _apw _auid _agid _agecos _ahome _ashell; do
+        case "$_aname" in
+            ''|'#'*)
+                continue
+                ;;
+        esac
+        [ -n "${_ahome-}" ] || continue
+        case "$_ahome" in
+            /*) ;;
+            *) continue ;;
+        esac
+        [ "$_ahome" = / ] && continue
+        if [ -d "$_ahome" ]; then
+            _aabs=$(srm_phys_dir "$_ahome") || _aabs=$(srm_lexical_abs "$_ahome")
+        else
+            _aabs=$(srm_lexical_abs "$_ahome") || continue
+        fi
+        [ -n "${_aabs-}" ] || continue
+        [ "$_aabs" = / ] && continue
+        printf '%s\n' "$_aabs" >> "$_dest"
+    done < "$_raw"
+}
+
+# Return 0 when the resolved path is an account home loaded by srm_load_account_homes.
+srm_is_account_home() {
+    _apath=${1-}
+    _alist=${SRM_WORK-}/homes
+    [ -n "$_apath" ] || return 1
+    [ -f "$_alist" ] || return 1
+    while IFS= read -r _aline; do
+        [ -n "$_aline" ] || continue
+        [ "$_apath" = "$_aline" ] && return 0
+    done < "$_alist"
+    return 1
+}
+
 # Sets SRM_RAW SRM_RESOLVED SRM_EXISTS SRM_KIND SRM_CLASS SRM_VERDICT SRM_MESSAGE.
 srm_classify() {
     SRM_RAW=${1-}
@@ -2988,7 +3142,7 @@ srm_classify() {
             SRM_MESSAGE=$(srm_msg_refuse "$SRM_RAW" "$SRM_CLASS")
             return 0
             ;;
-        '$HOME'|'$HOME'/*|'${HOME}'|'${HOME}'/*|'~'|'~'/*)
+        '$HOME'|'${HOME}'|'~')
             SRM_CLASS=DENY-LOGIN-HOME
             SRM_VERDICT=refuse
             SRM_RESOLVED=$SRM_RAW
@@ -2998,7 +3152,15 @@ srm_classify() {
     esac
 
     SRM_RESOLVED=$(srm_resolve_path "$SRM_RAW") || {
-        SRM_CLASS=DENY-UNRESOLVED
+        SRM_RESOLVED=$(srm_lexical_abs "$SRM_RAW") || SRM_RESOLVED=$SRM_RAW
+        _home=$(srm_resolve_path "${HOME}") || _home=$(srm_lexical_abs "${HOME}")
+        if [ "$SRM_RESOLVED" = "$_home" ]; then
+            SRM_CLASS=DENY-LOGIN-HOME
+        elif srm_is_account_home "$SRM_RESOLVED"; then
+            SRM_CLASS=DENY-ACCOUNT-HOME
+        else
+            SRM_CLASS=DENY-UNRESOLVED
+        fi
         SRM_VERDICT=refuse
         SRM_MESSAGE=$(srm_msg_refuse "$SRM_RAW" "$SRM_CLASS")
         return 0
@@ -3044,16 +3206,44 @@ srm_classify() {
     if [ "$SRM_RESOLVED" = "$_home" ]; then
         SRM_CLASS=DENY-LOGIN-HOME
     fi
-    case "$SRM_RESOLVED" in
-        "$_home"/*)
-            SRM_CLASS=DENY-LOGIN-HOME
-            ;;
-    esac
     case "$_home" in
         "$SRM_RESOLVED"/*)
             SRM_CLASS=DENY-HOME-ANCESTOR
             ;;
     esac
+    # The login home itself stays refused. A folder strictly inside it is
+    # allowed, including when that folder also sits under /home. Do not lift
+    # a system-directory refusal, and do not treat children of / as inside
+    # a login home of /.
+    if [ -n "$_home" ] && [ "$_home" != / ]; then
+        case "$SRM_RESOLVED" in
+            "$_home"/*)
+                case "$SRM_CLASS" in
+                    DENY-ROOT|DENY-USR-BIN|DENY-HOST|DENY-HOME-ANCESTOR)
+                        ;;
+                    *)
+                        SRM_CLASS=ALLOW
+                        ;;
+                esac
+                ;;
+        esac
+    fi
+    # Every account home in /etc/passwd is refused the same way as the login
+    # home. A named folder inside this login home stays allowed unless that
+    # folder is itself some account's home directory.
+    if srm_is_account_home "$SRM_RESOLVED"; then
+        if [ "$SRM_RESOLVED" = "$_home" ]; then
+            SRM_CLASS=DENY-LOGIN-HOME
+        else
+            case "$SRM_CLASS" in
+                DENY-ROOT|DENY-USR-BIN|DENY-HOME-ANCESTOR|DENY-LOGIN-HOME)
+                    ;;
+                *)
+                    SRM_CLASS=DENY-ACCOUNT-HOME
+                    ;;
+            esac
+        fi
+    fi
 
     if [ "$SRM_CLASS" = ALLOW ]; then
         SRM_VERDICT=allow
@@ -3132,9 +3322,22 @@ srm_flags_need_prompt() {
     return 1
 }
 
-# System rm that is not this program. Path on stdout (class B).
+# Remover after the swap: /usr/bin/origin-rm or /bin/origin-rm.
+# Before the swap, the original regular file still named rm.
+# Path on stdout (class B). Never returns a symlink to this program.
 srm_origin_rm() {
     _self=$0
+    _list="/usr/bin/origin-rm /bin/origin-rm"
+    if [ -n "${SRM_SWAP_ROOT-}" ]; then
+        _list="${SRM_SWAP_ROOT}/origin-rm ${_list}"
+    fi
+    for _c in ${_list}; do
+        [ -x "$_c" ] || continue
+        [ -L "$_c" ] && continue
+        printf '%s\n' "$_c"
+        unset _self _list _c _t
+        return 0
+    done
     for _c in /bin/rm /usr/bin/rm; do
         [ -x "$_c" ] || continue
         if [ "$_c" = "$_self" ]; then
@@ -3147,9 +3350,178 @@ srm_origin_rm() {
             esac
         fi
         printf '%s\n' "$_c"
+        unset _self _list _c _t
         return 0
     done
+    unset _self _list _c _t
     return 1
+}
+
+# Drop a symlink. Refuse a directory. Do not call rm.
+srm_drop_symlink() {
+    _p=${1-}
+    [ -n "$_p" ] || return 0
+    [ -L "$_p" ] || return 0
+    if [ -d "$_p" ]; then
+        unset _p
+        return 1
+    fi
+    unlink -- "$_p" 2>/dev/null || unlink "$_p" 2>/dev/null || return 1
+    unset _p
+    return 0
+}
+
+# One directory of the before/after table. Does not delete a directory.
+srm_swap_one() {
+    _dir=${1-}
+    _src=${2-}
+    [ -d "$_dir" ] || {
+        out_die "Setup directory is missing. Nothing was moved."
+    }
+    _rm="${_dir}/rm"
+    _origin="${_dir}/origin-rm"
+    _guard="${_dir}/safe-rm"
+    if [ -e "$_origin" ]; then
+        out_info "Already swapped: ${_origin}"
+    else
+        if [ -f "$_rm" ] && [ ! -L "$_rm" ]; then
+            mv -- "$_rm" "$_origin" || out_die "Could not move ${_rm} to ${_origin}. Nothing else was changed."
+            out_info "Moved ${_rm} to ${_origin}"
+        else
+            out_die "No original rm binary in ${_dir}. Nothing was moved."
+        fi
+    fi
+    if [ ! -e "$_guard" ]; then
+        cp -- "$_src" "$_guard" || out_die "Could not copy this program to ${_guard}."
+        chmod 0755 "$_guard" 2>/dev/null || true
+        out_info "Installed ${_guard}"
+    fi
+    if [ -L "$_rm" ] || [ ! -e "$_rm" ]; then
+        srm_drop_symlink "$_rm" || out_die "Could not replace the rm link in ${_dir}."
+        ln -s "$_guard" "$_rm" || out_die "Could not point ${_rm} at ${_guard}."
+        out_info "Pointed ${_rm} at ${_guard}"
+    else
+        out_info "Left ${_rm} in place because ${_origin} already exists."
+    fi
+    unset _dir _src _rm _origin _guard
+    return 0
+}
+
+srm_restore_one() {
+    _dir=${1-}
+    [ -d "$_dir" ] || out_die "Restore directory is missing. Nothing was moved."
+    _rm="${_dir}/rm"
+    _origin="${_dir}/origin-rm"
+    _guard="${_dir}/safe-rm"
+    if [ -e "$_origin" ]; then
+        if [ -L "$_rm" ]; then
+            srm_drop_symlink "$_rm" || out_die "Could not remove the rm link in ${_dir}."
+        elif [ -e "$_rm" ]; then
+            out_die "Refusing to restore over an existing ${_rm}. Nothing was moved."
+        fi
+        mv -- "$_origin" "$_rm" || out_die "Could not move ${_origin} back to ${_rm}."
+        out_success "Restored ${_rm}"
+    else
+        out_die "No ${_origin} to restore. Nothing was moved."
+    fi
+    if [ -L "$_guard" ] || [ -f "$_guard" ]; then
+        if [ -L "$_guard" ]; then
+            srm_drop_symlink "$_guard" || true
+        else
+            unlink -- "$_guard" 2>/dev/null || unlink "$_guard" 2>/dev/null || true
+        fi
+    fi
+    unset _dir _rm _origin _guard
+    return 0
+}
+
+srm_swap_root_ok() {
+    _r=${1-}
+    case "$_r" in
+        /tmp/safe-rm-swap.*) ;;
+        *)
+            unset _r
+            return 1
+            ;;
+    esac
+    case "$_r" in
+        *..*) unset _r; return 1 ;;
+    esac
+    [ -d "$_r" ] || { unset _r; return 1; }
+    if [ -n "${HOME-}" ] && [ "$_r" = "${HOME}" ]; then
+        unset _r
+        return 1
+    fi
+    unset _r
+    return 0
+}
+
+srm_same_file() {
+    _a=${1-}
+    _b=${2-}
+    [ -e "$_a" ] && [ -e "$_b" ] || return 1
+    _ia=$(stat -c '%d:%i' "$_a" 2>/dev/null || true)
+    _ib=$(stat -c '%d:%i' "$_b" 2>/dev/null || true)
+    [ -n "$_ia" ] && [ "$_ia" = "$_ib" ]
+    _rc=$?
+    unset _a _b _ia _ib
+    return $_rc
+}
+
+srm_script_source() {
+    _src=$(inst_resolve_self_script "$0" 2>/dev/null || true)
+    if [ -z "$_src" ] || [ ! -f "$_src" ]; then
+        _src=$0
+    fi
+    if [ ! -f "$_src" ]; then
+        unset _src
+        return 1
+    fi
+    printf '%s\n' "$_src"
+    unset _src
+}
+
+srm_cmd_setup() {
+    _src=$(srm_script_source) || out_die "Could not find this program file to install as safe-rm. Nothing was moved."
+    if [ -n "${SRM_SWAP_ROOT-}" ]; then
+        srm_swap_root_ok "${SRM_SWAP_ROOT}" || out_die "Refusing setup outside a /tmp/safe-rm-swap.* directory. Nothing was moved."
+        srm_swap_one "${SRM_SWAP_ROOT}" "$_src"
+        unset _src
+        return 0
+    fi
+    if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
+        out_die "Setup checks /usr/bin/origin-rm and /bin/origin-rm and may move the system rm. That needs an admin login. Nothing was moved."
+    fi
+    srm_swap_one "/usr/bin" "$_src"
+    if [ -e /bin/rm ] || [ -e /bin/origin-rm ] || [ -d /bin ]; then
+        if srm_same_file /bin/rm /usr/bin/rm || srm_same_file /bin /usr/bin; then
+            out_info "/bin and /usr/bin are the same file. One origin-rm covers both."
+        elif [ -d /bin ]; then
+            srm_swap_one "/bin" "$_src"
+        fi
+    fi
+    unset _src
+    return 0
+}
+
+srm_cmd_restore() {
+    if [ -n "${SRM_SWAP_ROOT-}" ]; then
+        srm_swap_root_ok "${SRM_SWAP_ROOT}" || out_die "Refusing restore outside a /tmp/safe-rm-swap.* directory. Nothing was moved."
+        srm_restore_one "${SRM_SWAP_ROOT}"
+        return 0
+    fi
+    if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
+        out_die "Restore puts origin-rm back as rm. That needs an admin login. Nothing was moved."
+    fi
+    if [ -e /usr/bin/origin-rm ] || [ -L /usr/bin/rm ]; then
+        srm_restore_one "/usr/bin"
+    fi
+    if [ -d /bin ] && ! srm_same_file /bin /usr/bin; then
+        if [ -e /bin/origin-rm ] || [ -L /bin/rm ]; then
+            srm_restore_one "/bin"
+        fi
+    fi
+    return 0
 }
 
 # !!! DO NOT MODIFY OR SIMPLIFY THIS FUNCTION !!!
@@ -3196,6 +3568,7 @@ srm_cmd_rm() {
     }
     trap 'srm_cleanup_work' EXIT INT HUP TERM
     : > "${SRM_WORK}/flags"
+    srm_load_account_homes "${SRM_WORK}/homes"
 
     _n=0
     _end=0
@@ -3235,6 +3608,7 @@ srm_cmd_rm() {
             esac
         fi
         _n=$((_n + 1))
+        _arg=$(srm_expand_home_operand "$_arg")
         printf '%s\n' "$_arg" > "${SRM_WORK}/path.${_n}"
     done
 
@@ -3307,6 +3681,336 @@ srm_cmd_rm() {
 }
 
 # =============================================================================
+# app_default_print_menu() - Front board (TTY)
+# =============================================================================
+#
+# GENERAL PURPOSE:
+# Front categories are 1 remove-guard and 8 self-management, then 9 Exit.
+# Number 2 stays reserved and is not printed. There is no Back row here.
+# Lifecycle verbs stay under 8. The rm verb stays under 1.
+#
+# ALIGNMENT:
+# - requirement-shell-cli-default-interaction.md
+#
+# Last updated: 2026-09-27
+# =============================================================================
+app_default_print_menu() {
+    : "${APP_NAME:=safe-rm}"
+    : "${SHORT_DESCRIPTION:=${APP_DESC:-Guarded rm that refuses login homes and system directories}}"
+    out_info "$(util_app_ident) — ${SHORT_DESCRIPTION}"
+    out_menu_choice "1" "remove-guard" "check a path and remove it only when it is allowed"
+    out_menu_choice "8" "self-management" "this CLI install, version, update, uninstall"
+    out_menu_choice "9" "Exit"
+}
+
+# =============================================================================
+# app_default_print_rm_menu() - Remove-guard board under 1
+# =============================================================================
+#
+# GENERAL PURPOSE:
+# One live verb: 11 rm. 0 Back. Do not restart this list at 1.
+#
+# ALIGNMENT:
+# - requirement-shell-cli-default-interaction.md
+# - requirement-domain-safe-rm.md
+#
+# Last updated: 2026-09-27
+# =============================================================================
+app_default_print_rm_menu() {
+    out_info "$(util_app_ident) — remove-guard"
+    out_menu_choice "11" "rm" "check each path and remove only when every path is allowed"
+    out_menu_choice "0" "Back"
+}
+
+# =============================================================================
+# app_default_print_self_menu() - Self-management board under 8
+# =============================================================================
+#
+# GENERAL PURPOSE:
+# Online script-alone, no payload: 81 install stays reserved and is omitted.
+# Listed rows are 82 version through 87 self-install, then 0 Back.
+#
+# ALIGNMENT:
+# - requirement-shell-cli-default-interaction.md
+#
+# Last updated: 2026-09-27
+# =============================================================================
+app_default_print_self_menu() {
+    out_info "$(util_app_ident) — self-management"
+    out_menu_choice "82" "version" "show current version"
+    out_menu_choice "83" "about" "show detailed diagnostics"
+    out_menu_choice "84" "version-check" "compare local vs remote version"
+    out_menu_choice "85" "self-update" "update ${APP_NAME} to a newer remote version"
+    out_menu_choice "86" "self-uninstall" "remove ${APP_NAME}"
+    out_menu_choice "87" "self-install" "place this CLI only (copy when \$0 is a script; download when piped)"
+    out_menu_choice "0" "Back"
+}
+
+# =============================================================================
+# app_default_run_self_leaf() - Run one self-management verb
+# =============================================================================
+#
+# Returns 0 after a listed leaf. Returns 1 when the pick is not a leaf.
+# install (81) is reserved and is not a leaf.
+# =============================================================================
+app_default_run_self_leaf() {
+    _leaf="${1-}"
+    case "${_leaf}" in
+        82|version)
+            app_version
+            ;;
+        83|about)
+            app_about
+            ;;
+        84|version-check)
+            ver_check
+            ;;
+        85|self-update)
+            inst_self_update
+            ;;
+        86|self-uninstall)
+            inst_self_uninstall
+            ;;
+        87|self-install)
+            inst_self_install
+            ;;
+        *)
+            unset _leaf
+            return 1
+            ;;
+    esac
+    unset _leaf
+    return 0
+}
+
+# =============================================================================
+# app_default_ask_rm() - One path, then the remove guard
+# =============================================================================
+#
+# Read the path in this shell. Do not capture read with $().
+# Return 0 after the guard runs. Return 1 on EOF. Return 2 when the path
+# is empty (nothing was removed; caller reprints this layer).
+# =============================================================================
+app_default_ask_rm() {
+    : "${APP_NAME:=safe-rm}"
+    out_msg_n "Path: "
+    _rm_path=""
+    if ! read -r _rm_path; then
+        unset _rm_path
+        return 1
+    fi
+    if [ -z "${_rm_path}" ]; then
+        out_error "No path was given. Nothing was removed. Next: ${APP_NAME} rm --dry-run <path>"
+        unset _rm_path
+        return 2
+    fi
+    srm_cmd_rm "${_rm_path}"
+    unset _rm_path
+    return 0
+}
+
+# =============================================================================
+# app_default_rm_loop() - Remove-guard layer
+# =============================================================================
+#
+# A finished rm returns so the front board redisplays. 0 / back / empty
+# returns to the front board without running rm. A bad pick reprints this
+# layer. EOF leaves this layer.
+# =============================================================================
+app_default_rm_loop() {
+    : "${_menu_json:=0}"
+    : "${_menu_quiet:=0}"
+    while true; do
+        JSON=0
+        QUIET=0
+        export JSON QUIET
+        app_default_print_rm_menu
+        out_msg_n "Choice: "
+        _pick=""
+        if ! read -r _pick; then
+            unset _pick
+            return 0
+        fi
+        case "${_pick}" in
+            0|back|Back|"")
+                unset _pick
+                return 0
+                ;;
+            11|rm)
+                JSON="${_menu_json}"
+                QUIET="${_menu_quiet}"
+                export JSON QUIET
+                app_default_ask_rm
+                _rc=$?
+                JSON=0
+                QUIET=0
+                export JSON QUIET
+                unset _pick
+                if [ "${_rc}" -eq 2 ]; then
+                    continue
+                fi
+                unset _rc
+                return 0
+                ;;
+        esac
+        JSON=0
+        QUIET=0
+        export JSON QUIET
+        out_error "Not a menu choice '${_pick}'. Type 11, 0 back, or rm."
+    done
+}
+
+# =============================================================================
+# app_default_self_loop() - Self-management layer
+# =============================================================================
+#
+# A finished leaf returns so the front board redisplays. 0 / back / empty
+# returns to the front board without running a verb. A bad pick reprints
+# this layer. EOF leaves this layer.
+# =============================================================================
+app_default_self_loop() {
+    : "${_menu_json:=0}"
+    : "${_menu_quiet:=0}"
+    while true; do
+        JSON=0
+        QUIET=0
+        export JSON QUIET
+        app_default_print_self_menu
+        out_msg_n "Choice: "
+        _pick=""
+        if ! read -r _pick; then
+            unset _pick
+            return 0
+        fi
+        case "${_pick}" in
+            0|back|Back|"")
+                unset _pick
+                return 0
+                ;;
+        esac
+        JSON="${_menu_json}"
+        QUIET="${_menu_quiet}"
+        export JSON QUIET
+        if app_default_run_self_leaf "${_pick}"; then
+            unset _pick
+            return 0
+        fi
+        JSON=0
+        QUIET=0
+        export JSON QUIET
+        out_error "Not a menu choice '${_pick}'. Type 82-87, 0 back, or a listed command name."
+    done
+}
+
+# =============================================================================
+# app_default() - TTY numbered menu / off-TTY help
+# =============================================================================
+#
+# GENERAL PURPOSE:
+# menu / main / interactive empty argv. On a terminal: ignore --json and
+# --quiet while painting, show the front board, open 1 or 8, or run a typed
+# leaf. After a leaf, show the front board again. A bad pick reprints this
+# layer (does not exit). Off a terminal: help.
+#
+# ALIGNMENT:
+# - requirement-shell-cli-default-interaction.md
+# - requirement-shell-cli-zero-arguments.md
+#
+# Last updated: 2026-09-27
+# =============================================================================
+app_default() {
+    : "${TTY:=0}"
+    : "${JSON:=0}"
+    : "${QUIET:=0}"
+    : "${APP_NAME:=safe-rm}"
+
+    if [ "${TTY}" -ne 1 ]; then
+        app_help
+        return 0
+    fi
+
+    _menu_json="${JSON}"
+    _menu_quiet="${QUIET}"
+    JSON=0
+    QUIET=0
+    export JSON QUIET
+
+    while true; do
+        app_default_print_menu
+        out_msg_n "Choice: "
+        _pick=""
+        if ! read -r _pick; then
+            JSON="${_menu_json}"
+            QUIET="${_menu_quiet}"
+            export JSON QUIET
+            unset _pick _menu_json _menu_quiet
+            return 0
+        fi
+        case "${_pick}" in
+            9|exit|quit|Exit|QUIT|"")
+                JSON="${_menu_json}"
+                QUIET="${_menu_quiet}"
+                export JSON QUIET
+                unset _pick _menu_json _menu_quiet
+                return 0
+                ;;
+            1|remove-guard)
+                if app_default_rm_loop; then
+                    JSON=0
+                    QUIET=0
+                    export JSON QUIET
+                    unset _pick
+                    continue
+                fi
+                ;;
+            8|self-management)
+                if app_default_self_loop; then
+                    JSON=0
+                    QUIET=0
+                    export JSON QUIET
+                    unset _pick
+                    continue
+                fi
+                ;;
+            11|rm)
+                JSON="${_menu_json}"
+                QUIET="${_menu_quiet}"
+                export JSON QUIET
+                app_default_ask_rm
+                _rc=$?
+                JSON=0
+                QUIET=0
+                export JSON QUIET
+                unset _pick
+                if [ "${_rc}" -eq 1 ]; then
+                    JSON="${_menu_json}"
+                    QUIET="${_menu_quiet}"
+                    export JSON QUIET
+                    unset _rc _menu_json _menu_quiet
+                    return 0
+                fi
+                unset _rc
+                continue
+                ;;
+        esac
+        JSON="${_menu_json}"
+        QUIET="${_menu_quiet}"
+        export JSON QUIET
+        if app_default_run_self_leaf "${_pick}"; then
+            JSON=0
+            QUIET=0
+            export JSON QUIET
+            unset _pick
+            continue
+        fi
+        JSON=0
+        QUIET=0
+        export JSON QUIET
+        out_error "Not a menu choice '${_pick}'. Type 1, 8, 9 to leave, or a listed command name."
+    done
+}
+
+# =============================================================================
 # app_main() - Main entrypoint and command dispatcher
 # =============================================================================
 #
@@ -3348,8 +4052,12 @@ srm_cmd_rm() {
 # 2026-08-11:
 #   - Specializee injection anchors (DOMAIN_DISPATCH_*) for A→B products; empty
 #     argv remains Type O — domain setup uses explicit verbs only.
+# 2026-09-27:
+#   - Interactive empty argv (TTY, not quiet/json) opens the numbered menu.
+#     Non-interactive / quiet / json empty argv stays CLI self-install.
+#     menu and main are the named menu verbs. rm lives under front category 1.
 #
-# Last reviewed: 2026-08-11
+# Last reviewed: 2026-09-27
 # =============================================================================
 
 app_main() {
@@ -3374,30 +4082,31 @@ app_main() {
     export EFFECTIVE_STORAGE_DIR STORAGE_DIR
     export TMPDIR="${EFFECTIVE_STORAGE_DIR}"
 
-    # === ZERO-ARG = Type O CLI self-install-ensure (curl | sh contract) ===
-    # Product type: Type O (online-install) — not Type N help-default.
-    # Empty argv always means "ensure installed", never help, never domain setup.
-    # Cases: not installed | installed local | installed global
-    # - not installed → self-install (TTY prompt via inst_maybe_install; non-TTY auto)
-    # - already installed → success no-op (inst_self_install); no --force required
-    # - script $0 copies; interpreter $0 downloads
-    # - --force / FORCE_REINSTALL only for deliberate replace
-    # Exit status must reflect install outcome (failed copy/download/checksum → non-zero).
-    # SSOT: docs/requirements/requirement-shell-cli-zero-arguments.md
-    #       docs/requirements/requirement-shell-cli-self-install.md
-    # Specializee: do NOT replace this block with domain full-setup.
-    if [ $# -eq 0 ]; then
-        if [ "${JSON}" -eq 1 ] || [ "${QUIET}" -eq 1 ]; then
+    # === ZERO-ARG split ===
+    # Interactive 0-argv (TTY, not quiet, not json): main menu.
+    # --debug is not a command. safe-rm --debug on a TTY is still this menu.
+    # Non-interactive / quiet / json, no command: Type O CLI self-install-ensure.
+    # Never help. Never a menu under curl | sh. Never treat empty argv as rm.
+    # SSOT: requirement-shell-cli-zero-arguments.md
+    #       requirement-shell-cli-default-interaction.md
+    #       requirement-shell-cli-self-install.md
+    _debug_only=1
+    for _a in "$@"; do
+        case "${_a}" in
+            --debug) DEBUG=1 ;;
+            *) _debug_only=0 ;;
+        esac
+    done
+    if [ "${_debug_only}" -eq 1 ]; then
+        unset _a _debug_only
+        if [ "${JSON}" -eq 1 ] || [ "${QUIET}" -eq 1 ] || [ "${TTY}" -ne 1 ]; then
             inst_self_install
-            exit $?
-        elif inst_is_installed; then
-            inst_self_install
-            exit $?
-        else
-            inst_maybe_install
             exit $?
         fi
+        app_default
+        exit $?
     fi
+    unset _a _debug_only
 
     # === Argument parsing: flags and commands (order-independent) ===
     while [ $# -gt 0 ]; do
@@ -3411,7 +4120,7 @@ app_main() {
                 DRY_RUN=1
                 ;;
             # --- end DOMAIN_DISPATCH_FLAGS ---
-            version|about|help|version-check|self-update|self-uninstall|self-install|install)
+            version|about|help|version-check|self-update|self-uninstall|self-install|install|menu|main|setup|restore|-restore)
                 COMMAND="$1"
                 ;;
             # --- DOMAIN_DISPATCH_COMMANDS (specializee injection) ---
@@ -3448,6 +4157,15 @@ app_main() {
             ;;
         self-install|install)
             inst_self_install
+            ;;
+        menu|main)
+            app_default
+            ;;
+        setup)
+            srm_cmd_setup
+            ;;
+        restore|-restore)
+            srm_cmd_restore
             ;;
         # --- DOMAIN_DISPATCH_ROUTES (specializee injection) ---
         rm)
