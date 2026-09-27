@@ -1,6 +1,6 @@
 **file**: docs/requirements/requirement-actor-role-subject.md
 **id**: RQ-ACTOR-ROLE-SUBJECT
-**Status**: Active (Version 1.0.3)
+**Status**: Active (Version 1.0.4)
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -48,17 +48,17 @@ Three columns. No approver.
 | This login, on a terminal | Opens the main menu (`safe-rm` or `safe-rm --debug`) | None |
 | This login | Runs the guard (`rm`, `--dry-run`) | The path named on that command |
 | This login | Runs self-install, version, about, help, menu, self-update, self-uninstall. Each of those words is also `--` plus the same word. On the command named `rm`, only the `--` form is that command (`rm --help`, `rm --version`). The bare word is a path (`rm version` removes a link named version) | None |
-| Admin login: root, or a login that can move `/usr/bin/rm` and `/bin/rm` | Runs **setup**. Setup checks whether `/usr/bin/origin-rm` or `/bin/origin-rm` is already the original binary. If it is, setup does not move `rm` again and replaces the existing `safe-rm` with this program. If `rm` is still the original binary, setup moves it to that `origin-rm` path and points `rm` at this program | The host `rm` command (`/usr/bin/rm`, `/bin/rm`, `/usr/bin/origin-rm`, `/bin/origin-rm`) |
+| Admin login: root, or a login that can move `/usr/bin/rm` or `/bin/rm` | Runs **setup**. Setup checks both paths. On Alpine, `/bin/rm` is the BusyBox symlink and `/usr/bin/rm` may be absent; that is still this row. Setup checks whether `/usr/bin/origin-rm` or `/bin/origin-rm` is already the remover. If it is, setup does not move `rm` again and replaces the existing `safe-rm` with this program. If `rm` is still the original file, setup moves it, or writes the BusyBox `origin-rm`, and points `rm` at this program | The host `rm` that exists (`/usr/bin/rm`, `/bin/rm`, and the matching `origin-rm`) |
 | The same admin login | Runs `restore` | The host `rm` command |
 | A pipe, or quiet, or json, with no command | Places this CLI. Does not open the menu and does not move `rm`. When that place is root and `origin-rm` is already there, it replaces the guard file with this program | None |
 
 Rules:
 
-1. A login that cannot move `/usr/bin/rm` and `/bin/rm` **MUST NOT** run setup and **MUST NOT** run `restore`. That login may still open the main menu and run the guard.
+1. A login that cannot move `/usr/bin/rm` or `/bin/rm` **MUST NOT** run setup and **MUST NOT** run `restore`. That login may still open the main menu and run the guard. Alpine's `rm` is `/bin/rm`. Setup still belongs to this admin row when `/usr/bin/rm` is absent.
 2. Setup's first act is the check. The check looks at `/usr/bin/origin-rm` and `/bin/origin-rm`. An existing original binary there means the swap already happened. Setup **MUST NOT** move `rm` again in that case. Setup **MUST** replace the existing `safe-rm` when its bytes are not this program. A root place does the same replace and does not move `rm`. A non-root place does not write `/usr/bin/safe-rm` or `/bin/safe-rm`.
 3. On Termux, Git Bash, and Windows cmd, nobody runs setup. The swap stays unused. The menu and the guard still run as this login.
 4. The main menu does not ask for admin privilege. Choosing a leaf that is setup or `restore` still has to pass the admin row above.
-5. Setup's check compares the host to the before/after table. That table lives in `requirement-domain-safe-rm.md` §2.0.1. Before swapped, `/usr/bin/rm` and `/bin/rm` are the original binary and `origin-rm` is absent. After swapped, those `rm` paths are this guard and the original binary is `/usr/bin/origin-rm` or `/bin/origin-rm`.
+5. Setup's check compares the host to the before/after table. The same-directory table is `requirement-domain-safe-rm.md` §2.0.1. Alpine, where `/bin/rm` and `/usr/bin/rm` are different paths, is §2.0.2. Before swapped on Alpine, `/bin/rm` is the BusyBox symlink and `/usr/bin/rm` may be absent. After swapped, `/bin/rm` is this guard and `/bin/origin-rm` runs `busybox rm`.
 
 ### 2.2 Implementation Notes
 
@@ -111,6 +111,6 @@ Rules:
 
 ---
 
-**Last Updated**: 2026-09-27 (1.0.5 — on the command named `rm`, only the `--` form of a lifecycle verb is that command)
+**Last Updated**: 2026-09-27 (1.0.4 — Alpine may have `rm` only at `/bin/rm`; setup still checks both paths)
 **Owner**: safe-rm project maintainers
 **Alignment**: Registry `docs/requirements/index.md`; CIAO (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

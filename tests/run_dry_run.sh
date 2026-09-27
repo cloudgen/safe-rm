@@ -91,6 +91,9 @@ assert_contains "TP-SRM-02 version names safe-rm" "$out" "safe-rm version $(grep
 # TP-SRM-03 help
 out=$(sh "$SAFE_RM" help 2>/dev/null)
 assert_contains "TP-SRM-03 help lists self-install" "$out" "self-install"
+assert_contains "TP-SRM-28 help says local install does not download" "$out" "does not download"
+assert_contains "TP-SRM-28 help names the global bin" "$out" "/usr/local/bin/"
+assert_contains "TP-SRM-28 help names the local bin" "$out" "\${HOME}/.local/bin/"
 assert_contains "TP-SRM-03 help lists rm" "$out" "rm"
 assert_contains "TP-SRM-03 help lists --dry-run" "$out" "--dry-run"
 assert_contains "TP-SRM-03 help tells agents not to retry rm" "$out" "Do not retry with rm"
@@ -924,6 +927,94 @@ case "$SWAP" in
         scratch_rm -rf -- "$SWAP"
         ;;
 esac
+
+# TP-SRM-29: /usr/bin/rm may be absent. /bin/rm may be the rm people type.
+# Two fixture directories. Neither is executed. BusyBox stays a symlink
+# target; origin-rm is the small program that runs busybox rm.
+REG_U=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
+REG_B=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
+printf '#!/bin/sh\nexit 0\n' > "$REG_B/rm"
+chmod 0755 "$REG_B/rm"
+reg_before=$(stat -c '%d:%i' "$REG_B/rm")
+out=$(SRM_SWAP_ROOT="$REG_U" SRM_SWAP_BIN="$REG_B" sh "$SAFE_RM" setup 2>"$err")
+ec=$?
+assert_eq "TP-SRM-29 regular other-path exit" 0 "$ec"
+assert_contains "TP-SRM-29 names the empty rm" "$out" "No original rm at ${REG_U}/rm"
+assert_contains "TP-SRM-29 moves the rm that exists" "$out" "Moved ${REG_B}/rm to ${REG_B}/origin-rm"
+if [ -e "$REG_U/rm" ] || [ -e "$REG_U/safe-rm" ] || [ -e "$REG_U/origin-rm" ]; then
+    t_fail "TP-SRM-29 empty directory was written"
+else
+    t_pass "TP-SRM-29 empty directory was not written"
+fi
+if [ -L "$REG_B/rm" ]; then
+    t_pass "TP-SRM-29 other-path rm is a symlink"
+else
+    t_fail "TP-SRM-29 other-path rm is not a symlink"
+fi
+assert_eq "TP-SRM-29 other-path origin inode" "$reg_before" "$(stat -c '%d:%i' "$REG_B/origin-rm" 2>/dev/null || true)"
+out=$(SRM_SWAP_ROOT="$REG_U" SRM_SWAP_BIN="$REG_B" sh "$SAFE_RM" restore 2>"$err")
+ec=$?
+assert_eq "TP-SRM-29 regular restore exit" 0 "$ec"
+assert_eq "TP-SRM-29 regular restored inode" "$reg_before" "$(stat -c '%d:%i' "$REG_B/rm" 2>/dev/null || true)"
+
+BB_U=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
+BB_B=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
+printf '#!/bin/sh\nexit 0\n' > "$BB_B/busybox"
+chmod 0755 "$BB_B/busybox"
+ln -s busybox "$BB_B/rm"
+bb_before=$(stat -c '%d:%i' "$BB_B/busybox")
+out=$(SRM_SWAP_ROOT="$BB_U" SRM_SWAP_BIN="$BB_B" sh "$SAFE_RM" setup 2>"$err")
+ec=$?
+assert_eq "TP-SRM-29 busybox exit" 0 "$ec"
+assert_contains "TP-SRM-29 busybox skips empty rm" "$out" "No original rm at ${BB_U}/rm"
+assert_contains "TP-SRM-29 busybox keeps the applet" "$out" "Kept BusyBox rm as ${BB_B}/origin-rm"
+assert_contains "TP-SRM-29 busybox points rm" "$out" "Pointed ${BB_B}/rm at ${BB_B}/safe-rm"
+if [ -e "$BB_U/rm" ] || [ -e "$BB_U/safe-rm" ] || [ -e "$BB_U/origin-rm" ]; then
+    t_fail "TP-SRM-29 busybox wrote the empty directory"
+else
+    t_pass "TP-SRM-29 busybox left the empty directory alone"
+fi
+assert_contains "TP-SRM-29 busybox link target" "$(readlink "$BB_B/rm")" "${BB_B}/safe-rm"
+assert_contains "TP-SRM-29 origin names busybox" "$(cat "$BB_B/origin-rm")" "safe-rm busybox-origin"
+assert_contains "TP-SRM-29 origin runs busybox rm" "$(cat "$BB_B/origin-rm")" "${BB_B}/busybox"
+assert_eq "TP-SRM-29 busybox inode unchanged" "$bb_before" "$(stat -c '%d:%i' "$BB_B/busybox" 2>/dev/null || true)"
+out=$(SRM_SWAP_ROOT="$BB_U" SRM_SWAP_BIN="$BB_B" sh "$SAFE_RM" restore 2>"$err")
+ec=$?
+assert_eq "TP-SRM-29 busybox restore exit" 0 "$ec"
+assert_eq "TP-SRM-29 busybox link restored" "busybox" "$(readlink "$BB_B/rm" 2>/dev/null || true)"
+assert_eq "TP-SRM-29 busybox still the same file" "$bb_before" "$(stat -c '%d:%i' "$BB_B/busybox" 2>/dev/null || true)"
+if [ -e "$BB_B/origin-rm" ]; then
+    t_fail "TP-SRM-29 busybox origin-rm still exists"
+else
+    t_pass "TP-SRM-29 busybox origin-rm removed"
+fi
+if [ -e "$BB_B/safe-rm" ]; then
+    t_fail "TP-SRM-29 busybox safe-rm still exists"
+else
+    t_pass "TP-SRM-29 busybox safe-rm removed"
+fi
+
+EMPTY_U=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
+EMPTY_B=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
+out=$(SRM_SWAP_ROOT="$EMPTY_U" SRM_SWAP_BIN="$EMPTY_B" sh "$SAFE_RM" setup 2>"$err")
+ec=$?
+assert_eq "TP-SRM-29 neither path exit" 1 "$ec"
+assert_contains "TP-SRM-29 neither path names both" "$(cat "$err")" "No original rm at ${EMPTY_U}/rm or ${EMPTY_B}/rm"
+assert_contains "TP-SRM-29 neither path moved nothing" "$(cat "$err")" "Nothing was moved"
+if [ -e "$EMPTY_U/safe-rm" ] || [ -e "$EMPTY_B/safe-rm" ]; then
+    t_fail "TP-SRM-29 neither path installed a guard"
+else
+    t_pass "TP-SRM-29 neither path installed nothing"
+fi
+
+for _sd in "$REG_U" "$REG_B" "$BB_U" "$BB_B" "$EMPTY_U" "$EMPTY_B"; do
+    case "$_sd" in
+        /tmp/safe-rm-swap.*)
+            scratch_rm -rf -- "$_sd"
+            ;;
+    esac
+done
+unset _sd REG_U REG_B BB_U BB_B EMPTY_U EMPTY_B reg_before bb_before
 
 printf '\n== summary ==\n'
 printf 'PASS=%s FAIL=%s\n' "$PASS" "$FAIL"

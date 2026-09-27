@@ -1,13 +1,19 @@
 # safe-rm
 
-![Version](https://img.shields.io/badge/Version-1.0.5-blue?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.0.7-blue?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 [![CIAO](https://img.shields.io/badge/Philosophy-CIAO%20v2.10.*-purple.svg)](https://github.com/cloudgen/ciao)
 [![Stars](https://img.shields.io/github/stars/cloudgen/safe-rm?style=flat-square)](https://github.com/cloudgen/safe-rm)
 
 **safe-rm** is a POSIX `/bin/sh` program. `rm -rf` is too dangerous to leave as the raw binary, so setup moves that binary aside to `origin-rm` and points `rm` at this guard. It keeps the selfmanaged lifecycle: place itself, update itself, remove itself, and the numbered menu. `rm -rf` of any account home is refused, because that deletes the whole home. A folder inside any account home, such as a cache directory, may be removed. A refusal is an `out_*` error that tells you to stop.
 
-The program people install is `src/safe-rm`. The lifecycle and `out_*` come from the **selfmanaged** bootstrap. The swap, `origin-rm`, and `restore` are the 2023 safe-rm setup. `safe-rm setup` is for an admin login. It checks `/usr/bin/origin-rm` and `/bin/origin-rm`, moves the original binary there, and points `rm` at this program. `safe-rm restore` puts that binary back. The test of that table uses a scratch directory under `/tmp` and does not delete a directory.
+The program people install is `src/safe-rm`. The lifecycle and `out_*` come from the **selfmanaged** bootstrap. The swap, `origin-rm`, and `restore` are the 2023 safe-rm setup. `safe-rm setup` is for an admin login. It checks `/usr/bin/rm` and `/bin/rm`. A directory with no `rm` does not cancel the other. It moves a regular `rm` aside to `origin-rm` and points `rm` at this program. `safe-rm restore` puts that file back. The test of that table uses a scratch directory under `/tmp` and does not delete a directory.
+
+## Alpine
+
+On Alpine, `/bin` and `/usr/bin` are different directories. The `rm` people type is `/bin/rm`, a symlink to BusyBox. `/usr/bin/rm` is often absent, so `which rm` prints `/bin/rm` and `rm --version` is BusyBox text.
+
+`safe-rm setup` checks both paths. It does not stop because `/usr/bin` has no `rm`, and it does not create `/usr/bin/rm`. It does not rename the BusyBox symlink to `origin-rm`, because BusyBox would then refuse to remove files. After setup, `/bin/rm` points at this program and `/bin/origin-rm` runs `busybox rm`. `safe-rm restore` puts the BusyBox symlink back.
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
@@ -46,7 +52,7 @@ Human output says whether the path exists and whether removal is allowed. JSON i
 
 ## Install
 
-Runtime version: `VERSION="1.0.5"` in `src/safe-rm`.
+Runtime version: `VERSION="1.0.7"` in `src/safe-rm`.
 
 Channel default:
 
@@ -64,14 +70,21 @@ Root, when this machine has it:
 curl -fsSL https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm | sudo sh
 ```
 
-With no `CHECKSUM` set, that download checks the companion `https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm.sha256` (SHA-256, first field). A match continues. A mismatch stops the install. A missing companion warns and continues. From a checkout, copy the file you have:
+With no `CHECKSUM` set, that download checks the companion `https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm.sha256` (SHA-256, first field). A match continues. A mismatch stops the install. A missing companion warns and continues. From a checkout, `$0` is this file, not a shell. `install` copies that file and does not download:
+
+```sh
+sudo src/safe-rm install --force
+src/safe-rm install
+```
+
+Root copies it into `/usr/local/bin/`. This login copies it into `${HOME}/.local/bin/`. The program does not run `sudo` itself. `sudo` on the command is what makes the copy global.
 
 ```sh
 ./src/safe-rm self-install
 safe-rm about
 ```
 
-- Non-root install lands in `~/.local/bin/safe-rm` (mode `0700`)
+- Non-root install lands in `${HOME}/.local/bin/safe-rm` (mode `0700`)
 - Root install lands in `/usr/local/bin/safe-rm` (mode `0755`)
 - When `origin-rm` is already present, that root install also replaces `/usr/bin/safe-rm` (the file `rm` runs) with this program. It does not move `origin-rm` again
 - On a terminal, no arguments opens the numbered list (same as `safe-rm menu`)
@@ -81,7 +94,7 @@ safe-rm about
 At a terminal the front board is:
 
 ```text
-safe-rm(1.0.5) — Guarded rm that refuses login homes and system directories
+safe-rm(1.0.7) — Guarded rm that refuses login homes and system directories
 1. remove-guard: check a path and remove it only when it is allowed
 8. self-management: this CLI install, version, update, uninstall
 9. Exit
@@ -90,7 +103,7 @@ safe-rm(1.0.5) — Guarded rm that refuses login homes and system directories
 **1** opens:
 
 ```text
-safe-rm(1.0.5) — remove-guard
+safe-rm(1.0.7) — remove-guard
 11. rm: check each path and remove only when every path is allowed
 0. Back
 ```

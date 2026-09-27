@@ -2,11 +2,11 @@
 
 **Product:** safe-rm (POSIX `/bin/sh` Type 0 CLI plus a guarded `rm`, specialized from selfmanaged)  
 **Workspace state:** Specialized product law (not blank genesis); **software-development** class; one Active domain SSOT.  
-**Updated:** 2026-09-27 (on the command named `rm`, a bare lifecycle word is a path; `rm --version` stays this program's version)
+**Updated:** 2026-09-27 (Alpine: `/bin/rm` and `/usr/bin/rm` are different paths; setup checks both)
 
 | ID / key | Title | Area | Status | Path | Updated |
 |----------|-------|------|--------|------|---------|
-| requirement-actor-role-subject | Who may run the menu, the guard, and setup (the origin-rm check) | shell | Active | `requirement-actor-role-subject.md` | 2026-09-27 |
+| requirement-actor-role-subject | Who may run the menu, the guard, and setup (the origin-rm check; Alpine `rm` may be only `/bin/rm`) | shell | Active | `requirement-actor-role-subject.md` | 2026-09-27 |
 | requirement-class-software-dev | Software-development class law + residual stack (posix-sh, no package tool) | class | Active | `requirement-class-software-dev.md` | 2026-09-06 |
 | requirement-shell-automatic-checksum | Automatic companion-digest integrity (transparent link/value/result; CHECKSUM not help/about) | shell | Active | `requirement-shell-automatic-checksum.md` | 2026-09-06 |
 | requirement-shell-cli-default-interaction | Main menu (interactive 0-argv, including --debug alone, opens it; the command named rm does not) | shell | Active | `requirement-shell-cli-default-interaction.md` | 2026-09-27 |
@@ -20,7 +20,7 @@
 | requirement-shell-output-requirements | Central `out_*` output SSOT (stdout/stderr, modes; `@key` raw nested JSON) | shell | Active | `requirement-shell-output-requirements.md` | 2026-09-06 |
 | requirement-shell-script-coding | POSIX `/bin/sh` coding-style specialize-in home (without it, portable lessons arrive raw) | shell | Active | `requirement-shell-script-coding.md` | 2026-09-06 |
 | requirement-shell-self-management | Self-management lifecycle (version-check, update, uninstall, about) | shell | Active | `requirement-shell-self-management.md` | 2026-09-17 |
-| requirement-domain-safe-rm | Protected rm (swap system rm to this guard, origin-rm kept, restore; the command named rm accepts origin-rm switches including -rf; a lifecycle `--` switch on that command is this program, and a bare word is a path; any home directory refused; a folder inside any home allowed; --dry-run) | domain | Active | `requirement-domain-safe-rm.md` | 2026-09-27 |
+| requirement-domain-safe-rm | Protected rm (swap system rm to this guard, origin-rm kept, restore; Alpine `/bin/rm` and `/usr/bin/rm` are different paths and both are checked; the command named rm accepts origin-rm switches including -rf; a lifecycle `--` switch on that command is this program, and a bare word is a path; any home directory refused; a folder inside any home allowed; --dry-run) | domain | Active | `requirement-domain-safe-rm.md` | 2026-09-27 |
 
 **Rules for agents:**
 

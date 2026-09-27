@@ -67,22 +67,21 @@ When this product is **bootstrap origin A** for specialized product **B** (A→B
 | `$0` | Place |
 |------|-------|
 | Interpreter basename `sh` `bash` `dash` `ash` `zsh` `ksh` `mksh` `yash` `posh` `csh` `tcsh` `fish` `busybox` (login dash prefix stripped; paths like `/bin/sh` and `/bin/bash` count) | Download from `SCRIPT_URL` + companion digest |
-| Readable regular file (`./src/selfmanaged`, `sh /path/to/selfmanaged`) | **Copy** that file — **MUST NOT** download |
-| Basename-only, `command -v` finds a readable file | Copy that file |
+| Any other `$0` (the file you ran: `src/safe-rm`, `./src/safe-rm`, `sh src/safe-rm`) | The file is local. **Copy** it. **MUST NOT** download. Unreadable → fail |
 
 **MUST NOT** treat `$0` as product identity for whether main runs. A pipe **MUST** still reach `app_main`.
 
 ### 2.3 Copy (no download)
 
-When `$0` is a script source:
+When `$0` is not a shell interpreter, the file is already on disk. **MUST NOT** fetch `SCRIPT_URL`.
 
-1. Resolve an absolute readable path of the running script.  
-2. `mktemp -t` under isolated `TMPDIR` (storage resolver): leaf `selfmanaged-XXXXXX`.  
-3. `cp` source → stage.  
-4. `chmod` dest mode on stage **before** `mv`. **MUST NOT** `chmod +x` alone (that mints **0711** from `mktemp` **0600**).  
-5. `mv` onto `INSTALL_PATH`.  
-6. `chmod` dest mode on dest.  
-7. **MAY** run PATH rc ensure (`path_add_shell`). **MUST NOT** fetch `SCRIPT_URL`. **MUST NOT** require network.
+1. Resolve a readable path of the running script (`$0`, or `command -v` when `$0` is a basename).  
+2. Root (the operator already ran `sudo` on this command): `cp` that file into `${GLOBAL_BIN}/` (default `/usr/local/bin/`). The process is root, so this `cp` is the global place. The program **MUST NOT** invoke `sudo` itself.  
+3. Not root: `cp` that file into `${USER_BIN}/` (default `${HOME}/.local/bin/`).  
+4. `chmod` the dest mode on the placed file (**0755** global / **0700** local). **MUST NOT** `chmod +x` alone (that mints **0711**).  
+5. **MAY** run PATH rc ensure (`path_add_shell`). **MUST NOT** require network.
+
+`sudo src/safe-rm install --force` is the global copy. `src/safe-rm install` is the local copy. `--force` replaces a file that is already there. Without `--force`, an existing install is a success and does not copy again.
 
 ### 2.4 Dest mode
 
@@ -135,7 +134,7 @@ fi
 |------|--------|
 | empty argv (pipe) | `curl -fsSL https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged \| /bin/sh` |
 | `self-install` | `selfmanaged self-install` · `./src/selfmanaged self-install` |
-| `install` (alias) | `selfmanaged install` · `./src/selfmanaged install` |
+| `install` (alias) | `selfmanaged install` · `sudo src/safe-rm install --force` (copies this file into `/usr/local/bin/`; no download) · `src/safe-rm install` (copies into `${HOME}/.local/bin/`) |
 | empty argv (TTY checkout) | `./src/selfmanaged` then yes → copy from that file |
 
 ### 2.x Why This Requirement Exists (Direct CIAO Alignment)
@@ -163,7 +162,7 @@ When Termux, Git Bash, Windows cmd, or the same class is detected: Type 1/2 unus
 **Future AI assistants or maintainers MUST NOT**:
 
 1. Route non-interactive empty argv to `inst_perform_install` as the default (download-always).  
-2. Download when `$0` is a readable script.  
+2. Download when `$0` is not an interpreter, including when the local path cannot be read (fail instead).  
 3. Treat interactive TTY yes as an online re-download when `$0` is the script.  
 4. Leave local dest **0711** or global dest **0700**/**0711** on this path.  
 5. Drop `self-install` from help or dispatcher.  
@@ -210,6 +209,6 @@ When Termux, Git Bash, Windows cmd, or the same class is detected: Type 1/2 unus
 | `docs/requirements/requirement-shell-automatic-checksum.md` | Integrity on **download** path only |
 | `./src/selfmanaged` | Implementation |
 
-**Last Updated**: 2026-09-17  
+**Last Updated**: 2026-09-27  
 **Owner**: selfmanaged project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; **CIAO** (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

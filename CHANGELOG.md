@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.7] - 2026-09-27
+
+### Fixed
+
+- `safe-rm setup` checks `/usr/bin/rm` and `/bin/rm`. A directory with no `rm` does not cancel the other. On Alpine those paths differ: `/bin/rm` is BusyBox and `/usr/bin/rm` is often absent. That symlink is not renamed to `origin-rm`, because BusyBox would then refuse to remove files. `/bin/origin-rm` runs `busybox rm`, and `/bin/rm` points at this program
+
+## [1.0.6] - 2026-09-27
+
+### Changed
+
+- `install` and `self-install`, when this file is not started by a shell, copy that file and do not download. Root (`sudo src/safe-rm install --force`) copies it into `/usr/local/bin/`. This login copies it into `${HOME}/.local/bin/`. A shell pipe still downloads
+
 ## [1.0.5] - 2026-09-27
 
 ### Changed

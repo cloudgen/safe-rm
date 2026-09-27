@@ -50,8 +50,8 @@ APP_NAME="safe-rm"
 : "${SHORT_DESCRIPTION:=${APP_DESC}}"
 : "${DESCRIPTION:=POSIX /bin/sh program you install for yourself. It keeps self-install and self-update, and it refuses to remove the login home itself, every account home in /etc/passwd, /home, another login's folder under /home, /usr/bin, or other system directories. A named folder inside the login home, such as a cache directory, may be removed. --dry-run reports whether a path exists and whether removal is allowed, and removes nothing.}"
 # Product version SSOT (semver). Extractors use: grep '^VERSION="'
-VERSION="1.0.5"
-: "${VERSION:=1.0.4}"
+VERSION="1.0.7"
+: "${VERSION:=1.0.7}"
 
 # Runtime flags (safe defaults)
 : "${QUIET:=0}"
@@ -1077,56 +1077,102 @@ inst_cli_dest_mode() {
 }
 
 # =============================================================================
-# inst_self_install_copy_from_script() - Copy $0 to dest without download
+# inst_self_install_copy_from_script() - Copy the local file into the bin directory
 # =============================================================================
 #
 # GENERAL PURPOSE:
-# Stage as ${APP_NAME}-XXXXXX under TMPDIR/cache, chmod dest mode, atomic mv.
-# MUST NOT chmod +x on mktemp 0600 (that mints 0711).
+# $0 is this file, not a shell. Copy it into the bin directory. Do not
+# download. Root copies into ${GLOBAL_BIN}/ (default /usr/local/bin/). The
+# operator's sudo already made this process root, so that cp is the global
+# place. This login copies into ${USER_BIN}/ (default ${HOME}/.local/bin/).
+# chmod the dest mode after the copy (0755 global / 0700 local).
+# MUST NOT chmod +x (that mints 0711 from a 0600 file).
 #
 # ALIGNMENT (live requirements only):
 # - requirement-shell-cli-self-install.md
 #
-# Last updated: 2026-09-17
+# Last updated: 2026-09-27
 # =============================================================================
 inst_self_install_copy_from_script() {
     local _src="$1"
     local _mode="$2"
-    local _tmp
+    local _dir _base _placed
     : "${APP_NAME:=safe-rm}"
     : "${JSON:=0}"
     : "${INSTALL_PATH:=}"
+    : "${GLOBAL_BIN:=/usr/local/bin}"
+    : "${HOME:=/tmp}"
+    : "${USER_BIN:=${HOME}/.local/bin}"
 
-    _tmp=$(mktemp -t "${APP_NAME}-XXXXXX")
-    if [ -z "${_tmp}" ]; then
+    if [ -z "${_src}" ] || [ ! -f "${_src}" ] || [ ! -r "${_src}" ]; then
         if [ "${JSON}" -eq 1 ]; then
-            out_json_error "Failed to create temporary file" "io_error"
+            out_json_error "Could not read ${_src}. This run is not a shell pipe, so install copies that file and does not download." "io_error"
         else
-            out_error "Failed to create temporary file"
+            out_error "Could not read ${_src}. This run is not a shell pipe, so install copies that file and does not download."
         fi
         return 1
     fi
-    if ! cp "${_src}" "${_tmp}"; then
-        rm -f "${_tmp}" 2>/dev/null || true
-        if [ "${JSON}" -eq 1 ]; then
-            out_json_error "Failed to copy ${_src}" "io_error"
+    if [ -z "${INSTALL_PATH}" ]; then
+        if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
+            INSTALL_PATH="${GLOBAL_BIN}/${APP_NAME}"
         else
-            out_error "Failed to copy ${_src}"
+            INSTALL_PATH="${USER_BIN}/${APP_NAME}"
+        fi
+    fi
+    _dir=${INSTALL_PATH%/*}
+    _base=${_src##*/}
+    if [ -z "${_dir}" ] || [ "${_dir}" = "${INSTALL_PATH}" ]; then
+        if [ "${JSON}" -eq 1 ]; then
+            out_json_error "Failed to copy ${_src} into the bin directory" "io_error"
+        else
+            out_error "Failed to copy ${_src} into the bin directory"
         fi
         return 1
     fi
-    chmod "${_mode}" "${_tmp}" 2>/dev/null || true
-    rm -f "${INSTALL_PATH}" 2>/dev/null
-    if ! mv "${_tmp}" "${INSTALL_PATH}" 2>/dev/null; then
-        rm -f "${_tmp}" 2>/dev/null || true
+    if [ ! -d "${_dir}" ]; then
+        if ! mkdir -p "${_dir}" 2>/dev/null; then
+            if [ "${JSON}" -eq 1 ]; then
+                out_json_error "Failed to create ${_dir}" "io_error"
+            else
+                out_error "Failed to create ${_dir}"
+            fi
+            return 1
+        fi
+    fi
+    _placed="${_dir}/${_base}"
+    if [ -e "${_placed}" ] && [ "${_src}" -ef "${_placed}" ]; then
+        chmod "${_mode}" "${_placed}" 2>/dev/null || true
+        return 0
+    fi
+    # Root: cp $0 /usr/local/bin/    This login: cp $0 ${HOME}/.local/bin/
+    if ! cp "${_src}" "${_dir}/"; then
         if [ "${JSON}" -eq 1 ]; then
-            out_json_error "Failed to move to ${INSTALL_PATH}" "io_error"
+            out_json_error "Failed to copy ${_src} into ${_dir}/" "io_error"
         else
-            out_error "Failed to move to ${INSTALL_PATH}"
+            out_error "Failed to copy ${_src} into ${_dir}/"
         fi
         return 1
     fi
-    chmod "${_mode}" "${INSTALL_PATH}" 2>/dev/null || true
+    if [ ! -f "${_placed}" ]; then
+        if [ "${JSON}" -eq 1 ]; then
+            out_json_error "Failed to copy ${_src} into ${_dir}/" "io_error"
+        else
+            out_error "Failed to copy ${_src} into ${_dir}/"
+        fi
+        return 1
+    fi
+    if [ "${_placed}" != "${INSTALL_PATH}" ]; then
+        if ! cp "${_placed}" "${INSTALL_PATH}"; then
+            if [ "${JSON}" -eq 1 ]; then
+                out_json_error "Failed to copy ${_src} to ${INSTALL_PATH}" "io_error"
+            else
+                out_error "Failed to copy ${_src} to ${INSTALL_PATH}"
+            fi
+            return 1
+        fi
+        chmod "${_mode}" "${INSTALL_PATH}" 2>/dev/null || true
+    fi
+    chmod "${_mode}" "${_placed}" 2>/dev/null || true
     return 0
 }
 
@@ -1136,15 +1182,22 @@ inst_self_install_copy_from_script() {
 #
 # GENERAL PURPOSE:
 # Type O CLI place/ensure. Empty argv and the self-install verb (install is
-# an alias). Script $0 → copy without download. Interpreter $0 → channel
-# download. Dest mode 0755 global / 0700 local. PATH rc MAY.
+# an alias). $0 is not a shell → the file is local: copy it, do not download.
+# Root copies into /usr/local/bin/. This login copies into ${HOME}/.local/bin/.
+# Interpreter $0 (a shell pipe) → channel download. Dest mode 0755 global /
+# 0700 local. PATH rc MAY.
 #
 # ALIGNMENT (live requirements only):
 # - requirement-shell-cli-self-install.md
 # - requirement-shell-cli-zero-arguments.md
 # - requirement-shell-automatic-checksum.md
 #
-# Last updated: 2026-09-17
+# Lessons Learned (CIAO Reflection):
+# 2026-09-27: A non-shell $0 used to fall through to the channel when the
+#             path resolver returned empty. install then downloaded. The
+#             local file is the source. Copy it into the bin directory.
+#
+# Last updated: 2026-09-27
 # =============================================================================
 inst_self_install() {
     : "${JSON:=0}"
@@ -1190,8 +1243,22 @@ inst_self_install() {
         return 1
     fi
 
-    _src=$(inst_resolve_self_script "$0") || _src=""
-    if [ -n "${_src}" ]; then
+    # A shell pipe is the only download. Every other $0 is this file on disk.
+    if ! inst_argv0_is_shell_interpreter "$0"; then
+        _src=$(inst_resolve_self_script "$0" 2>/dev/null || true)
+        if [ -z "${_src}" ]; then
+            if [ -f "$0" ] && [ -r "$0" ]; then
+                _src=$0
+            fi
+        fi
+        if [ -z "${_src}" ] || [ ! -r "${_src}" ]; then
+            if [ "${JSON}" -eq 1 ]; then
+                out_json_error "Could not read ${0}. This run is not a shell pipe, so install copies that file and does not download. Next: run this file by its path, for example sudo src/safe-rm install --force." "io_error"
+            else
+                out_error "Could not read ${0}. This run is not a shell pipe, so install copies that file and does not download. Next: run this file by its path, for example sudo src/safe-rm install --force."
+            fi
+            return 1
+        fi
         if [ "${JSON}" -eq 0 ]; then
             out_info "Installing from local script ${_src} (no download)."
         fi
@@ -2953,15 +3020,15 @@ app_help() {
     out_empty_line
 
     out_info "Self-Management (Type 0 - any user):"
-    out_plain "  self-install         Place ${APP_NAME} (copy when \$0 is this file; pipe downloads; 0755 global / 0700 local)"
-    out_plain "  install              Same as self-install (compatibility alias)"
+    out_plain "  self-install         Place this file. Root copies it into /usr/local/bin/. This login copies it into \${HOME}/.local/bin/. A shell pipe still downloads"
+    out_plain "  install              Same as self-install. sudo src/safe-rm install --force copies this file and does not download"
     out_plain "  version              Show current version"
     out_plain "  about                Show detailed diagnostics"
     out_plain "  version-check        Compare local vs remote version (needs SCRIPT_URL)"
     out_plain "  self-update          Update ${APP_NAME} to a newer remote version"
     out_plain "  self-uninstall       Remove ${APP_NAME} (safe PATH cleanup)"
     out_plain "  help                 Show this help"
-    out_plain "  setup                Check origin-rm. An admin login moves the original rm there and points rm at this program"
+    out_plain "  setup                Check /usr/bin/rm and /bin/rm. An admin login moves the one that exists aside and points rm at this program"
     out_plain "  restore              Put origin-rm back as rm. Same as -restore"
     out_plain "  menu                 Numbered list on a terminal (1 remove-guard, 8 self-management, 9 Exit). Help off a terminal"
     out_plain "  main                 Same as menu"
@@ -3518,6 +3585,9 @@ srm_flags_request_info() {
 srm_origin_rm() {
     _self=$0
     _list="/usr/bin/origin-rm /bin/origin-rm"
+    if [ -n "${SRM_SWAP_BIN-}" ]; then
+        _list="${SRM_SWAP_BIN}/origin-rm ${_list}"
+    fi
     if [ -n "${SRM_SWAP_ROOT-}" ]; then
         _list="${SRM_SWAP_ROOT}/origin-rm ${_list}"
     fi
@@ -3642,7 +3712,90 @@ srm_place_refreshes_guard() {
     return 0
 }
 
+# Symlink text when $1 is a link whose target name is busybox. Empty otherwise.
+srm_busybox_link_text() {
+    _bl=${1-}
+    [ -n "$_bl" ] || return 1
+    [ -L "$_bl" ] || return 1
+    _bt=$(readlink -- "$_bl" 2>/dev/null || readlink "$_bl" 2>/dev/null || true)
+    [ -n "$_bt" ] || {
+        unset _bl _bt
+        return 1
+    }
+    case "$_bt" in
+        *'
+'*)
+            unset _bl _bt
+            return 1
+            ;;
+    esac
+    _bb=${_bt##*/}
+    if [ "$_bb" != "busybox" ]; then
+        unset _bl _bt _bb
+        return 1
+    fi
+    printf '%s\n' "$_bt"
+    unset _bl _bt _bb
+    return 0
+}
+
+# Absolute busybox path. $1 is the rm link. $2 is its stored target text.
+srm_busybox_abs() {
+    _ba_link=${1-}
+    _ba_text=${2-}
+    case "$_ba_text" in
+        /*)
+            printf '%s\n' "$_ba_text"
+            ;;
+        *)
+            printf '%s\n' "${_ba_link%/*}/${_ba_text}"
+            ;;
+    esac
+    unset _ba_link _ba_text
+}
+
+# BusyBox picks its applet from the file name. origin-rm must run `busybox rm`.
+# The stored link text is what restore puts back.
+srm_install_busybox_origin() {
+    _bo_origin=${1-}
+    _bo_text=${2-}
+    _bo_abs=${3-}
+    _bo_dir=${_bo_origin%/*}
+    _bo_tmp=$(mktemp "${_bo_dir}/origin-rm.XXXXXX") || out_die "Could not stage origin-rm. Nothing else was changed."
+    if ! printf '%s\n' '#!/bin/sh' '# safe-rm busybox-origin' "# link: ${_bo_text}" "exec '${_bo_abs}' rm \"\$@\"" > "${_bo_tmp}"; then
+        unlink -- "$_bo_tmp" 2>/dev/null || unlink "$_bo_tmp" 2>/dev/null || true
+        out_die "Could not write ${_bo_origin}. Nothing else was changed."
+    fi
+    chmod 0755 "$_bo_tmp" 2>/dev/null || true
+    if ! mv -- "$_bo_tmp" "$_bo_origin"; then
+        unlink -- "$_bo_tmp" 2>/dev/null || unlink "$_bo_tmp" 2>/dev/null || true
+        out_die "Could not write ${_bo_origin}. Nothing else was changed."
+    fi
+    out_info "Kept BusyBox rm as ${_bo_origin}"
+    unset _bo_origin _bo_text _bo_abs _bo_dir _bo_tmp
+    return 0
+}
+
+srm_origin_is_busybox() {
+    _ob=${1-}
+    [ -n "$_ob" ] || return 1
+    [ -f "$_ob" ] || return 1
+    if [ -L "$_ob" ]; then
+        unset _ob
+        return 1
+    fi
+    if grep -q 'safe-rm busybox-origin' "$_ob" 2>/dev/null; then
+        unset _ob
+        return 0
+    fi
+    unset _ob
+    return 1
+}
+
 # One directory of the before/after table. Does not delete a directory.
+# Returns 1 when this directory has no rm to move. The caller checks the
+# other of /usr/bin/rm and /bin/rm. A BusyBox symlink is not renamed to
+# origin-rm: that name would not run the rm applet.
 srm_swap_one() {
     _dir=${1-}
     _src=${2-}
@@ -3654,10 +3807,24 @@ srm_swap_one() {
     _guard="${_dir}/safe-rm"
     if [ -e "$_origin" ]; then
         out_info "Already swapped: ${_origin}"
+    elif [ -f "$_rm" ] && [ ! -L "$_rm" ]; then
+        if ! mv -- "$_rm" "$_origin"; then
+            out_die "Could not move ${_rm} to ${_origin}. Nothing else was changed."
+        fi
+        out_info "Moved ${_rm} to ${_origin}"
     else
-        if [ -f "$_rm" ] && [ ! -L "$_rm" ]; then
-            mv -- "$_rm" "$_origin" || out_die "Could not move ${_rm} to ${_origin}. Nothing else was changed."
-            out_info "Moved ${_rm} to ${_origin}"
+        _bb_text=$(srm_busybox_link_text "$_rm" 2>/dev/null || true)
+        if [ -n "${_bb_text}" ]; then
+            _bb_abs=$(srm_busybox_abs "$_rm" "$_bb_text")
+            if [ ! -f "$_bb_abs" ]; then
+                out_die "BusyBox rm at ${_rm} does not point at a usable ${_bb_abs}. Nothing was moved."
+            fi
+            srm_install_busybox_origin "$_origin" "$_bb_text" "$_bb_abs"
+            unset _bb_text _bb_abs
+        elif [ ! -e "$_rm" ] || [ -L "$_rm" ]; then
+            out_info "No original rm at ${_rm}."
+            unset _dir _src _rm _origin _guard _bb_text _bb_abs
+            return 1
         else
             out_die "No original rm binary in ${_dir}. Nothing was moved."
         fi
@@ -3675,13 +3842,70 @@ srm_swap_one() {
     return 0
 }
 
+# Check both rm paths. One empty directory does not cancel the other.
+srm_swap_either() {
+    _ea=${1-}
+    _eb=${2-}
+    _es=${3-}
+    _esame=0
+    _ea_ok=0
+    _eb_ok=0
+    if srm_same_file "$_ea" "$_eb"; then
+        _esame=1
+    elif srm_same_file "${_ea}/rm" "${_eb}/rm"; then
+        _esame=1
+    fi
+    if srm_swap_one "$_ea" "$_es"; then
+        _ea_ok=1
+    fi
+    if [ "$_esame" -eq 1 ]; then
+        if [ "$_ea_ok" -eq 1 ]; then
+            out_info "/bin and /usr/bin are the same file. One origin-rm covers both."
+            unset _ea _eb _es _esame _ea_ok _eb_ok
+            return 0
+        fi
+        out_die "No original rm at ${_ea}/rm or ${_eb}/rm. Nothing was moved."
+    fi
+    if srm_swap_one "$_eb" "$_es"; then
+        _eb_ok=1
+    fi
+    if [ "$_ea_ok" -eq 0 ] && [ "$_eb_ok" -eq 0 ]; then
+        out_die "No original rm at ${_ea}/rm or ${_eb}/rm. Nothing was moved."
+    fi
+    unset _ea _eb _es _esame _ea_ok _eb_ok
+    return 0
+}
+
 srm_restore_one() {
     _dir=${1-}
     [ -d "$_dir" ] || out_die "Restore directory is missing. Nothing was moved."
     _rm="${_dir}/rm"
     _origin="${_dir}/origin-rm"
     _guard="${_dir}/safe-rm"
-    if [ -e "$_origin" ]; then
+    if [ ! -e "$_origin" ]; then
+        unset _dir _rm _origin _guard
+        return 1
+    fi
+    if srm_origin_is_busybox "$_origin"; then
+        _ol=$(grep '^# link: ' "$_origin" 2>/dev/null | head -n 1)
+        _ol=${_ol#"# link: "}
+        if [ -z "${_ol}" ]; then
+            out_die "Could not restore the BusyBox link at ${_rm}. Nothing was moved."
+        fi
+        if [ -L "$_rm" ]; then
+            srm_drop_symlink "$_rm" || out_die "Could not remove the rm link in ${_dir}."
+        elif [ -e "$_rm" ]; then
+            out_die "Refusing to restore over an existing ${_rm}. Nothing was moved."
+        fi
+        ln -s "$_ol" "$_rm" || out_die "Could not restore ${_rm}."
+        if ! unlink -- "$_origin" 2>/dev/null; then
+            if ! unlink "$_origin" 2>/dev/null; then
+                out_die "Could not remove ${_origin}."
+            fi
+        fi
+        out_success "Restored ${_rm}"
+        unset _ol
+    else
         if [ -L "$_rm" ]; then
             srm_drop_symlink "$_rm" || out_die "Could not remove the rm link in ${_dir}."
         elif [ -e "$_rm" ]; then
@@ -3689,8 +3913,6 @@ srm_restore_one() {
         fi
         mv -- "$_origin" "$_rm" || out_die "Could not move ${_origin} back to ${_rm}."
         out_success "Restored ${_rm}"
-    else
-        out_die "No ${_origin} to restore. Nothing was moved."
     fi
     if [ -L "$_guard" ] || [ -f "$_guard" ]; then
         if [ -L "$_guard" ]; then
@@ -3751,44 +3973,74 @@ srm_script_source() {
 
 srm_cmd_setup() {
     _src=$(srm_script_source) || out_die "Could not find this program file to install as safe-rm. Nothing was moved."
-    if [ -n "${SRM_SWAP_ROOT-}" ]; then
-        srm_swap_root_ok "${SRM_SWAP_ROOT}" || out_die "Refusing setup outside a /tmp/safe-rm-swap.* directory. Nothing was moved."
-        srm_swap_one "${SRM_SWAP_ROOT}" "$_src"
+    if [ -n "${SRM_SWAP_ROOT-}" ] || [ -n "${SRM_SWAP_BIN-}" ]; then
+        if [ -n "${SRM_SWAP_ROOT-}" ]; then
+            srm_swap_root_ok "${SRM_SWAP_ROOT}" || out_die "Refusing setup outside a /tmp/safe-rm-swap.* directory. Nothing was moved."
+        fi
+        if [ -n "${SRM_SWAP_BIN-}" ]; then
+            srm_swap_root_ok "${SRM_SWAP_BIN}" || out_die "Refusing setup outside a /tmp/safe-rm-swap.* directory. Nothing was moved."
+        fi
+        if [ -n "${SRM_SWAP_ROOT-}" ] && [ -n "${SRM_SWAP_BIN-}" ]; then
+            srm_swap_either "${SRM_SWAP_ROOT}" "${SRM_SWAP_BIN}" "$_src"
+        else
+            _one=${SRM_SWAP_ROOT:-${SRM_SWAP_BIN}}
+            if ! srm_swap_one "$_one" "$_src"; then
+                out_die "No original rm binary in ${_one}. Nothing was moved."
+            fi
+            unset _one
+        fi
         unset _src
         return 0
     fi
     if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
-        out_die "Setup checks /usr/bin/origin-rm and /bin/origin-rm and may move the system rm. That needs an admin login. Nothing was moved."
+        out_die "Setup checks /usr/bin/rm and /bin/rm and may move the system rm. That needs an admin login. Nothing was moved."
     fi
-    srm_swap_one "/usr/bin" "$_src"
-    if [ -e /bin/rm ] || [ -e /bin/origin-rm ] || [ -d /bin ]; then
-        if srm_same_file /bin/rm /usr/bin/rm || srm_same_file /bin /usr/bin; then
-            out_info "/bin and /usr/bin are the same file. One origin-rm covers both."
-        elif [ -d /bin ]; then
-            srm_swap_one "/bin" "$_src"
-        fi
-    fi
+    srm_swap_either "/usr/bin" "/bin" "$_src"
     unset _src
     return 0
 }
 
 srm_cmd_restore() {
-    if [ -n "${SRM_SWAP_ROOT-}" ]; then
-        srm_swap_root_ok "${SRM_SWAP_ROOT}" || out_die "Refusing restore outside a /tmp/safe-rm-swap.* directory. Nothing was moved."
-        srm_restore_one "${SRM_SWAP_ROOT}"
+    if [ -n "${SRM_SWAP_ROOT-}" ] || [ -n "${SRM_SWAP_BIN-}" ]; then
+        _rdid=0
+        if [ -n "${SRM_SWAP_ROOT-}" ]; then
+            srm_swap_root_ok "${SRM_SWAP_ROOT}" || out_die "Refusing restore outside a /tmp/safe-rm-swap.* directory. Nothing was moved."
+            if srm_restore_one "${SRM_SWAP_ROOT}"; then
+                _rdid=1
+            fi
+        fi
+        if [ -n "${SRM_SWAP_BIN-}" ]; then
+            srm_swap_root_ok "${SRM_SWAP_BIN}" || out_die "Refusing restore outside a /tmp/safe-rm-swap.* directory. Nothing was moved."
+            if srm_restore_one "${SRM_SWAP_BIN}"; then
+                _rdid=1
+            fi
+        fi
+        if [ "$_rdid" -eq 0 ]; then
+            out_die "No origin-rm to restore. Nothing was moved."
+        fi
+        unset _rdid
         return 0
     fi
     if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
         out_die "Restore puts origin-rm back as rm. That needs an admin login. Nothing was moved."
     fi
-    if [ -e /usr/bin/origin-rm ] || [ -L /usr/bin/rm ]; then
-        srm_restore_one "/usr/bin"
-    fi
-    if [ -d /bin ] && ! srm_same_file /bin /usr/bin; then
-        if [ -e /bin/origin-rm ] || [ -L /bin/rm ]; then
-            srm_restore_one "/bin"
+    _rdid=0
+    if [ -e /usr/bin/origin-rm ]; then
+        if srm_restore_one "/usr/bin"; then
+            _rdid=1
         fi
     fi
+    if [ -d /bin ] && ! srm_same_file /bin /usr/bin; then
+        if [ -e /bin/origin-rm ]; then
+            if srm_restore_one "/bin"; then
+                _rdid=1
+            fi
+        fi
+    fi
+    if [ "$_rdid" -eq 0 ]; then
+        out_die "No origin-rm at /usr/bin/origin-rm or /bin/origin-rm. Nothing was moved."
+    fi
+    unset _rdid
     return 0
 }
 
@@ -4078,7 +4330,7 @@ app_default_print_self_menu() {
     out_menu_choice "84" "version-check" "compare local vs remote version"
     out_menu_choice "85" "self-update" "update ${APP_NAME} to a newer remote version"
     out_menu_choice "86" "self-uninstall" "remove ${APP_NAME}"
-    out_menu_choice "87" "self-install" "place this CLI only (copy when \$0 is a script; download when piped)"
+    out_menu_choice "87" "self-install" "copy this file into /usr/local/bin or \${HOME}/.local/bin (download only when a shell pipe starts it)"
     out_menu_choice "0" "Back"
 }
 

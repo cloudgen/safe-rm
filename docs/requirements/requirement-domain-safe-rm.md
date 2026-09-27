@@ -1,6 +1,6 @@
 **file**: docs/requirements/requirement-domain-safe-rm.md
 **id**: RQ-DOMAIN-SAFE-RM
-**Status**: Active (Version 1.2.3)
+**Status**: Active (Version 1.2.5)
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -69,6 +69,21 @@ Setup **MUST** turn the Before column into the After column. `restore` **MUST** 
 | `/bin/origin-rm` | Absent | The original binary moved from `/bin/rm` when that file was not already `/usr/bin/rm`. Absent when one move covered both. **When this file exists, it is the remover.** |
 | `/usr/bin/safe-rm` | Absent | This program, mode `0755`. |
 | `/bin/safe-rm` | Absent | This program, mode `0755`, when `/bin` is a different directory from `/usr/bin`. Otherwise the same file as `/usr/bin/safe-rm`. |
+
+### 2.0.2 Alpine: `/bin/rm` and `/usr/bin/rm` are different paths
+
+Alpine keeps those two paths apart. The system `rm` is BusyBox. The command people type is `/bin/rm`, a symlink to BusyBox. `/usr/bin/rm` is often absent. Setup **MUST** treat that host as normal. It **MUST** check both paths. It **MUST NOT** stop with no `rm` in `/usr/bin` while `/bin/rm` exists. It **MUST NOT** create `/usr/bin/rm` when that path was absent.
+
+| Path | Before swapped | After swapped |
+|------|----------------|---------------|
+| `/usr/bin/rm` | Absent | Stays absent |
+| `/bin/rm` | Symlink to BusyBox. `rm --version` is BusyBox text | Symlink to `/bin/safe-rm`. This is the guard |
+| `/usr/bin/origin-rm` | Absent | Stays absent |
+| `/bin/origin-rm` | Absent | Runs `busybox rm`. This is the remover. It is not the BusyBox symlink renamed |
+| `/usr/bin/safe-rm` | Absent | Stays absent |
+| `/bin/safe-rm` | Absent | This program, mode `0755` |
+
+`restore` on that host puts the BusyBox symlink back at `/bin/rm` and removes `/bin/origin-rm` and `/bin/safe-rm`. A host where `/bin` and `/usr/bin` are the same directory stays on the §2.0.1 table. Proof: `TP-SRM-29`.
 
 ### 2.1 Specialized CLI subcommands
 
@@ -164,9 +179,11 @@ A refused dry-run uses `"ok":"false"`, `"removed":"false"`, `"verdict":"refuse"`
 
 `rm -rf` on the raw system binary is the danger this product exists to close. Setup does all of the following, and it is idempotent. The disk after a finished setup **MUST** match §2.0.1 After swapped.
 
-1. For `/usr/bin` and, when it is a different file, `/bin`: if `rm` there is a regular file and `origin-rm` is absent in that same directory, move `rm` to `origin-rm`. When `/bin/rm` and `/usr/bin/rm` are the same file, one move covers both.
-2. Copy this program to `safe-rm` in that directory, mode `0755`. When that file is absent, this is the first copy. When that file is already present and its bytes differ, replace it with this program. Do not move `origin-rm` to do that.
-3. Point `rm` at `safe-rm`. If `rm` is missing, or is a symlink that does not name this program, replace that link.
+1. Check **both** `/usr/bin/rm` and `/bin/rm`. A directory with no `rm` is skipped. Setup **MUST NOT** stop at `/usr/bin` when `/bin/rm` is the `rm` people type, and **MUST NOT** stop at `/bin` when `/usr/bin/rm` is that file. When the two paths are the same file, one move covers both. When neither path has an `rm` that can be swapped, stop and move nothing.
+2. When `rm` in that directory is a regular file and `origin-rm` is absent, move `rm` to `origin-rm`.
+3. When `rm` is a symlink to BusyBox, do not rename that symlink to `origin-rm`. BusyBox chooses its applet from the file name, so a file named `origin-rm` would not remove anything. Write `origin-rm` so it runs `busybox rm`, then point `rm` at this program. `restore` puts that BusyBox symlink back and removes that `origin-rm`.
+4. Copy this program to `safe-rm` in the directory that was swapped, mode `0755`. When that file is absent, this is the first copy. When that file is already present and its bytes differ, replace it with this program. Do not move `origin-rm` to do that. Do not create `rm` in a directory that had no `rm`.
+5. Point `rm` at `safe-rm`. If `rm` is missing after the move, or is a symlink that does not name this program, replace that link.
 
 A root `self-install` (and the same place from a pipe, quiet, or json run) does not perform that first move. When `origin-rm` is already present, that place replaces `/usr/bin/safe-rm`, and `/bin/safe-rm` when `/bin` is a different directory, with this program. A non-root place does not write those paths. Termux, Git Bash, and Windows cmd do not replace them and do not call `sudo`.
 
@@ -238,6 +255,8 @@ JSON `about` includes `"remove_guard":"on"` and `"dry_run_switch":"--dry-run"`.
 | `TP-SRM-25` | The command named `rm` with `--debug --dry-run` and no path exits `1`, says no path was given, and does not open the menu |
 | `TP-SRM-26` | A second setup, after the fixture guard was replaced with a stub, writes this program back, does not move `origin-rm`, and the command named `rm` accepts `rm -rf --dry-run` of an allowed folder. The folder remains |
 | `TP-SRM-27` | `help`/`--help`, `version`/`--version`, and the other lifecycle pairs are one command on `safe-rm`. On the command named `rm`, `--version` prints this program's version and does not remove. A bare word, including a link named `version`, is a path under `--dry-run` and stays in place. A `--` switch and a path together remove nothing |
+| `TP-SRM-29` | Two fixture directories under `/tmp/safe-rm-swap.*`. An empty first directory does not stop setup. A regular `rm` in the second directory is moved. A BusyBox symlink in the second directory stays the BusyBox file; `origin-rm` there runs `busybox rm`, and `restore` puts the symlink back. Nothing in the fixture is executed. Neither path present moves nothing |
+| `TP-SRM-28` | `help` says a local `install` copies this file into `/usr/local/bin/` or `${HOME}/.local/bin/` and does not download |
 | `TP-SRM-18` | `about` includes `Remove guard:` |
 | `TP-SRM-19` | `--quiet` still prints the refusal |
 
@@ -250,7 +269,7 @@ Runner: `tests/run_dry_run.sh`. It does not point `HOME` at a scratch directory.
 | Product | `safe-rm` |
 | Ship unit | `src/safe-rm` |
 | Companion | `src/safe-rm.sha256` |
-| Version | `1.0.5` |
+| Version | `1.0.7` |
 | Prefix | `srm_` |
 | Bootstrap origin | `selfmanaged` Type 0 architecture kept in full (self-install, self-update, self-uninstall, version, about, help, numbered menu, `out_*`). The 2023 safe-rm setup is kept as well: `origin-rm`, `rm` → this program, `restore` |
 | Channel default | `REPO_USER=cloudgen`, `REPO_NAME=safe-rm`, `SCRIPT_RELPATH=src/safe-rm` |
@@ -329,6 +348,8 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | 2026-09-27 | 1.2.1: when `origin-rm` is already present, a later setup and a root place replace the guard file with this program. They do not move `origin-rm` again. A non-root place does not write that guard. |
 | 2026-09-27 | 1.2.2: each lifecycle verb is also its `--` switch. On the command named `rm`, `version` and `--version` are this program's version, not a file and not the remover's text. |
 | 2026-09-27 | 1.2.3: on the command named `rm`, a bare lifecycle word is a path again. `rm version` removes a link named `version`. `rm --version` stays this program's version. The same split applies to every other command word. `safe-rm version` stays the command. |
+| 2026-09-27 | 1.2.4: setup checks `/usr/bin/rm` and `/bin/rm`. A missing `rm` in one directory does not cancel the other. A BusyBox symlink is not renamed to `origin-rm`; that file runs `busybox rm`. |
+| 2026-09-27 | 1.2.5: Alpine is the different-path host. `/bin/rm` is BusyBox and `/usr/bin/rm` may be absent. §2.0.2 is that before/after table. Setup must not stop at `/usr/bin` on that host. |
 
 **Last Updated**: 2026-09-27
 **Owner**: safe-rm project maintainers
