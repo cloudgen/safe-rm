@@ -1,6 +1,6 @@
 # safe-rm
 
-![Version](https://img.shields.io/badge/Version-1.0.2-blue?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.0.4-blue?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 [![CIAO](https://img.shields.io/badge/Philosophy-CIAO%20v2.10.*-purple.svg)](https://github.com/cloudgen/ciao)
 [![Stars](https://img.shields.io/github/stars/cloudgen/safe-rm?style=flat-square)](https://github.com/cloudgen/safe-rm)
@@ -46,7 +46,7 @@ Human output says whether the path exists and whether removal is allowed. JSON i
 
 ## Install
 
-Runtime version: `VERSION="1.0.2"` in `src/safe-rm`.
+Runtime version: `VERSION="1.0.4"` in `src/safe-rm`.
 
 Channel default:
 
@@ -54,7 +54,17 @@ Channel default:
 https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm
 ```
 
-That one-liner works after this file is published on that channel. From a checkout, copy the file you have:
+```sh
+curl -fsSL https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm | sh
+```
+
+Root, when this machine has it:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm | sudo sh
+```
+
+With no `CHECKSUM` set, that download checks the companion `https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm.sha256` (SHA-256, first field). A match continues. A mismatch stops the install. A missing companion warns and continues. From a checkout, copy the file you have:
 
 ```sh
 ./src/safe-rm self-install
@@ -63,6 +73,7 @@ safe-rm about
 
 - Non-root install lands in `~/.local/bin/safe-rm` (mode `0700`)
 - Root install lands in `/usr/local/bin/safe-rm` (mode `0755`)
+- When `origin-rm` is already present, that root install also replaces `/usr/bin/safe-rm` (the file `rm` runs) with this program. It does not move `origin-rm` again
 - On a terminal, no arguments opens the numbered list (same as `safe-rm menu`)
 - A pipe, `--quiet`, or `--json` with no arguments still places the program
 - Online install checks `src/safe-rm.sha256` when the companion is on the same channel
@@ -70,7 +81,7 @@ safe-rm about
 At a terminal the front board is:
 
 ```text
-safe-rm(1.0.2) — Guarded rm that refuses login homes and system directories
+safe-rm(1.0.4) — Guarded rm that refuses login homes and system directories
 1. remove-guard: check a path and remove it only when it is allowed
 8. self-management: this CLI install, version, update, uninstall
 9. Exit
@@ -79,7 +90,7 @@ safe-rm(1.0.2) — Guarded rm that refuses login homes and system directories
 **1** opens:
 
 ```text
-safe-rm(1.0.2) — remove-guard
+safe-rm(1.0.4) — remove-guard
 11. rm: check each path and remove only when every path is allowed
 0. Back
 ```
@@ -92,13 +103,17 @@ Scratch for one run lives in a cache folder named for this login and this proces
 
 ## Usage
 
+Each command is also a switch with the same name: `help` and `--help`, `version` and `--version`, `self-install` and `--self-install`, and the same pair for `about`, `version-check`, `self-update`, `self-uninstall`, `install`, `menu`, `main`, `setup`, `restore`, and `rm`. When `rm` is this program, `rm version` and `rm --version` print this version. They are not a file named `version`. The remover's own text is `origin-rm --version`.
+
 ```sh
 safe-rm                  # terminal: numbered menu; pipe: install-ensure
 safe-rm menu             # same menu; help when there is no terminal
 safe-rm help
 safe-rm about
-safe-rm version
-safe-rm self-install
+safe-rm version           # same as safe-rm --version
+safe-rm --help
+safe-rm self-install       # same as safe-rm --self-install
+rm version                 # when rm is this program: this version, not a file
 safe-rm version-check
 safe-rm self-update
 safe-rm self-uninstall

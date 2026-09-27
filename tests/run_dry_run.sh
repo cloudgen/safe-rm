@@ -12,13 +12,25 @@ FAIL=0
 
 SCRATCH=$(mktemp -d /tmp/safe-rm-dry.XXXXXX) || exit 2
 
+# Scratch cleanup uses the remover, not the guard. /bin/rm is this program
+# after setup, and a remove path in this file always carries --dry-run.
+scratch_rm() {
+    if [ -x /usr/bin/origin-rm ]; then
+        /usr/bin/origin-rm "$@"
+    elif [ -x /bin/origin-rm ]; then
+        /bin/origin-rm "$@"
+    else
+        /bin/rm "$@"
+    fi
+}
+
 cleanup() {
     case "${SCRATCH-}" in
         /tmp/safe-rm-dry.*)
             if [ -n "${HOME-}" ] && [ "$SCRATCH" = "$HOME" ]; then
                 return 0
             fi
-            /bin/rm -rf -- "$SCRATCH"
+            scratch_rm -rf -- "$SCRATCH"
             ;;
     esac
 }
@@ -82,6 +94,7 @@ assert_contains "TP-SRM-03 help lists self-install" "$out" "self-install"
 assert_contains "TP-SRM-03 help lists rm" "$out" "rm"
 assert_contains "TP-SRM-03 help lists --dry-run" "$out" "--dry-run"
 assert_contains "TP-SRM-03 help tells agents not to retry rm" "$out" "Do not retry with rm"
+assert_contains "TP-SRM-03 help lists rm -rf" "$out" "rm -rf"
 
 # TP-SRM-04 companion digest
 if [ -f "${REPO_ROOT}/src/safe-rm.sha256" ]; then
@@ -305,6 +318,158 @@ ec=$?
 assert_eq "TP-SRM-17 unknown exit" 1 "$ec"
 assert_contains "TP-SRM-17 unknown points at help" "$(cat "$err")" "help"
 
+# Command name rm: a symlink whose basename is rm. Switches are origin-rm's.
+ln -s "$SAFE_RM" "$SCRATCH/rm"
+
+# TP-SRM-21 rm -rf of an allowed folder
+out=$("$SCRATCH/rm" -rf --dry-run "$SCRATCH/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-21 -rf exit" 0 "$ec"
+assert_contains "TP-SRM-21 -rf allowed" "$out" "Removal is allowed"
+assert_not_contains "TP-SRM-21 -rf is not unknown" "$(cat "$err")" "Unknown command"
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-21 file still exists"
+else
+    t_fail "TP-SRM-21 file was removed"
+fi
+
+# TP-SRM-22 other origin-rm switches
+out=$("$SCRATCH/rm" --preserve-root=all --one-file-system --interactive=never -rf --dry-run "$SCRATCH/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-22 other switches exit" 0 "$ec"
+assert_contains "TP-SRM-22 other switches allowed" "$out" "Removal is allowed"
+assert_not_contains "TP-SRM-22 other switches are not unknown" "$(cat "$err")" "Unknown"
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-22 file still exists"
+else
+    t_fail "TP-SRM-22 file was removed"
+fi
+
+# TP-SRM-23 rm -rf of the login home is still refused
+out=$("$SCRATCH/rm" -rf --dry-run "$HOME" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-23 home exit" 1 "$ec"
+assert_contains "TP-SRM-23 home refused" "$(cat "$err")" "STOP"
+if [ -d "$HOME" ]; then
+    t_pass "TP-SRM-23 home still exists"
+else
+    t_fail "TP-SRM-23 home was removed"
+fi
+
+# TP-SRM-24 safe-rm rm -rf with another switch
+out=$(sh "$SAFE_RM" rm -rf --preserve-root --dry-run "$SCRATCH/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-24 verb -rf exit" 0 "$ec"
+assert_contains "TP-SRM-24 verb -rf allowed" "$out" "Removal is allowed"
+assert_not_contains "TP-SRM-24 verb -rf is not unknown" "$(cat "$err")" "Unknown"
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-24 file still exists"
+else
+    t_fail "TP-SRM-24 file was removed"
+fi
+
+# Command named rm with no path is the remove, not the menu.
+out=$("$SCRATCH/rm" --debug --dry-run </dev/null 2>"$err")
+ec=$?
+assert_eq "TP-SRM-25 no path exit" 1 "$ec"
+assert_contains "TP-SRM-25 no path message" "$(cat "$err")" "No path was given"
+assert_not_contains "TP-SRM-25 is not the menu" "$out$(cat "$err")" "Choice:"
+
+# TP-SRM-27 lifecycle verbs are switches. Not a remove path, so no --dry-run.
+# A real path check below still uses --dry-run. No file named "version" is passed
+# to a live remove.
+ver=$(grep '^VERSION="' "$SAFE_RM" | head -n1 | cut -d'"' -f2)
+out=$(sh "$SAFE_RM" --version 2>"$err")
+ec=$?
+assert_eq "TP-SRM-27 --version exit" 0 "$ec"
+assert_contains "TP-SRM-27 --version names safe-rm" "$out" "safe-rm version ${ver}"
+assert_not_contains "TP-SRM-27 --version is not GNU" "$out$(cat "$err")" "GNU coreutils"
+
+out=$(sh "$SAFE_RM" --json --version 2>"$err")
+ec=$?
+assert_eq "TP-SRM-27 json --version exit" 0 "$ec"
+assert_contains "TP-SRM-27 json --version value" "$out" "\"version\":\"${ver}\""
+
+out=$(sh "$SAFE_RM" --help 2>/dev/null)
+assert_contains "TP-SRM-27 --help lists --self-install" "$out" "--self-install"
+assert_contains "TP-SRM-27 --help lists --version" "$out" "--version"
+assert_contains "TP-SRM-27 --help lists --about" "$out" "--about"
+assert_contains "TP-SRM-27 --help lists --version-check" "$out" "--version-check"
+assert_contains "TP-SRM-27 --help lists --self-update" "$out" "--self-update"
+assert_contains "TP-SRM-27 --help lists --self-uninstall" "$out" "--self-uninstall"
+assert_contains "TP-SRM-27 --help lists --install" "$out" "--install"
+assert_contains "TP-SRM-27 --help lists --menu" "$out" "--menu"
+assert_contains "TP-SRM-27 --help lists --main" "$out" "--main"
+assert_contains "TP-SRM-27 --help lists --setup" "$out" "--setup"
+assert_contains "TP-SRM-27 --help lists --restore" "$out" "--restore"
+assert_contains "TP-SRM-27 --help lists --rm" "$out" "--rm"
+
+out=$(sh "$SAFE_RM" --about 2>/dev/null)
+assert_contains "TP-SRM-27 --about remove guard" "$out" "Remove guard:"
+
+out=$(TTY=0 sh "$SAFE_RM" --menu </dev/null 2>/dev/null)
+assert_contains "TP-SRM-27 --menu off a terminal is help" "$out" "--self-install"
+
+out=$("$SCRATCH/rm" version 2>"$err")
+ec=$?
+assert_eq "TP-SRM-27 rm version exit" 0 "$ec"
+assert_contains "TP-SRM-27 rm version names safe-rm" "$out" "safe-rm version ${ver}"
+assert_not_contains "TP-SRM-27 rm version does not remove" "$out$(cat "$err")" "cannot remove"
+assert_not_contains "TP-SRM-27 rm version is not GNU" "$out$(cat "$err")" "GNU coreutils"
+
+out=$("$SCRATCH/rm" --version 2>"$err")
+ec=$?
+assert_eq "TP-SRM-27 rm --version exit" 0 "$ec"
+assert_contains "TP-SRM-27 rm --version names safe-rm" "$out" "safe-rm version ${ver}"
+assert_not_contains "TP-SRM-27 rm --version is not GNU" "$out$(cat "$err")" "GNU coreutils"
+
+out=$("$SCRATCH/rm" help 2>/dev/null)
+assert_contains "TP-SRM-27 rm help lists --self-install" "$out" "--self-install"
+
+out=$("$SCRATCH/rm" --help 2>/dev/null)
+assert_contains "TP-SRM-27 rm --help lists --setup" "$out" "--setup"
+
+out=$(sh "$SAFE_RM" rm --version 2>"$err")
+ec=$?
+assert_eq "TP-SRM-27 safe-rm rm --version exit" 0 "$ec"
+assert_contains "TP-SRM-27 safe-rm rm --version names safe-rm" "$out" "safe-rm version ${ver}"
+
+out=$("$SCRATCH/rm" --about 2>/dev/null)
+assert_contains "TP-SRM-27 rm --about remove guard" "$out" "Remove guard:"
+
+printf 'keep\n' > "$SCRATCH/version"
+out=$("$SCRATCH/rm" --dry-run "$SCRATCH/version" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-27 path version exit" 0 "$ec"
+assert_contains "TP-SRM-27 path version allowed" "$out" "Removal is allowed"
+assert_not_contains "TP-SRM-27 path version is not the version command" "$out" "safe-rm version"
+if [ -f "$SCRATCH/version" ]; then
+    t_pass "TP-SRM-27 path version still exists"
+else
+    t_fail "TP-SRM-27 path version was removed"
+fi
+
+out=$("$SCRATCH/rm" version "$SCRATCH/missing-leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-27 mixed exit" 1 "$ec"
+assert_contains "TP-SRM-27 mixed says command" "$(cat "$err")" "--version"
+assert_contains "TP-SRM-27 mixed nothing removed" "$(cat "$err")" "Nothing was removed"
+
+out=$("$SCRATCH/rm" --dry-run -- version 2>"$err")
+ec=$?
+assert_eq "TP-SRM-27 end-of-options exit" 0 "$ec"
+assert_not_contains "TP-SRM-27 end-of-options is not the version command" "$out$(cat "$err")" "safe-rm version"
+
+out=$(sh "$SAFE_RM" --rm --dry-run "$SCRATCH/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-27 --rm exit" 0 "$ec"
+assert_contains "TP-SRM-27 --rm allowed" "$out" "Removal is allowed"
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-27 --rm file still exists"
+else
+    t_fail "TP-SRM-27 --rm file was removed"
+fi
+
 # TP-SRM-18 about mentions the guard
 out=$(sh "$SAFE_RM" about 2>/dev/null)
 assert_contains "TP-SRM-18 about remove guard" "$out" "Remove guard:"
@@ -464,12 +629,12 @@ case "$leaf" in
         ;;
 esac
 if [ -n "$leaf" ] && [ -f "$leaf" ]; then
-    /bin/rm -f -- "$leaf"
+    scratch_rm -f -- "$leaf"
 fi
 dollars=$(printf '%s%s' '$' '$')
 bad=$(sh -c '. "$1"; util_mktemp "$2"' sh "$lib" "x${dollars}y" 2>&1 >/dev/null) || true
 assert_contains "TP-CACHE-03 refuses a dollar file name" "$bad" "refuse predictable"
-/bin/rm -f -- "$lib"
+scratch_rm -f -- "$lib"
 
 # TP-SRM-19 quiet still shows the refusal
 out=$(sh "$SAFE_RM" --quiet --dry-run rm --dry-run /usr/bin 2>"$err")
@@ -678,6 +843,32 @@ assert_eq "TP-SRM-SWAP-01 second setup exit" 0 "$ec"
 assert_contains "TP-SRM-SWAP-01 second setup sees origin" "$out" "Already swapped"
 origin_again=$(stat -c '%d:%i' "$SWAP/origin-rm" 2>/dev/null || true)
 assert_eq "TP-SRM-SWAP-01 second setup did not move again" "$origin_after" "$origin_again"
+
+# A stale guard is replaced. origin-rm stays. The command named rm accepts -rf.
+printf '#!/bin/sh\nprintf "STALE\\n"\nexit 9\n' > "$SWAP/safe-rm"
+chmod 0755 "$SWAP/safe-rm"
+out=$(SRM_SWAP_ROOT="$SWAP" sh "$SAFE_RM" setup 2>"$err")
+ec=$?
+assert_eq "TP-SRM-26 refresh exit" 0 "$ec"
+assert_contains "TP-SRM-26 replaced the guard" "$out" "Replaced ${SWAP}/safe-rm"
+origin_refresh=$(stat -c '%d:%i' "$SWAP/origin-rm" 2>/dev/null || true)
+assert_eq "TP-SRM-26 origin-rm was not moved" "$origin_again" "$origin_refresh"
+if grep -q 'srm_invoked_as_rm' "$SWAP/safe-rm"; then
+    t_pass "TP-SRM-26 guard is this program"
+else
+    t_fail "TP-SRM-26 guard is still the stub"
+fi
+out=$("$SWAP/rm" -rf --dry-run "$SCRATCH/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-26 -rf exit" 0 "$ec"
+assert_contains "TP-SRM-26 -rf allowed" "$out" "Removal is allowed"
+assert_not_contains "TP-SRM-26 -rf is not unknown" "$(cat "$err")" "Unknown command"
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-26 file still exists"
+else
+    t_fail "TP-SRM-26 file was removed"
+fi
+
 out=$(SRM_SWAP_ROOT="$SWAP" sh "$SAFE_RM" restore 2>"$err")
 ec=$?
 assert_eq "TP-SRM-SWAP-01 restore exit" 0 "$ec"
@@ -701,7 +892,7 @@ else
 fi
 case "$SWAP" in
     /tmp/safe-rm-swap.*)
-        /bin/rm -rf -- "$SWAP"
+        scratch_rm -rf -- "$SWAP"
         ;;
 esac
 

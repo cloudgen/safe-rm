@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-zero-arguments.md  
-**Status**: Active (Version 1.3.0)  
+**Status**: Active (Version 1.3.1)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -84,6 +84,7 @@ Jargon: **Type O** (letter) means “no arguments = install-ensure.” That is *
 3. Explicit `help` remains the full-usage path for help text. Off a terminal, `menu` and `main` print that help.  
 4. Bootstrap **MUST** always call `app_main "$@"` so pipe one-liners reach this contract (no `${0##*/}` product-name gate).  
 5. Non-interactive empty argv **MUST NOT** require the user to pass `install` or `install --force` merely because a previous ensure already succeeded.
+6. When the basename of `$0` is `rm`, this empty-argv split does **not** apply. That command is the remove in `requirement-domain-safe-rm.md`, including no arguments and `--debug` alone. It is not the menu and not install-ensure. The script still calls `app_main`. This exception is not a product-name gate that skips `app_main` for `curl | sh`.
 
 ### 2.2.1 Specializee contract (bootstrap origin → specialized B)
 
@@ -309,10 +310,11 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | 2026-07-14 | v1.1.0: Classify product as Type O (online-install) under dual-type empty-argv template model | Grok |
 | 2026-08-11 | v1.2.0: Specializee contract — empty argv stays Type O; domain setup uses explicit verbs; test GLOBAL_BIN isolation | Grok (gitlab-nginx specialize reflection) |
 | 2026-09-17 | v1.3.0: Empty argv ensure handler is `inst_self_install` (script `$0` copies; dest 0700/0755); points at `requirement-shell-cli-self-install` | Grok (owner request) |
+| 2026-09-27 | v1.3.1: basename `rm` is the remove, not this empty-argv split | Grok (owner request) |
 
 ---
 
-**Last Updated**: 2026-09-17  
+**Last Updated**: 2026-09-27  
 **Owner**: selfmanaged project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 6, 16, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).
 

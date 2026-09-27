@@ -50,8 +50,8 @@ APP_NAME="safe-rm"
 : "${SHORT_DESCRIPTION:=${APP_DESC}}"
 : "${DESCRIPTION:=POSIX /bin/sh program you install for yourself. It keeps self-install and self-update, and it refuses to remove the login home itself, every account home in /etc/passwd, /home, another login's folder under /home, /usr/bin, or other system directories. A named folder inside the login home, such as a cache directory, may be removed. --dry-run reports whether a path exists and whether removal is allowed, and removes nothing.}"
 # Product version SSOT (semver). Extractors use: grep '^VERSION="'
-VERSION="1.0.2"
-: "${VERSION:=1.0.2}"
+VERSION="1.0.4"
+: "${VERSION:=1.0.4}"
 
 # Runtime flags (safe defaults)
 : "${QUIET:=0}"
@@ -1181,6 +1181,8 @@ inst_self_install() {
             out_success "${APP_NAME} is already installed."
             out_info "Use --force only to replace deliberately (or run: ${APP_NAME} self-update)."
         fi
+        # Already swapped: the rm people type is /usr/bin/safe-rm, not GLOBAL_BIN.
+        srm_place_refreshes_guard
         return 0
     fi
 
@@ -1201,6 +1203,7 @@ inst_self_install() {
         else
             out_success "${APP_NAME} ${REMOTE_VERSION} successfully installed to ${INSTALL_PATH}"
         fi
+        srm_place_refreshes_guard
         return 0
     fi
 
@@ -1235,6 +1238,7 @@ inst_self_install() {
         return 1
     fi
     chmod "${_mode}" "${INSTALL_PATH}" 2>/dev/null || true
+    srm_place_refreshes_guard
     return 0
 }
 
@@ -2963,9 +2967,27 @@ app_help() {
     out_plain "  main                 Same as menu"
     out_empty_line
 
+    out_info "Each command is also a switch:"
+    out_plain "  --help               help"
+    out_plain "  --version            version"
+    out_plain "  --about              about"
+    out_plain "  --version-check      version-check"
+    out_plain "  --self-update        self-update"
+    out_plain "  --self-uninstall     self-uninstall"
+    out_plain "  --self-install       self-install"
+    out_plain "  --install            install"
+    out_plain "  --menu               menu"
+    out_plain "  --main               main"
+    out_plain "  --setup              setup"
+    out_plain "  --restore            restore (-restore is the same command)"
+    out_plain "  --rm                 rm"
+    out_plain "  When this program is the rm people type, rm version and rm --version are this version. They are not a file named version. origin-rm --version is the remover's own text."
+    out_empty_line
+
     # --- DOMAIN_HELP_ROWS (specializee injection) ---
     out_info "Remove guard:"
     out_plain "  rm                   Check each path. Remove only when every path is allowed"
+    out_plain "  rm -rf <path>        When this program is the rm people type, the same switches as origin-rm, including -rf"
     out_plain "  rm --dry-run         Remove nothing. Say whether each path exists and whether it may be removed"
     out_plain "  --dry-run            Same switch, before or after rm"
     out_plain "                       A refused path stops the command. Do not retry with rm, /bin/rm, or /usr/bin/rm"
@@ -3064,7 +3086,12 @@ srm_cleanup_work() {
             ;;
     esac
     if [ "$_ok" -eq 1 ]; then
-        if [ -x /bin/rm ]; then
+        # The remover, not /bin/rm. After setup /bin/rm is this guard.
+        if [ -x /usr/bin/origin-rm ]; then
+            /usr/bin/origin-rm -rf -- "$_w" 2>/dev/null || true
+        elif [ -x /bin/origin-rm ]; then
+            /bin/origin-rm -rf -- "$_w" 2>/dev/null || true
+        elif [ -x /bin/rm ]; then
             /bin/rm -rf -- "$_w" 2>/dev/null || true
         elif [ -x /usr/bin/rm ]; then
             /usr/bin/rm -rf -- "$_w" 2>/dev/null || true
@@ -3442,35 +3469,13 @@ srm_json_item() {
     printf '}'
 }
 
-srm_flag_ok() {
-    _f=${1-}
-    case "$_f" in
-        --recursive|--force|--dir|--verbose|--one-file-system|--interactive=never|--interactive=once|--interactive=always|--interactive)
-            return 0
-            ;;
-        --*)
-            return 1
-            ;;
-        -)
-            return 1
-            ;;
-        -*)
-            _rest=${_f#-}
-            [ -n "$_rest" ] || return 1
-            while [ -n "$_rest" ]; do
-                _c=${_rest%"${_rest#?}"}
-                case "$_c" in
-                    r|R|f|v|i|d|I) ;;
-                    *) return 1 ;;
-                esac
-                _rest=${_rest#?}
-            done
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
+# Basename rm is the command people type after setup. Not a gate that skips app_main.
+srm_invoked_as_rm() {
+    _b=${0##*/}
+    [ "$_b" = "rm" ]
+    _rc=$?
+    unset _b
+    return $_rc
 }
 
 srm_flags_need_prompt() {
@@ -3482,12 +3487,26 @@ srm_flags_need_prompt() {
             --interactive|--interactive=always|--interactive=once)
                 return 0
                 ;;
+            --*)
+                ;;
             -*)
                 _rest=${_f#-}
                 case "$_rest" in
                     *i*) return 0 ;;
                 esac
                 ;;
+        esac
+    done < "${SRM_WORK}/flags"
+    return 1
+}
+
+# A stored remover info switch removes nothing.
+# Lifecycle --help and --version are commands. They are not stored here.
+srm_flags_request_info() {
+    [ -f "${SRM_WORK}/flags" ] || return 1
+    while IFS= read -r _f; do
+        case "$_f" in
+            --help|--version) return 0 ;;
         esac
     done < "${SRM_WORK}/flags"
     return 1
@@ -3542,6 +3561,87 @@ srm_drop_symlink() {
     return 0
 }
 
+# Copy this program onto the guard path. Do not call rm.
+# Same bytes: say so and leave the file. Absent: install. Different: replace.
+srm_install_guard() {
+    _ig_src=${1-}
+    _ig_guard=${2-}
+    if [ -z "$_ig_src" ] || [ ! -f "$_ig_src" ]; then
+        out_die "Could not find this program file to install as safe-rm. Nothing was moved."
+    fi
+    if [ -d "$_ig_guard" ]; then
+        out_die "Refusing to replace a directory at ${_ig_guard}. Nothing was moved."
+    fi
+    if [ -f "$_ig_guard" ] && cmp -s "$_ig_src" "$_ig_guard"; then
+        out_info "Guard is already this program: ${_ig_guard}"
+        unset _ig_src _ig_guard
+        return 0
+    fi
+    _ig_dir=${_ig_guard%/*}
+    [ -d "$_ig_dir" ] || out_die "Setup directory is missing. Nothing was moved."
+    _ig_tmp=$(mktemp "${_ig_dir}/safe-rm.XXXXXX") || out_die "Could not stage a copy of this program. Nothing else was changed."
+    if ! cp -- "$_ig_src" "$_ig_tmp"; then
+        unlink -- "$_ig_tmp" 2>/dev/null || unlink "$_ig_tmp" 2>/dev/null || true
+        out_die "Could not copy this program to ${_ig_guard}."
+    fi
+    chmod 0755 "$_ig_tmp" 2>/dev/null || true
+    if [ -e "$_ig_guard" ]; then
+        _ig_verb="Replaced"
+    else
+        _ig_verb="Installed"
+    fi
+    if ! mv -- "$_ig_tmp" "$_ig_guard"; then
+        unlink -- "$_ig_tmp" 2>/dev/null || unlink "$_ig_tmp" 2>/dev/null || true
+        out_die "Could not copy this program to ${_ig_guard}."
+    fi
+    out_info "${_ig_verb} ${_ig_guard}"
+    unset _ig_src _ig_guard _ig_dir _ig_tmp _ig_verb
+    return 0
+}
+
+# Termux, Git Bash, and Windows cmd do not refresh the host guard.
+srm_swap_host_skipped() {
+    if [ -n "${TERMUX_VERSION-}" ] || [ -n "${MSYSTEM-}" ]; then
+        return 0
+    fi
+    case "$(uname -s 2>/dev/null)" in
+        Linux) ;;
+        *)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+# Root place only. Does not move rm. When origin-rm is already there, the
+# command people type is the guard in that directory, not GLOBAL_BIN.
+srm_place_refreshes_guard() {
+    if srm_swap_host_skipped; then
+        return 0
+    fi
+    if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
+        return 0
+    fi
+    _pg_src=$(srm_script_source 2>/dev/null || true)
+    if [ -z "${_pg_src}" ] || [ ! -f "${_pg_src}" ]; then
+        _pg_src=${INSTALL_PATH-}
+    fi
+    if [ -z "${_pg_src}" ] || [ ! -f "${_pg_src}" ]; then
+        unset _pg_src
+        return 0
+    fi
+    if [ -e /usr/bin/origin-rm ]; then
+        srm_install_guard "${_pg_src}" "/usr/bin/safe-rm"
+    fi
+    if [ -d /bin ] && ! srm_same_file /bin /usr/bin; then
+        if [ -e /bin/origin-rm ]; then
+            srm_install_guard "${_pg_src}" "/bin/safe-rm"
+        fi
+    fi
+    unset _pg_src
+    return 0
+}
+
 # One directory of the before/after table. Does not delete a directory.
 srm_swap_one() {
     _dir=${1-}
@@ -3562,11 +3662,8 @@ srm_swap_one() {
             out_die "No original rm binary in ${_dir}. Nothing was moved."
         fi
     fi
-    if [ ! -e "$_guard" ]; then
-        cp -- "$_src" "$_guard" || out_die "Could not copy this program to ${_guard}."
-        chmod 0755 "$_guard" 2>/dev/null || true
-        out_info "Installed ${_guard}"
-    fi
+    # Absent: first copy. Present: replace, so a later setup is not a stale guard.
+    srm_install_guard "$_src" "$_guard"
     if [ -L "$_rm" ] || [ ! -e "$_rm" ]; then
         srm_drop_symlink "$_rm" || out_die "Could not replace the rm link in ${_dir}."
         ln -s "$_guard" "$_rm" || out_die "Could not point ${_rm} at ${_guard}."
@@ -3695,22 +3792,32 @@ srm_cmd_restore() {
     return 0
 }
 
-# !!! DO NOT MODIFY OR SIMPLIFY THIS FUNCTION !!!
-# --dry-run must return before any system rm.
-srm_exec_one() {
-    _origin=${1-}
-    _path=${2-}
+# !!! DO NOT MODIFY OR SIMPLIFY THE DRY-RUN GUARD !!!
+# --dry-run must return before any origin-rm.
+# One exec: every forwarded switch, then --, then every allowed path.
+# _fwd_paths 0 forwards switches only. No paths.
+srm_exec_forward() {
+    _fwd_origin=${1-}
+    _fwd_paths=${2-}
     if [ "${DRY_RUN:-0}" -eq 1 ]; then
-        out_die "Dry-run tried to remove ${_path}. Nothing was removed. STOP. Next: ${APP_NAME} rm --dry-run <path>"
+        out_die "Dry-run tried to remove a path. Nothing was removed. STOP. Next: ${APP_NAME} rm --dry-run <path>"
     fi
-    set -- "$_origin"
+    set -- "$_fwd_origin"
     if [ -f "${SRM_WORK}/flags" ]; then
-        while IFS= read -r _flag; do
-            [ -n "$_flag" ] || continue
-            set -- "$@" "$_flag"
+        while IFS= read -r _fwd_flag; do
+            [ -n "$_fwd_flag" ] || continue
+            set -- "$@" "$_fwd_flag"
         done < "${SRM_WORK}/flags"
     fi
-    set -- "$@" "--" "$_path"
+    if [ "$_fwd_paths" -eq 1 ]; then
+        set -- "$@" "--"
+        _fwd_i=1
+        while [ "$_fwd_i" -le "${_n:-0}" ]; do
+            IFS= read -r _fwd_path < "${SRM_WORK}/path.${_fwd_i}" || _fwd_path=
+            set -- "$@" "$_fwd_path"
+            _fwd_i=$((_fwd_i + 1))
+        done
+    fi
     "$@"
 }
 
@@ -3743,6 +3850,9 @@ srm_cmd_rm() {
 
     _n=0
     _end=0
+    _verb=
+    _saw_force=0
+    _saw_q=0
     while [ $# -gt 0 ]; do
         _arg=$1
         shift
@@ -3756,7 +3866,7 @@ srm_cmd_rm() {
                     _end=1
                     continue
                     ;;
-                --quiet|-q)
+                --quiet)
                     QUIET=1
                     continue
                     ;;
@@ -3769,12 +3879,35 @@ srm_cmd_rm() {
                     DEBUG=1
                     continue
                     ;;
-                -*)
-                    if srm_flag_ok "$_arg"; then
-                        printf '%s\n' "$_arg" >> "${SRM_WORK}/flags"
+                --force)
+                    # Remove: the remover's --force, written after this loop.
+                    # Lifecycle verb: reinstall force. Not a path.
+                    _saw_force=1
+                    continue
+                    ;;
+                -q)
+                    # Remove: forward. The remover has no -q.
+                    # Lifecycle verb: quiet.
+                    _saw_q=1
+                    continue
+                    ;;
+                -)
+                    ;;
+                *)
+                    # help → --help, version → --version, self-install → --self-install.
+                    # The word rm stays a path. People do not type a second rm verb.
+                    _tok=$(app_token_command "$_arg") || _tok=
+                    if [ -n "$_tok" ] && [ "$_tok" != "rm" ]; then
+                        _verb=$_tok
                         continue
                     fi
-                    out_die "Unknown remove option: ${_arg}. Nothing was removed. Next: ${APP_NAME} help"
+                    case "$_arg" in
+                        -*)
+                            # Any remover switch, including clustered -rf. Forward unchanged.
+                            printf '%s\n' "$_arg" >> "${SRM_WORK}/flags"
+                            continue
+                            ;;
+                    esac
                     ;;
             esac
         fi
@@ -3782,6 +3915,40 @@ srm_cmd_rm() {
         _arg=$(srm_expand_home_operand "$_arg")
         printf '%s\n' "$_arg" > "${SRM_WORK}/path.${_n}"
     done
+
+    if [ -n "$_verb" ]; then
+        if [ "$_n" -gt 0 ] || [ -s "${SRM_WORK}/flags" ] || [ "$DRY_RUN" -eq 1 ]; then
+            out_die "The word ${_verb} is the command --${_verb}, not a path. Nothing was removed. Next: ${APP_NAME} --${_verb}. To remove a file with that name, pass ./${_verb} or -- ${_verb}."
+        fi
+        if [ "$_saw_force" -eq 1 ]; then
+            FORCE=1
+            FORCE_REINSTALL=1
+            export FORCE FORCE_REINSTALL
+        fi
+        if [ "$_saw_q" -eq 1 ]; then
+            QUIET=1
+            export QUIET
+        fi
+        app_run_command "$_verb"
+        _rc=$?
+        unset _verb _saw_force _saw_q _tok _arg _n _end
+        return $_rc
+    fi
+    if [ "$_saw_force" -eq 1 ]; then
+        printf '%s\n' "--force" >> "${SRM_WORK}/flags"
+    fi
+    if [ "$_saw_q" -eq 1 ]; then
+        printf '%s\n' "-q" >> "${SRM_WORK}/flags"
+    fi
+    unset _verb _saw_force _saw_q _tok
+
+    if [ "$DRY_RUN" -eq 0 ] && srm_flags_request_info; then
+        _origin=$(srm_origin_rm) || {
+            out_die "Could not find the system rm outside this program. Nothing was removed. Next: use the rm that came with the system, or stop."
+        }
+        srm_exec_forward "$_origin" 0
+        return $?
+    fi
 
     if [ "$_n" -eq 0 ]; then
         out_die "No path was given. Nothing was removed. Next: ${APP_NAME} rm --dry-run <path>"
@@ -3834,21 +4001,18 @@ srm_cmd_rm() {
     _origin=$(srm_origin_rm) || {
         out_die "Could not find the system rm outside this program. Nothing was removed. Next: use the rm that came with the system, or stop."
     }
-    _i=1
-    while [ "$_i" -le "$_n" ]; do
-        IFS= read -r _path < "${SRM_WORK}/path.${_i}" || _path=
-        if srm_exec_one "$_origin" "$_path"; then
-            out_success "Removed ${_path}."
-        else
-            out_error "The system rm failed for ${_path}. Later paths were not removed."
-            srm_emit_json "The system rm failed for ${_path}. Later paths were not removed." false false false "$_items"
-            return 1
-        fi
-        _i=$((_i + 1))
-    done
-    _done="Removed every listed path."
-    srm_emit_json "$_done" false true true "$_items"
-    return 0
+    srm_exec_forward "$_origin" 1
+    _rc=$?
+    if [ "$_rc" -eq 0 ]; then
+        _done="Removed every listed path."
+        srm_emit_json "$_done" false true true "$_items"
+        out_success "$_done"
+        return 0
+    fi
+    _done="The remover failed. Its result is the result of this command."
+    srm_emit_json "$_done" false false false "$_items"
+    out_error "$_done"
+    return $_rc
 }
 
 # =============================================================================
@@ -4395,6 +4559,91 @@ app_default() {
 }
 
 # =============================================================================
+# app_token_command() - Verb or its --switch, as the canonical command
+# =============================================================================
+#
+# help and --help are the same command. version and --version. self-install
+# and --self-install. The same pair for every live verb. -restore is the
+# 2023 token for restore. Prints the command name. Returns 1 when $1 is not
+# one of those words.
+#
+# PRINTF EXCEPTION (class B – function return-via-stdout): command name.
+#
+# Last updated: 2026-09-27
+# =============================================================================
+app_token_command() {
+    case "${1-}" in
+        help|--help) printf '%s\n' help ;;
+        version|--version) printf '%s\n' version ;;
+        about|--about) printf '%s\n' about ;;
+        version-check|--version-check) printf '%s\n' version-check ;;
+        self-update|--self-update) printf '%s\n' self-update ;;
+        self-uninstall|--self-uninstall) printf '%s\n' self-uninstall ;;
+        self-install|--self-install) printf '%s\n' self-install ;;
+        install|--install) printf '%s\n' install ;;
+        menu|--menu) printf '%s\n' menu ;;
+        main|--main) printf '%s\n' main ;;
+        setup|--setup) printf '%s\n' setup ;;
+        restore|--restore|-restore) printf '%s\n' restore ;;
+        rm|--rm) printf '%s\n' rm ;;
+        *) return 1 ;;
+    esac
+}
+
+# =============================================================================
+# app_run_command() - Run one canonical command
+# =============================================================================
+#
+# $1 is the name from app_token_command. Remaining args belong to rm.
+#
+# Last updated: 2026-09-27
+# =============================================================================
+app_run_command() {
+    _run=${1-}
+    shift
+    case "${_run}" in
+        version)
+            app_version
+            ;;
+        about)
+            app_about
+            ;;
+        version-check)
+            ver_check
+            ;;
+        self-update)
+            inst_self_update
+            ;;
+        self-uninstall)
+            inst_self_uninstall
+            ;;
+        self-install|install)
+            inst_self_install
+            ;;
+        menu|main)
+            app_default
+            ;;
+        setup)
+            srm_cmd_setup
+            ;;
+        restore)
+            srm_cmd_restore
+            ;;
+        # --- DOMAIN_DISPATCH_ROUTES (specializee injection) ---
+        rm)
+            srm_cmd_rm "$@"
+            ;;
+        # --- end DOMAIN_DISPATCH_ROUTES ---
+        help|*)
+            app_help
+            ;;
+    esac
+    _rc=$?
+    unset _run
+    return $_rc
+}
+
+# =============================================================================
 # app_main() - Main entrypoint and command dispatcher
 # =============================================================================
 #
@@ -4440,6 +4689,10 @@ app_default() {
 #   - Interactive empty argv (TTY, not quiet/json) opens the numbered menu.
 #     Non-interactive / quiet / json empty argv stays CLI self-install.
 #     menu and main are the named menu verbs. rm lives under front category 1.
+#   - Each live verb is also its switch: help and --help, version and
+#     --version, self-install and --self-install, and the same pair for the
+#     rest. On the command named rm those words are that command, not a path.
+#     origin-rm --help and origin-rm --version are the remover's own text.
 #
 # Last reviewed: 2026-09-27
 # =============================================================================
@@ -4464,6 +4717,14 @@ app_main() {
     PERSISTENT_STORAGE_DIR=$(util_resolve_persistent_storage)
     export EFFECTIVE_STORAGE_DIR STORAGE_DIR PERSISTENT_STORAGE_DIR
     export TMPDIR="${EFFECTIVE_STORAGE_DIR}"
+
+    # Command name rm: the remover's argument list, unless a lifecycle verb
+    # or its --switch is present. That word is the command, not a path.
+    # requirement-domain-safe-rm.md §2.1.1
+    if srm_invoked_as_rm; then
+        srm_cmd_rm "$@"
+        exit $?
+    fi
 
     # === ZERO-ARG split ===
     # Interactive 0-argv (TTY, not quiet, not json): main menu.
@@ -4503,62 +4764,31 @@ app_main() {
                 DRY_RUN=1
                 ;;
             # --- end DOMAIN_DISPATCH_FLAGS ---
-            version|about|help|version-check|self-update|self-uninstall|self-install|install|menu|main|setup|restore|-restore)
-                COMMAND="$1"
-                ;;
             # --- DOMAIN_DISPATCH_COMMANDS (specializee injection) ---
-            rm)
-                COMMAND="rm"
-                shift
-                break
+            *)
+                # Bare verb and --verb are one command. rm and --rm break so
+                # the remaining words stay the remove argument list.
+                _cmd=$(app_token_command "$1") || _cmd=
+                if [ -n "$_cmd" ]; then
+                    COMMAND=$_cmd
+                    if [ "$_cmd" = "rm" ]; then
+                        shift
+                        unset _cmd
+                        break
+                    fi
+                else
+                    out_die "Unknown command or flag: $1. See '${APP_NAME} help'."
+                fi
                 ;;
             # --- end DOMAIN_DISPATCH_COMMANDS ---
-            *)
-                out_die "Unknown command or flag: $1. See '${APP_NAME} help'."
-                ;;
         esac
         shift
     done
+    unset _cmd
 
     out_debug "dispatch command=${COMMAND} quiet=${QUIET} json=${JSON} force=${FORCE}"
 
-    case "${COMMAND}" in
-        version)
-            app_version
-            ;;
-        about)
-            app_about
-            ;;
-        version-check)
-            ver_check
-            ;;
-        self-update)
-            inst_self_update
-            ;;
-        self-uninstall)
-            inst_self_uninstall
-            ;;
-        self-install|install)
-            inst_self_install
-            ;;
-        menu|main)
-            app_default
-            ;;
-        setup)
-            srm_cmd_setup
-            ;;
-        restore|-restore)
-            srm_cmd_restore
-            ;;
-        # --- DOMAIN_DISPATCH_ROUTES (specializee injection) ---
-        rm)
-            srm_cmd_rm "$@"
-            ;;
-        # --- end DOMAIN_DISPATCH_ROUTES ---
-        help|*)
-            app_help
-            ;;
-    esac
+    app_run_command "${COMMAND}" "$@"
 }
 
 

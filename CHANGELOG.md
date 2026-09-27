@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.4] - 2026-09-27
+
+### Added
+
+- Each command is also a switch: `help` and `--help`, `version` and `--version`, `self-install` and `--self-install`, and the same pair for `about`, `version-check`, `self-update`, `self-uninstall`, `install`, `menu`, `main`, `setup`, `restore`, and `rm`
+- When this program is the `rm` people type, `rm version` and `rm --version` print this version. They do not remove a file named `version`. `origin-rm --version` is still the remover's own text
+
+## [1.0.3] - 2026-09-27
+
+### Fixed
+
+- `rm` after setup is `/usr/bin/safe-rm`. A root `self-install` used to write only `/usr/local/bin/safe-rm`, so `rm -rf` still ran the older guard and reported `Unknown command or flag: -rf`
+- When `origin-rm` is already present, a root place and a later `setup` replace that guard with this program. They do not move `origin-rm` again. A non-root place does not write it
+
 ## [1.0.2] - 2026-09-27
 
 ### Added

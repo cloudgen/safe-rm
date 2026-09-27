@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-default-interaction.md  
-**Status**: Active (Version 1.1.1)  
+**Status**: Active (Version 1.1.2)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -43,7 +43,8 @@ safe-rm has a zero-argument requirement. That file owns empty argv. This file ow
 
 | Situation | What runs |
 |-----------|-----------|
-| Interactive 0-argv: no command token, `TTY=1`, `JSON=0`, `QUIET=0`. `--debug` is excluded from the command count, so `safe-rm --debug` is still 0-argv | This main menu (`app_default`). `DEBUG=1` when `--debug` was present |
+| Interactive 0-argv: no command token, `TTY=1`, `JSON=0`, `QUIET=0`. `--debug` is excluded from the command count, so `safe-rm --debug` is still 0-argv. The command name is not `rm` | This main menu (`app_default`). `DEBUG=1` when `--debug` was present |
+| Basename of `$0` is `rm`, including no arguments and `rm --debug` alone | Not this menu. The remove in `requirement-domain-safe-rm.md` |
 | No command, and no TTY, or `JSON=1`, or `QUIET=1` | `inst_self_install` (not this menu, not help). `--debug` does not change that |
 | A command token is present (`version`, `rm`, `self-install`, …) | That command. `--debug` only turns debug on |
 | `menu` or `main` on a TTY | This menu. `--json` and `--quiet` are ignored while the list is drawn |
@@ -197,6 +198,6 @@ The Type 0 suite `tests/test_cli.sh` still targets the bootstrap snapshot `src/s
 
 ---
 
-**Last Updated**: 2026-09-27  
+**Last Updated**: 2026-09-27 (1.1.2 — the command named `rm` is not this menu)  
 **Owner**: safe-rm project maintainers  
 **Alignment:** requirement-shell-cli-zero-arguments · requirement-shell-cli-interface · requirement-shell-cli-self-install · requirement-shell-output-requirements · requirement-domain-safe-rm · CIAO / CIAO-Lite
