@@ -1,16 +1,16 @@
 **file**: docs/requirements/requirement-domain-safe-rm.md
 **id**: RQ-DOMAIN-SAFE-RM
-**Status**: Active (Version 1.2.6)
+**Status**: Active (Version 1.2.7)
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
 
-This requirement is the **current domain SSOT** for **safe-rm**. The 2023 program already moved the system `rm` aside to `origin-rm` and made `rm` run the guard, because `rm -rf` is too dangerous to leave as the raw binary. Bootstrap from selfmanaged keeps that setup and adds the selfmanaged lifecycle (self-install, self-update, self-uninstall, version, about, help, the numbered menu). The improvement over 2023 is a reviewed blacklist and product sentences through `out_*`.
+This requirement is the **current domain SSOT** for **safe-rm**. The 2023 program already moved the system `rm` aside to `origin-rm` and made `rm` run the guard, because `rm -rf` is too dangerous to leave as the raw binary. The self-management lifecycle stays with that setup (self-install, self-update, self-uninstall, version, about, help, the numbered menu). The improvement over 2023 is a reviewed blacklist and product sentences through `out_*`.
 
 It also exists because an agent once ran a recursive remove of the login home after a command-scoped `HOME=` prefix. The prefix did not apply to the later remove, and the login home was the target.
 
 **Scope:** the protected-`rm` setup (`origin-rm`, the `rm` link, `restore`), the command named `rm` (the same switches as `origin-rm`, including `-rf`), the `safe-rm rm` verb, `--dry-run`, refuse classes, messages that tell the operator to stop, and the help/about rows for that guard.
-**Out of scope:** Checksum and storage (peer shell requirements). Any remove that the tests perform without `--dry-run`. Dropping the 2023 swap because the selfmanaged shell usually avoids `sudo`.
+**Out of scope:** Checksum and storage (peer shell requirements). Any remove that the tests perform without `--dry-run`. Dropping the 2023 swap because a Type 0 shell usually avoids `sudo`.
 
 ### 1.1 Human-facing
 
@@ -102,6 +102,29 @@ A symlink to `coreutils`, `toybox`, or `busybox` **MUST NOT** be renamed to `ori
 
 A missing `$PREFIX/bin/rm` moves nothing. A second setup finds `origin-rm` already there, does not move it again, and replaces `$PREFIX/bin/safe-rm` when its bytes are not this program. A later place on Termux does that same replace when `origin-rm` is already there. It does not call `sudo` and it does not write `/usr/bin/safe-rm`. Git Bash and Windows cmd still do not run this setup. Proof: `TP-SRM-30`.
 
+### 2.0.4 Termux blacklist: `$PREFIX` stands for `/usr`
+
+On Termux the Linux blacklist in §2.2 has the same meaning under `$PREFIX`. `$PREFIX` is the directory from §2.0.3 (`/data/data/com.termux/files/usr` on the reported phone). `rm -rf $PREFIX/var --dry-run` **MUST** refuse. With the default `PREFIX` that path is `/data/data/com.termux/files/usr/var`. Removing it is the same kind of remove as removing `/var`.
+
+| Linux path | Termux path | Scope |
+|------------|-------------|--------|
+| `/usr` | `$PREFIX` | That directory only |
+| `/usr/bin` and anything inside it | `$PREFIX/bin` and anything inside it | The tree. Termux also keeps the programs Linux keeps in `/bin` in this directory |
+| `/bin` | `$PREFIX/bin` | Covered by the row above |
+| `/sbin` | `$PREFIX/sbin` | That directory only. A name inside `$PREFIX/sbin` stays allowed, the same way a name inside `/sbin` stays allowed |
+| `/etc` | `$PREFIX/etc` | That directory only |
+| `/var` | `$PREFIX/var` | That directory only. A folder inside it, such as `$PREFIX/var/log`, stays allowed |
+| `/lib` | `$PREFIX/lib` | That directory only |
+| `/lib64` | `$PREFIX/lib64` | That directory only |
+| `/opt` | `$PREFIX/opt` | That directory only |
+| `/boot` | `$PREFIX/boot` | That directory only |
+| `/root` | The login home | Already refused as the login home. There is no second prefix path |
+| `/`, `/dev`, `/proc`, `/sys` | Those same Linux paths | Unchanged |
+
+These paths stay allowed, because the Linux blacklist does not name them: `$PREFIX/share`, `$PREFIX/include`, `$PREFIX/tmp`, `$PREFIX/libexec`, and a folder strictly inside `$PREFIX/var`.
+
+The inside-home allowance does not lift this list. `DENY-USR-BIN` and `DENY-HOST` stay refused when the path is also inside a home. Detection is the same rule as §2.0.3, including `SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*` for tests. A value outside that scratch directory does not apply this list. On a Linux host the `/usr`, `/var`, and `/usr/bin` rows stay in force with or without that test variable. Proof: `TP-SRM-31`.
+
 ### 2.1 Specialized CLI subcommands
 
 | Verb | Privilege | Meaning |
@@ -166,13 +189,13 @@ Resolve the path first (physical directory, symlink target when the path exists;
 | `DENY-ACCOUNT-HOME` | Resolved path is an account home recorded in `/etc/passwd` (sixth field; also `getent passwd` when that list is present), the directory itself | Refuse |
 | `DENY-HOME-USER` | Resolved path is exactly `/home` | Refuse |
 | `DENY-HOME-ANCESTOR` | Resolved path is a strict ancestor of an account home | Refuse |
-| `DENY-USR-BIN` | Resolved path is `/usr/bin` or anything inside `/usr/bin` (a symlink such as `/bin` that lands on `/usr/bin` uses this class) | Refuse |
+| `DENY-USR-BIN` | Resolved path is `/usr/bin` or anything inside `/usr/bin` (a symlink such as `/bin` that lands on `/usr/bin` uses this class). On Termux, also `$PREFIX/bin` or anything inside `$PREFIX/bin` | Refuse |
 | `DENY-ROOT` | Resolved path is `/` | Refuse |
-| `DENY-HOST` | Resolved path is exactly `/usr`, `/bin`, `/sbin`, `/etc`, `/var`, `/boot`, `/root`, `/lib`, `/lib64`, `/opt`, `/dev`, `/proc`, or `/sys` | Refuse |
+| `DENY-HOST` | Resolved path is exactly `/usr`, `/bin`, `/sbin`, `/etc`, `/var`, `/boot`, `/root`, `/lib`, `/lib64`, `/opt`, `/dev`, `/proc`, or `/sys`. On Termux, also exactly `$PREFIX`, `$PREFIX/etc`, `$PREFIX/var`, `$PREFIX/lib`, `$PREFIX/lib64`, `$PREFIX/opt`, `$PREFIX/sbin`, or `$PREFIX/boot` | Refuse |
 | `DENY-UNRESOLVED` | The path cannot be resolved | Refuse |
 | `ALLOW` | Anything else | May be removed when `--dry-run` is off |
 
-`rm -rf` of any account home directory is refused, because that path is the whole home. A named folder strictly inside any account home is allowed, including a cache directory. That folder does not, by itself, mean the home is being wiped. The text `$HOME/...`, `${HOME}/...`, and `~/...` is expanded and then classified, so a suffix is a folder inside that home. `/etc/passwd` stores every account's home in the sixth field. Each of those directories, and only the directory itself, is refused. `/home` itself stays refused because it is the parent of the homes. A path strictly inside another account's home is allowed. The reviewed blacklist still refuses `/`, `/usr/bin` and anything inside it, and the named system directories below.
+`rm -rf` of any account home directory is refused, because that path is the whole home. A named folder strictly inside any account home is allowed, including a cache directory. That folder does not, by itself, mean the home is being wiped. The text `$HOME/...`, `${HOME}/...`, and `~/...` is expanded and then classified, so a suffix is a folder inside that home. `/etc/passwd` stores every account's home in the sixth field. Each of those directories, and only the directory itself, is refused. `/home` itself stays refused because it is the parent of the homes. A path strictly inside another account's home is allowed. The reviewed blacklist still refuses `/`, `/usr/bin` and anything inside it, and the named system directories below. On Termux that same blacklist is the §2.0.4 table. `$PREFIX/var` is refused. A folder inside `$PREFIX/var` is allowed. `$PREFIX/share` is allowed.
 
 #### Dry-run report
 
@@ -274,6 +297,7 @@ JSON `about` includes `"remove_guard":"on"` and `"dry_run_switch":"--dry-run"`.
 | `TP-SRM-27` | `help`/`--help`, `version`/`--version`, and the other lifecycle pairs are one command on `safe-rm`. On the command named `rm`, `--version` prints this program's version and does not remove. A bare word, including a link named `version`, is a path under `--dry-run` and stays in place. A `--` switch and a path together remove nothing |
 | `TP-SRM-29` | Two fixture directories under `/tmp/safe-rm-swap.*`. An empty first directory does not stop setup. A regular `rm` in the second directory is moved. A BusyBox symlink in the second directory stays the BusyBox file; `origin-rm` there runs `busybox rm`, and `restore` puts the symlink back. Nothing in the fixture is executed. Neither path present moves nothing |
 | `TP-SRM-30` | Termux layout only. `SRM_TERMUX_PREFIX` is `/tmp/safe-rm-swap.*` and stands in for `/data/data/com.termux/files/usr`. Setup moves `$PREFIX/bin/rm` to `$PREFIX/bin/origin-rm` and points `rm` at `safe-rm`. A symlink to `toybox` or `coreutils` is not renamed; `origin-rm` runs that program's `rm`, and `restore` puts the symlink back. An empty `bin` moves nothing and does not say an admin login is required. A prefix outside `/tmp/safe-rm-swap.*` moves nothing. `/usr/bin/rm` stays. Nothing in the fixture is executed |
+| `TP-SRM-31` | Termux blacklist only. `SRM_TERMUX_PREFIX` is `/tmp/safe-rm-swap.*`. Dry-run refuses `$PREFIX`, `$PREFIX/bin` and a name inside it, and the exact directories `$PREFIX/etc`, `$PREFIX/var`, `$PREFIX/lib`, `$PREFIX/lib64`, `$PREFIX/opt`, `$PREFIX/sbin`, and `$PREFIX/boot`. Each of those paths remains. Dry-run allows `$PREFIX/share`, `$PREFIX/include`, `$PREFIX/tmp`, `$PREFIX/libexec`, `$PREFIX/var/log`, and a name inside `$PREFIX/sbin`. Those paths remain. The command named `rm` with `rm -rf $PREFIX/var --dry-run` refuses and the directory remains. Without that test variable, the scratch `$PREFIX/var` is allowed and `/var` is still refused. Nothing in the fixture is executed |
 | `TP-SRM-28` | `help` says a local `install` copies this file into `/usr/local/bin/` or `${HOME}/.local/bin/` and does not download |
 | `TP-SRM-18` | `about` includes `Remove guard:` |
 | `TP-SRM-19` | `--quiet` still prints the refusal |
@@ -287,19 +311,19 @@ Runner: `tests/run_dry_run.sh`. It does not point `HOME` at a scratch directory.
 | Product | `safe-rm` |
 | Ship unit | `src/safe-rm` |
 | Companion | `src/safe-rm.sha256` |
-| Version | `1.0.8` |
+| Version | `1.0.9` |
 | Prefix | `srm_` |
-| Bootstrap origin | `selfmanaged` Type 0 architecture kept in full (self-install, self-update, self-uninstall, version, about, help, numbered menu, `out_*`). The 2023 safe-rm setup is kept as well: `origin-rm`, `rm` → this program, `restore` |
+| Type 0 lifecycle | Kept in full (self-install, self-update, self-uninstall, version, about, help, numbered menu, `out_*`). The 2023 setup is kept as well: `origin-rm`, `rm` → this program, `restore` |
 | Channel default | `REPO_USER=cloudgen`, `REPO_NAME=safe-rm`, `SCRIPT_RELPATH=src/safe-rm` |
 | Dispatcher anchors | Basename `rm` routes to `srm_cmd_rm` before the menu. `safe-rm rm` is the same remove. `--dry-run` is not forwarded |
-| Honesty | **Implemented** for `setup` / `restore`, for replacing an already-swapped guard on a later setup and on a root place, for Termux setup against `$PREFIX/bin` with no `sudo`, and for remover switches on the command named `rm` (`-rf` and any other switch, one exec of the remover). Tests pass `SRM_SWAP_ROOT=/tmp/safe-rm-swap.*` or `SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*` so they never touch `/usr/bin` or `/bin`. A non-admin setup without those variables refuses and moves nothing. The real delete execs the remover in §2.0. Dry-run never execs it. The suite proves switch acceptance with `--dry-run` and does not exec the remover |
+| Honesty | **Implemented** for `setup` / `restore`, for replacing an already-swapped guard on a later setup and on a root place, for Termux setup against `$PREFIX/bin` with no `sudo`, for the Termux blacklist in §2.0.4 (`$PREFIX/var` and the other prefix rows), and for remover switches on the command named `rm` (`-rf` and any other switch, one exec of the remover). Tests pass `SRM_SWAP_ROOT=/tmp/safe-rm-swap.*` or `SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*` so they never touch `/usr/bin` or `/bin`. A non-admin setup without those variables refuses and moves nothing. The real delete execs the remover in §2.0. Dry-run never execs it. The suite proves switch acceptance with `--dry-run` and does not exec the remover |
 
 ---
 
 ## 3. Design Principles (CIAO / CIAO-Lite)
 
 - **Caution:** Resolve the path, then refuse. One refused path cancels the whole command.
-- **Intentional:** The 2023 setup stays. Specialize adds the selfmanaged lifecycle and the reviewed blacklist. It does not replace that setup.
+- **Intentional:** The 2023 setup stays. The self-management lifecycle and the reviewed blacklist stay with it. They do not replace that setup.
 - **Anti-fragile:** `--dry-run` is the way to see the verdict without a remove. A missing system `rm` fails closed.
 - **Over-protect:** The dry-run branch returns before `srm_exec_one`. `srm_exec_one` also refuses to run when dry-run is set.
 
@@ -324,6 +348,7 @@ Runner: `tests/run_dry_run.sh`. It does not point `HOME` at a scratch directory.
 13. Treat the command named `rm` with no arguments, or `rm --debug` alone, as the numbered menu or as install-ensure.
 14. Leave a stale `safe-rm` in place after a root place or a later setup when `origin-rm` already exists, so the command people type is an older program that rejects `-rf`.
 15. Forward `--help` or `--version` to the remover. On the command named `rm`, route a bare lifecycle word (`version`, `help`, and the other words with no dashes) as this program's command, or route a `--` lifecycle switch as a path.
+16. On Termux, allow `$PREFIX`, `$PREFIX/bin` or anything inside it, or the exact directories `$PREFIX/etc`, `$PREFIX/var`, `$PREFIX/lib`, `$PREFIX/lib64`, `$PREFIX/opt`, `$PREFIX/sbin`, and `$PREFIX/boot`. Refuse a folder strictly inside `$PREFIX/var`, or refuse `$PREFIX/share`, `$PREFIX/include`, `$PREFIX/tmp`, or `$PREFIX/libexec`, unless that folder is itself an account home.
 
 **Violating this rule is a critical remove-guard regression.**
 
@@ -333,11 +358,12 @@ Runner: `tests/run_dry_run.sh`. It does not point `HOME` at a scratch directory.
 
 This product may run on Termux, Git Bash, Windows cmd, or the same class (this login only).
 
-**This requirement:** On Termux, `which rm` is `$PREFIX/bin/rm` (`/data/data/com.termux/files/usr/bin/rm` on the reported phone). This login runs that swap and does not call `sudo`. The home-directory refusal still applies when this program is invoked by name. On Git Bash and Windows cmd the swap does not run and does not call `sudo`. On a Linux host the swap is the one admin step: it moves the system `rm` to `origin-rm` and points `rm` at this program. It is not a general admin shell, and it does not create a dedicated account.
+**This requirement:** On Termux, `which rm` is `$PREFIX/bin/rm` (`/data/data/com.termux/files/usr/bin/rm` on the reported phone). This login runs that swap and does not call `sudo`. The home-directory refusal still applies when this program is invoked by name. The §2.0.4 blacklist also applies: `$PREFIX/var` and the other prefix rows are refused, and a folder inside `$PREFIX/var` stays allowed. On Git Bash and Windows cmd the swap does not run and does not call `sudo`. On a Linux host the swap is the one admin step: it moves the system `rm` to `origin-rm` and points `rm` at this program. It is not a general admin shell, and it does not create a dedicated account.
 
 | MUST | MUST NOT |
 |------|----------|
 | On Termux, move `$PREFIX/bin/rm` as this login and leave `/usr/bin/rm` and `/bin/rm` untouched | Call `sudo` on Termux, or answer setup with `That needs an admin login` when `$PREFIX/bin/rm` is the `rm` people type |
+| On Termux, refuse `$PREFIX/var` and the other §2.0.4 rows | Allow `$PREFIX/var`, or refuse a folder inside `$PREFIX/var` |
 | Refuse any account home directory the same way on this login | Run the swap, or call `sudo`, when Git Bash or Windows cmd is detected |
 | Keep `--dry-run` as a local check | Wrap `apt` or `pkg` from this verb |
 
@@ -370,6 +396,7 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | 2026-09-27 | 1.2.4: setup checks `/usr/bin/rm` and `/bin/rm`. A missing `rm` in one directory does not cancel the other. A BusyBox symlink is not renamed to `origin-rm`; that file runs `busybox rm`. |
 | 2026-09-27 | 1.2.5: Alpine is the different-path host. `/bin/rm` is BusyBox and `/usr/bin/rm` may be absent. §2.0.2 is that before/after table. Setup must not stop at `/usr/bin` on that host. |
 | 2026-09-27 | 1.2.6: Termux `which rm` is `$PREFIX/bin/rm` (`/data/data/com.termux/files/usr/bin/rm`). §2.0.3 is that before/after table. This login runs setup there. Setup does not call `sudo` and does not require an admin login. |
+| 2026-09-27 | 1.2.7: Termux blacklist §2.0.4. `$PREFIX/var` and the other prefix matches of the Linux system directories are refused. A folder inside `$PREFIX/var` stays allowed. `$PREFIX/share` stays allowed. |
 
 **Last Updated**: 2026-09-27
 **Owner**: safe-rm project maintainers

@@ -1,10 +1,10 @@
-# What to review — selfmanaged
+# What to review — safe-rm
 
-**Living checklist** (review plan). Product: **selfmanaged** Type 0 bootstrap CLI.  
-**Class:** Bootstrap project — no Active domain requirements expected.  
+**Living checklist** (review plan). Product: **safe-rm**. Ship unit `src/safe-rm`.  
+**Domain SSOT:** `requirement-domain-safe-rm`.  
 **Always load first:** `reviews/lessons.md`
 
-**Last plan update:** 2026-09-27 (main menu vs selfmanaged; L-MENU-01)
+**Last plan update:** 2026-09-28 (product identity safe-rm; selfmanaged-only reports removed)
 
 ---
 
@@ -12,12 +12,12 @@
 
 | # | Check | Notes |
 |---|--------|--------|
-| P1 | Read `docs/requirements/index.md` (live law only) | **1 class** + **9 shell** REQs incl. **storage**; no domain SSOT |
+| P1 | Read `docs/requirements/index.md` (live law only) | **15** Active REQs: class, 13 shell, domain SSOT |
 | P0 | Pre-git SSH profile report if remote git | Active profile + git-capable candidates vs `REPO_USER` |
-| P2 | Confirm ship unit `src/selfmanaged` + companion `src/selfmanaged.sha256` | Digest match via tests |
+| P2 | Confirm ship unit `src/safe-rm` + companion `src/safe-rm.sha256` | Digest match via `tests/run_dry_run.sh` |
 | P3 | Load `reviews/lessons.md` and re-check every open L-* | Mandatory |
-| P4 | Run `./tests/run.sh` for baseline | Record PASS/FAIL in report |
-| P5 | Confirm product class still bootstrap (no invented domain REQ) | Owner may override |
+| P4 | Run `./tests/run_dry_run.sh` for the product baseline | Record PASS/FAIL in report |
+| P5 | Confirm one Active `requirement-domain-safe-rm` | Do not invent a second domain file |
 
 ---
 
@@ -34,8 +34,8 @@
 | Interactive modes | `requirement-shell-interactive-vs-noninteractive.md` | TTY vs pipe / quiet / json |
 | Automatic checksum | `requirement-shell-automatic-checksum.md` | Companion primary; CHECKSUM not help/about |
 | CLI storage | `requirement-shell-cli-storage.md` 1.1.0 | Per-login per-process cache folder; persistence `${HOME}/.local/${APP_NAME}`; silent tier miss; about labels |
-
-**Out of scope unless added:** Domain requirements / domain verbs (not bootstrap product law).
+| Domain guard | `requirement-domain-safe-rm.md` | Swap, restore, refuse classes, `--dry-run`, command named `rm` |
+| Main menu | `requirement-shell-cli-default-interaction.md` | Front **1** / **8** / **9**; **11** under **1** |
 
 ---
 
@@ -59,7 +59,7 @@
 
 | Check | Path |
 |-------|------|
-| Suite entry | `tests/run.sh` |
+| Product suite | `tests/run_dry_run.sh` |
 | CLI surface | `tests/test_cli.sh` |
 | Install lifecycle | `tests/test_install_lifecycle.sh` |
 | Helpers | `tests/helpers.sh` (**GLOBAL_BIN** isolate) |
@@ -68,9 +68,9 @@
 
 ---
 
-## Main menu vs selfmanaged (L-MENU-01)
+## Main menu (L-MENU-01)
 
-Reference is selfmanaged **1.4.0** (`selfmanaged/src/selfmanaged`), not `src/selfmanaged` **1.3.1**.
+Ship unit `src/safe-rm`. Interactive empty argv opens this board. A pipe, quiet, or json run with no arguments still places.
 
 | Check | Pass when |
 |-------|-----------|
@@ -93,14 +93,14 @@ Reference is selfmanaged **1.4.0** (`selfmanaged/src/selfmanaged`), not `src/sel
 | README install channel truth | `README.md` |
 | SECURITY trust bounds (no overclaim signing) | `SECURITY.md` |
 | CHANGELOG when releasing fixes | `CHANGELOG.md` |
-| Companion digest present | `selfmanaged.sha256` |
+| Companion digest present | `src/safe-rm.sha256` |
 
 ---
 
 ## Explicit non-goals for default full Type 0 review
 
-- Inventing domain REQs to “look complete”  
-- Reverse-copy of specialized sibling domain into selfmanaged  
+- A second Active domain requirements file  
+- Dropping the self-management lifecycle  
 - Treating `docs/skills` / templates as product behavioral authority  
 - Claiming ISO/OWASP certification from templates alone  
 

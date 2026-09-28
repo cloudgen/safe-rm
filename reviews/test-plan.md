@@ -1,14 +1,17 @@
-# Test plan — selfmanaged
+# Test plan — safe-rm
 
 Maps **baseline coverage** and **finding lock-in (TP-*)** to `tests/`.  
-**Suite entry:** `./tests/run.sh`  
-**Last update:** 2026-09-27 (Termux `$PREFIX/bin/rm` setup; Alpine `/bin/rm`)
+**Product suite:** `./tests/run_dry_run.sh` (`src/safe-rm`).  
+**Type 0 snapshot suite:** `./tests/run.sh` also runs that product suite, then the older snapshot suite.  
+**Last update:** 2026-09-27 (Termux `$PREFIX/var` blacklist; `$PREFIX/bin/rm` setup)
 
 Status: **have** = automated today · **TODO** = needed · **n/a** = not applicable / product choice
 
 ---
 
-## Baseline coverage (Type 0)
+## Baseline coverage (Type 0 snapshot suite)
+
+These rows are what `tests/test_cli.sh` asserts against the older snapshot. Product proof for `src/safe-rm` is the domain table below.
 
 | Area | Coverage | Evidence |
 |------|----------|----------|
@@ -89,6 +92,7 @@ Status: **have** = automated today · **TODO** = needed · **n/a** = not applica
 | TP-SRM-SWAP-01 | domain 1.2.6 | Setup moves a fixture `rm` to `origin-rm` and points `rm` at this program. Second setup does not move again. `restore` reverses it. Non-admin setup moves nothing. No real directory remove | **have** | `tests/run_dry_run.sh` (`SRM_SWAP_ROOT=/tmp/safe-rm-swap.*`) |
 | TP-SRM-29 | domain 1.2.6 §2.0.2 | An empty fixture directory does not stop setup. A regular `rm` in the other directory is moved. A BusyBox symlink is not renamed; `origin-rm` runs `busybox rm`. Nothing is executed | **have** | `tests/run_dry_run.sh` (`SRM_SWAP_ROOT` and `SRM_SWAP_BIN`) |
 | TP-SRM-30 | domain 1.2.6 §2.0.3 | Termux `$PREFIX/bin/rm`. A regular file is moved. A `toybox` or `coreutils` symlink is not renamed. An empty `bin` does not ask for an admin login. `/usr/bin/rm` stays. Nothing is executed | **have** | `tests/run_dry_run.sh` (`SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*`) |
+| TP-SRM-31 | domain 1.2.7 §2.0.4 | Termux blacklist. `$PREFIX/var` and the other prefix system directories are refused and remain. `$PREFIX/var/log` and `$PREFIX/share` are allowed and remain. `rm -rf $PREFIX/var --dry-run` refuses. Without the test prefix, `/var` is still refused. Nothing is executed | **have** | `tests/run_dry_run.sh` (`SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*`) |
 | TP-CACHE-01 | storage 1.1.0 | `about` prints Cache folder used, preferred, 1st fallback, 2nd fallback, and Persistence storage. JSON has `cache_used`, `cache_preferred`, `cache_fallback`, `cache_fallback_2`, `persistence_storage`. No Storage (effective) label | **have** | `tests/run_dry_run.sh` |
 | TP-CACHE-02 | storage 1.1.0 | Linux `/dev/shm/cache/cache-${APP_NAME}-${login}-$$`, then `/tmp/cache/...`, then `${HOME}/.cache/cache-${APP_NAME}-$$`. Git Bash and Mac chains. Silent skip. Leaf mode 0700. Persistence `${HOME}/.local/${APP_NAME}`. Suite does not assign HOME | **have** | `tests/run_dry_run.sh` |
 | TP-CACHE-03 | storage 1.1.0 | `util_mktemp` writes an mktemp name under the cache leaf and refuses a `$$` file-name template | **have** | `tests/run_dry_run.sh` |
@@ -99,4 +103,4 @@ Status: **have** = automated today · **TODO** = needed · **n/a** = not applica
 
 1. Closing a **bug** finding updates the matching TP to **have**.  
 2. Do not mark TP **have** without a suite assertion (or documented static fix for cite/ID).  
-3. Bootstrap project: no domain TP suite required.  
+3. Domain proof is `tests/run_dry_run.sh` (`TP-SRM-*`). The Type 0 snapshot suite is not that proof.  

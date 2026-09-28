@@ -8,9 +8,9 @@
 
 This requirement is the **specialize-in home** for POSIX `/bin/sh` coding lessons on this product. **Without this file, portable learned lessons arrive raw** (agents treat coding skills as product law).
 
-It owns **how** the single-file ship unit `./src/selfmanaged` is written: shebang, quoting, function headers, prefix discipline (by pointer), and what this product must **not** add (in-tool `sudo`, admin-privilege ladders).
+It owns **how** the single-file ship unit `./src/safe-rm` is written: shebang, quoting, function headers, prefix discipline (by pointer), and what this product must **not** add (in-tool `sudo`, admin-privilege ladders).
 
-**Scope:** POSIX `/bin/sh` coding contract for `./src/selfmanaged`.  
+**Scope:** POSIX `/bin/sh` coding contract for `./src/safe-rm`.  
 **Out of scope (own-or-point):** Command catalog (`requirement-shell-cli-interface.md`); `out_*` catalog (`requirement-shell-output-requirements.md`); prefix table body (`requirement-shell-modular-function-design.md`); TTY / prompt bodies (`requirement-shell-interactive-vs-noninteractive.md`); scratch roots (`requirement-shell-cli-storage.md`). This file **points**; it does **not** duplicate those tables.
 
 ### 1.1 Human-facing
@@ -19,8 +19,8 @@ It owns **how** the single-file ship unit `./src/selfmanaged` is written: sheban
 
 | Box | Meaning | Example |
 |-----|---------|---------|
-| You / this login | Maintainer editing `./src/selfmanaged` | Add a helper with an `out_` / `inst_` / `app_` prefix |
-| The other role | Operator running as themselves (Termux, Git Bash, Windows cmd, Linux) | `selfmanaged about` with no root |
+| You / this login | Maintainer editing `./src/safe-rm` | Add a helper with an `out_` / `inst_` / `app_` prefix |
+| The other role | Operator running as themselves (Termux, Git Bash, Windows cmd, Linux) | `safe-rm about` with no root |
 | Not this file | What verbs mean; how JSON is shaped; where scratch lives | Peer shell requirements |
 
 | Includes | Excludes |
@@ -30,13 +30,13 @@ It owns **how** the single-file ship unit `./src/selfmanaged` is written: sheban
 
 | Surface | What you open | What for |
 |---------|---------------|----------|
-| `./src/selfmanaged` | Program file people install | Live coding contract |
-| `selfmanaged help` | Command | Listed verbs stay Type-0 self-care |
+| `./src/safe-rm` | Program file people install | Live coding contract |
+| `safe-rm help` | Command | Listed verbs stay Type-0 self-care |
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
-| Add a helper | Give it a prefix, a header, and safe defaults. Print through `out_*`. | Edit `./src/selfmanaged`; run `./tests/run.sh` |
-| Run on a phone userspace | Keep **normal user privilege** only. Do not add `sudo` wrappers. | `selfmanaged about` |
+| Add a helper | Give it a prefix, a header, and safe defaults. Print through `out_*`. | Edit `./src/safe-rm`; run `./tests/run_dry_run.sh` |
+| Run on a phone userspace | Keep **normal user privilege** only. Do not add `sudo` wrappers. | `safe-rm about` |
 
 ---
 
@@ -59,7 +59,7 @@ It owns **how** the single-file ship unit `./src/selfmanaged` is written: sheban
 ### 2.3 Function headers and prefixes (point)
 
 9. **MUST** use the prefix families owned by `requirement-shell-modular-function-design.md` (`out_`, `inst_`, `app_`, `util_`, `ver_`, `path_`, `prompt_`).  
-10. **MUST NOT** add a domain prefix (`selfmanaged_*` product-ops) while this workspace remains a bootstrap with **no** domain SSOT.  
+10. Domain helpers **MUST** use the prefix `srm_` owned by `requirement-domain-safe-rm.md`. **MUST NOT** add a second product-ops prefix.  
 11. New **critical** helpers **SHOULD** keep a CIAO header (General Purpose + do-not-simplify when the helper is reusable). **MUST NOT** strip existing Protection Zones.  
 12. Product-source `ALIGNMENT` / `See` lines **MUST** cite only live `docs/requirements/requirement-*.md` paths.
 
@@ -73,20 +73,20 @@ It owns **how** the single-file ship unit `./src/selfmanaged` is written: sheban
 ### 2.5 In-tool sudo (this product: unused)
 
 17. This product **MUST NOT** add in-tool `sudo`, a `util_sudo` wrap, `useradd`, or a sudoers emitter. There is **no** `requirement-shell-sudo-command` because the ship unit does not invoke `sudo`.  
-18. **MUST NOT** copy a Type 1 password-sudo ladder from portable molds into `./src/selfmanaged`.  
+18. **MUST NOT** copy a Type 1 password-sudo ladder from portable molds into `./src/safe-rm`.  
 19. If a future specializee adds in-tool `sudo`, that work **MUST** register `requirement-shell-sudo-command` with a **studied** allow table — not keep wrapper bodies only here.
 
 ### 2.6 Implementation Notes (this project)
 
-| Field | Value (selfmanaged) |
+| Field | Value (safe-rm) |
 |-------|---------------------|
-| **Ship unit** | `./src/selfmanaged` (POSIX `/bin/sh`, single file) |
+| **Ship unit** | `./src/safe-rm` (POSIX `/bin/sh`, single file) |
 | **Shebang** | `#!/bin/sh` |
 | **Primary dialect** | POSIX `/bin/sh` (dash / bash-as-sh / BusyBox ash intended) |
 | **Inherited non-POSIX** | Existing `local` in some helpers is **bootstrap inheritance** — **MUST NOT** mass-rewrite; **SHOULD NOT** add new `local` when a POSIX assignment works |
 | **`set -u`** | Present at script top with documented defaults (`HOME`, privilege, storage) |
 | **In-tool sudo** | **None** — no wrap, no fragment, no Table A/C |
-| **Domain prefix** | **None** — bootstrap; injection anchors (`DOMAIN_*`) stay empty |
+| **Domain prefix** | `srm_` for the guard (`requirement-domain-safe-rm.md`). Specializee anchors `DOMAIN_*` stay for a later product |
 | **Coding-style owner** | **this file** |
 | **Peer pointers** | modular-function-design (prefixes); output-requirements (`out_*`); interactive (TTY / `prompt_*`); cli-storage (scratch root) |
 
@@ -96,7 +96,7 @@ It owns **how** the single-file ship unit `./src/selfmanaged` is written: sheban
 
 This product may run on Termux, Git Bash, Windows cmd, or the same class (this login only).
 
-**This requirement:** helpers in `./src/selfmanaged` stay **normal user privilege**. Do **not** add `util_sudo`, wrap `apt`/`dnf`, create a dedicated system user, or recommend `sudo curl | sh` on that class. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`. Termux named `pkg` as this login remains ordinary (not admin privilege) **if** a future Termux-ish REQ is added; this bootstrap does **not** wrap `pkg` today.
+**This requirement:** helpers in `./src/safe-rm` stay **normal user privilege**. Do **not** add `util_sudo`, wrap `apt`/`dnf`, create a dedicated system user, or recommend `sudo curl | sh` on that class. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`. Termux named `pkg` as this login remains ordinary (not admin privilege) **if** a future Termux-ish REQ is added; this product does **not** wrap `pkg` today.
 
 On detect of that class:
 
@@ -168,10 +168,10 @@ On detect of that class:
 | `docs/requirements/requirement-shell-interactive-vs-noninteractive.md` | TTY / `prompt_*` owner |
 | `docs/requirements/requirement-shell-cli-storage.md` | Scratch root owner |
 | `docs/requirements/requirement-shell-cli-interface.md` | Command surface |
-| `./src/selfmanaged` | Implementation under test |
+| `./src/safe-rm` | Implementation under test |
 
 ---
 
 **Last Updated**: 2026-09-06
-**Owner**: selfmanaged project maintainers
+**Owner**: safe-rm project maintainers
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 4, 20, 21 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

@@ -1,4 +1,4 @@
-# Lessons — selfmanaged
+# Lessons — safe-rm
 
 **Prior-report failure modes** to re-check on every product review.  
 **Mandatory load** before findings.  
@@ -18,8 +18,8 @@
 | L-SETU-01 | `set -u` with bare HOME / privilege defaults | env -u HOME | INC-20260713-001 | **Closed** (suite) |
 | L-CSUM-01 | CHECKSUM trust UX / overclaim authenticity | Companion primary; CHECKSUM not in help/about; SECURITY bounds | INC-20260713-003 | **Partial** — suite OK; wording vigilance |
 | L-CITE-01 | Product source cites templates/skills as law | ALIGNMENT cites live `requirement-shell-*` only | INC-20260712-002 | **Closed** (process) |
-| L-HYG-01 | Companion `*.tmp` left at repo root | No `selfmanaged.sha256.tmp` | SM-HYG-01 | **Closed** (2026-07-16) |
-| L-ID-01 | APP_NAME only `:=` without hard-assign | `APP_NAME="selfmanaged"` present | SM-ID-01 | **Closed** (2026-07-16) |
+| L-HYG-01 | Companion `*.tmp` left at repo root | No `safe-rm.sha256.tmp` | SM-HYG-01 | **Closed** (2026-07-16) |
+| L-ID-01 | APP_NAME only `:=` without hard-assign | `APP_NAME="safe-rm"` present in `src/safe-rm` | SM-ID-01 | **Closed** (2026-07-16) |
 | L-CITE-TERM-01 | Bootstrap footer cites terminologies | Footer cites requirement-shell-cli-* | origin 2026-07-16 | **Closed** (2026-07-16) |
 | L-JSON-RAW-01 | `out_json` lacks `@key` raw nested path | `@key` supported in out_json; suite asserts unquoted insert | timer origin map | **Closed** (impl 2026-07-16; suite 2026-09-06 TP-JSON-RAW-01) |
 | L-MENU-01 | Specialized safe-rm kept interactive empty argv as an install prompt after origin 1.4.0 opened a numbered menu. The copy in `src/selfmanaged` is still 1.3.1 and has no menu | `src/safe-rm` interactive empty argv opens front **1** remove-guard / **8** / **9**. Under **1**, **11** `rm`. Under **8**, **82–87** and **0** Back. **81** unprinted. Pipe, quiet, and json empty argv still place | `reports/2026-09-27-safe-rm-main-menu-vs-selfmanaged.md` | **Closed** (2026-09-27 ship unit + `tests/run_dry_run.sh` PASS=105) |

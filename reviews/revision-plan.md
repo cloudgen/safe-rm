@@ -1,8 +1,7 @@
-# Revision plan — selfmanaged
+# Revision plan — safe-rm
 
-Living backlog of **bootstrap origin** improvements.  
-**Product:** selfmanaged Type 0 CLI · **Class:** bootstrap (no domain SSOT)  
-**Source reflection:** specialize gitlab-nginx from selfmanaged (2026-08-11)  
+Living backlog. Closed rows below are Type 0 origin work. This product is **safe-rm** (`src/safe-rm`) with domain SSOT `requirement-domain-safe-rm`.  
+**Source reflection:** specialize gitlab-nginx (2026-08-11)  
 **Last update:** 2026-09-06 (SM-REV-06 / TP-JSON-RAW-01 **done**)
 
 Status: **done** · **open** · **deferred**
@@ -28,8 +27,8 @@ Status: **done** · **open** · **deferred**
 | SM-REV-04 | medium | Specializee **tests/README porting checklist** (rename app, GLOBAL_BIN, domain suite) | **done** (1.2.2) | See `tests/README.md` § Specializee porting |
 | SM-REV-05 | medium | Origin-review lesson: never bulk-sed org names in CIAO URLs when retargeting REQs | **done** (2026-08-11) | Captured as `L-REQ-CIAO-URL-01` in `reviews/lessons.md` |
 | SM-REV-06 | low | TP-JSON-RAW-01 suite assertion for `out_json` `@key` | **done** (1.2.4) | `tests/test_cli.sh`; closes SM-PLAN-01 |
-| SM-REV-07 | low | Optional GitHub Action template comment for specializees | **deferred** | Selfmanaged already has `.github/workflows/ci.yml` |
-| SM-REV-08 | n/a | Domain verbs inside selfmanaged | **rejected** | Would pollute bootstrap; reverse-copy risk |
+| SM-REV-07 | low | Optional GitHub Action template comment for specializees | **deferred** | This repo already has `.github/workflows/ci.yml` |
+| SM-REV-08 | n/a | Domain verbs copied onto the bootstrap snapshot | **rejected** | Would pollute that snapshot; reverse-copy risk. Domain verbs stay on `src/safe-rm` |
 
 ---
 
@@ -43,7 +42,7 @@ Status: **done** · **open** · **deferred**
 
 ## Publish checklist (when cutting a release)
 
-1. Align `VERSION` / README badge / CHANGELOG / SECURITY / `selfmanaged.sha256`  
-2. `./tests/run.sh` green  
+1. Align `VERSION` / README badge / CHANGELOG / SECURITY / `src/safe-rm.sha256`  
+2. `./tests/run_dry_run.sh` green  
 3. Update this plan + `what-to-review.md` last date  
 4. Commit + vault-bound push as **cloudgen** (repository-user)

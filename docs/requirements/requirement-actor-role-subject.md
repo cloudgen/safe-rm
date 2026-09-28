@@ -7,7 +7,7 @@
 
 This requirement says **who** may run each family of safe-rm commands. There is no dest review and no approver. The row that matters for the 2023 swap is **setup**: the check that `/usr/bin/origin-rm` or `/bin/origin-rm` already holds the original binary, and the move that does that swap when it has not happened.
 
-**Scope:** Actor, role, and subject for the main menu, the guard, setup, restore, and the selfmanaged lifecycle.
+**Scope:** Actor, role, and subject for the main menu, the guard, setup, restore, and the self-management lifecycle.
 **Out of scope:** How the swap moves the file (`requirement-domain-safe-rm.md`). Which rows the main menu draws (`requirement-shell-cli-default-interaction.md`).
 
 ### 1.1 Human-facing

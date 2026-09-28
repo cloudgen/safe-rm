@@ -4,7 +4,7 @@
 
 ## 1. Purpose
 
-This requirement is the **project Single Source of Truth** for how the selfmanaged **POSIX shell CLI** behaves in **interactive** (human + TTY) versus **non-interactive** (automation, `curl | sh`, CI/CD, pipes, `--json` / often `--quiet`) environments.
+This requirement is the **project Single Source of Truth** for how the safe-rm **POSIX shell CLI** behaves in **interactive** (human + TTY) versus **non-interactive** (automation, `curl | sh`, CI/CD, pipes, `--json` / often `--quiet`) environments.
 
 It defines interactive vs non-interactive behavior for this shell project (global flags + `prompt_*` + TTY detection—not a Node Config singleton).
 
@@ -13,12 +13,12 @@ It defines interactive vs non-interactive behavior for this shell project (globa
 
 ### 1.1 Human-facing
 
-**In one sentence:** On a real terminal the tool may **ask** before first install or uninstall; under a pipe, CI, `--quiet`, or `--json` it **must never wait for a key** — first install still **places** the program; uninstall without `--force` **must stop**.
+**In one sentence:** On a real terminal, empty argv opens the numbered menu, and uninstall may **ask**; under a pipe, CI, `--quiet`, or `--json` the tool **must never wait for a key** — a non-interactive first install still **places** the program; uninstall without `--force` **must stop**.
 
 | Box | Meaning | Example |
 |-----|---------|---------|
-| You / this login | A person at a terminal, or a script / `curl \| sh` with nobody to answer | `selfmanaged` on a TTY vs `curl … \| sh` |
-| The other role | Machine flags (`--json`, `--quiet`) and `--force` for deliberate uninstall | `selfmanaged --json version` · `selfmanaged --force self-uninstall` |
+| You / this login | A person at a terminal, or a script / `curl \| sh` with nobody to answer | `safe-rm` on a TTY vs `curl … \| sh` |
+| The other role | Machine flags (`--json`, `--quiet`) and `--force` for deliberate uninstall | `safe-rm --json version` · `safe-rm --force self-uninstall` |
 | Not this file | Empty-argv case table (peer); `out_*` printers; command catalog | `requirement-shell-cli-zero-arguments.md` |
 
 | Includes | Excludes |
@@ -28,14 +28,14 @@ It defines interactive vs non-interactive behavior for this shell project (globa
 
 | Surface | What you open | What for |
 |---------|---------------|----------|
-| `./src/selfmanaged` | Program file | `TTY` at startup; `prompt_*`; `inst_maybe_install` |
-| `selfmanaged --quiet` / `--json` | Flags | No prompts; first install must still place |
+| `./src/safe-rm` | Program file | `TTY` at startup; `prompt_*`; `inst_maybe_install` |
+| `safe-rm --quiet` / `--json` | Flags | No prompts; first install must still place |
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
-| Install from a pipe | Nobody can type yes. The tool **places** the program and prints a short auto-install note. | `curl -fsSL …/selfmanaged \| /bin/sh` |
-| First install on a real terminal | The tool **asks** once. Yes places; no skips without dumping help. | `selfmanaged` (no args, terminal) |
-| Uninstall without `--force` off a terminal | The tool **must not** delete. JSON says confirm is required. | `selfmanaged --json self-uninstall` |
+| Install from a pipe | Nobody can type yes. The tool **places** the program and prints a short auto-install note. | `curl -fsSL …/safe-rm \| /bin/sh` |
+| Open the menu on a real terminal | Empty argv opens the numbered menu. It does not ask to place and it does not place. | `safe-rm` (no args, terminal) |
+| Uninstall without `--force` off a terminal | The tool **must not** delete. JSON says confirm is required. | `safe-rm --json self-uninstall` |
 
 Jargon: a **TTY** here means “this login has a real terminal on stdin and stdout.” Measure that **once** at startup (`TTY`); helpers **read `TTY`**.
 
@@ -134,10 +134,10 @@ interactive   non-interactive
 
 ### 2.5 Implementation Notes (this project)
 
-| Item | Value for selfmanaged |
+| Item | Value for safe-rm |
 |------|------------------------|
-| **Product / binary** | `selfmanaged` |
-| **Implementation** | `src/selfmanaged` |
+| **Product / binary** | `safe-rm` |
+| **Implementation** | `src/safe-rm` |
 | **Mode globals** | `TTY`, `QUIET`, `JSON`, `DEBUG`, `FORCE`, `FORCE_REINSTALL` |
 | **TTY init** | `[ -t 0 ] && [ -t 1 ] && TTY=1` near config block |
 | **Flag parse SSOT** | `app_main` |
@@ -271,7 +271,7 @@ This dual policy is intentional: **pipe / quiet / json first-install proceeds**;
 
 ## 5. Definition of done (shell interactive vs non-interactive)
 
-Mode-related work for selfmanaged is **not done** if any of the following fail:
+Mode-related work for safe-rm is **not done** if any of the following fail:
 
 1. No code path blocks on `read` under `--json`, `--quiet`, or non-TTY (except documented `INTERACTIVE=1` value prompt).  
 2. Destructive uninstall without `--force` does not silently proceed in non-interactive mode.  
@@ -306,10 +306,10 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | `docs/requirements/requirement-shell-self-management.md` | Uninstall confirm / force policy |
 | `docs/requirements/requirement-shell-idempotency.md` | Re-run safety under automation |
 | `docs/requirements/index.md` | Registry SSOT |
-| `./src/selfmanaged` | Implementation under test |
+| `./src/safe-rm` | Implementation under test |
 
 ---
 
 **Last Updated**: 2026-09-17  
-**Owner**: selfmanaged project maintainers  
+**Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 16, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

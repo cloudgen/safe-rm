@@ -4,7 +4,7 @@
 
 ## 1. Purpose
 
-This requirement is the **project Single Source of Truth** for **CLI self-management** of the selfmanaged POSIX shell tool: inspecting, upgrading, and removing its own installed binary (and related install artifacts) safely—especially for tools installed via one-command online install (`curl | sh`)—without requiring a separate package-manager workflow for routine updates.
+This requirement is the **project Single Source of Truth** for **CLI self-management** of the safe-rm POSIX shell tool: inspecting, upgrading, and removing its own installed binary (and related install artifacts) safely—especially for tools installed via one-command online install (`curl | sh`)—without requiring a separate package-manager workflow for routine updates.
 
 It defines lifecycle capabilities and safety rules for this shell project’s self-management commands.
 
@@ -19,7 +19,7 @@ It defines lifecycle capabilities and safety rules for this shell project’s se
 
 | Box | Meaning | Example |
 |-----|---------|---------|
-| You / this login | The person who installed the CLI | `selfmanaged version-check` · `selfmanaged self-update` |
+| You / this login | The person who installed the CLI | `safe-rm version-check` · `safe-rm self-update` |
 | The other role | First-time empty argv (install-ensure) | `requirement-shell-cli-zero-arguments.md` |
 | Not this file | apt/apk, host packages, dedicated-account app start/stop | Out of scope for this product |
 
@@ -30,14 +30,14 @@ It defines lifecycle capabilities and safety rules for this shell project’s se
 
 | Surface | What you open | What for |
 |---------|---------------|----------|
-| `selfmanaged about` | Command | Installed? where? |
-| `selfmanaged self-uninstall` | Command | Remove with confirm or `--force` |
+| `safe-rm about` | Command | Installed? where? |
+| `safe-rm self-uninstall` | Command | Remove with confirm or `--force` |
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
-| See if a newer file exists | Compare local version to the channel. Do not mutate the install. | `selfmanaged version-check` · `selfmanaged --json version-check` |
-| Update | If the channel is newer, replace the installed file. If already latest, say so. | `selfmanaged self-update` |
-| Remove | JSON without `--force` **must fail** with “confirm required,” not fake success. | `selfmanaged --json self-uninstall` · `selfmanaged --force self-uninstall` |
+| See if a newer file exists | Compare local version to the channel. Do not mutate the install. | `safe-rm version-check` · `safe-rm --json version-check` |
+| Update | If the channel is newer, replace the installed file. If already latest, say so. | `safe-rm self-update` |
+| Remove | JSON without `--force` **must fail** with “confirm required,” not fake success. | `safe-rm --json self-uninstall` · `safe-rm --force self-uninstall` |
 
 ---
 
@@ -121,25 +121,25 @@ Root may write global install path; non-root uses user path. Do not assume root 
 
 ### 2.8 Implementation Notes (this project)
 
-| Item | Value for selfmanaged |
+| Item | Value for safe-rm |
 |------|------------------------|
-| **Product / binary** | `selfmanaged` (`APP_NAME`) |
-| **Implementation file** | `src/selfmanaged` |
+| **Product / binary** | `safe-rm` (`APP_NAME`) |
+| **Implementation file** | `src/safe-rm` |
 | **Dispatcher** | `app_main` routes `version-check` → `ver_check`; `self-update` → `inst_self_update`; `self-uninstall` → `inst_self_uninstall`; `about` → `app_about` |
 | **CLI self-install SSOT** | `inst_self_install` (empty argv / `self-install` / `install` alias; copy when `$0` is a script) — `requirement-shell-cli-self-install.md` |
 | **Install orchestrator SSOT** | `inst_perform_install` (+ prepare / download with or without checksum / atomic install) — **download** path reused by `self-update` and interpreter `$0` |
 | **Version compare** | `ver_gt` (pure POSIX); local version via `inst_get_version` |
 | **Install presence** | `inst_is_installed` |
 | **Paths** | `GLOBAL_BIN` default `/usr/local/bin`; `USER_BIN` default `${HOME}/.local/bin` |
-| **Repository identity** | `REPO_USER` default `cloudgen`; `REPO_NAME` default `selfmanaged` |
-| **Release channel** | `SCRIPT_URL` Config default composed as `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/${SCRIPT_RELPATH}` with `SCRIPT_RELPATH` default `src/${APP_NAME}` (this project: `https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged` — product channel SSOT; override `SCRIPT_URL`, `SCRIPT_RELPATH`, or `REPO_*` via env if needed) |
+| **Repository identity** | `REPO_USER` default `cloudgen`; `REPO_NAME` default `safe-rm` |
+| **Release channel** | `SCRIPT_URL` Config default composed as `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/${SCRIPT_RELPATH}` with `SCRIPT_RELPATH` default `src/${APP_NAME}` (this project: `https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm` — product channel SSOT; override `SCRIPT_URL`, `SCRIPT_RELPATH`, or `REPO_*` via env if needed) |
 | **Strict digest pin** | Runtime `CHECKSUM` when set in process env → `inst_perform_install_download_with_checksum` (secondary install-path only; **not** shown in `help`/`about`; see automatic-checksum requirement) |
 | **Companion digest** | Default `${SCRIPT_URL}.sha256` via `inst_perform_install_download_without_checksum` — law + transparency: `requirement-shell-automatic-checksum.md` |
 | **Force reinstall** | `FORCE_REINSTALL`; CLI `--force` required by CLI interface requirement |
 | **Uninstall steps** | `inst_self_uninstall_determine_bin` → `inst_self_uninstall_confirm_and_remove` → `inst_self_uninstall_cleanup_path` |
 | **PATH ensure** | `path_add_shell` / bash / zsh / fish helpers on user install |
 | **Privilege** | Type 0 only for self-management surface; no dedicated system user |
-| **Version SSOT** | `VERSION` default `1.3.1` in script config block (`VERSION="1.3.1"`) |
+| **Version SSOT** | `VERSION` default `1.0.9` in script config block (`VERSION="1.0.9"`) |
 
 #### Normative acceptance behaviors (this project)
 
@@ -159,7 +159,7 @@ Root may write global install path; non-root uses user path. Do not assume root 
 |------|--------|
 | Downgrade gate via `ver_gt` (refuse unless `--force`) | **Implemented** in `inst_self_update` (2026-07-12) |
 | CLI `--force` → `FORCE` / `FORCE_REINSTALL` | **Implemented** in `app_main` |
-| `SCRIPT_URL` default channel URL | **This project:** non-empty product default composed from `REPO_USER` / `REPO_NAME` / `SCRIPT_RELPATH` (`https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged`); product README must show simple literal one-liner(s) from that SSOT; env may still override |
+| `SCRIPT_URL` default channel URL | **This project:** non-empty product default composed from `REPO_USER` / `REPO_NAME` / `SCRIPT_RELPATH` (`https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm`); product README must show simple literal one-liner(s) from that SSOT; env may still override |
 
 ### 2.9 Why This Requirement Exists (Direct CIAO Alignment)
 
@@ -206,7 +206,7 @@ Root may write global install path; non-root uses user path. Do not assume root 
 
 ## 5. Definition of done (shell self-management)
 
-Work claiming self-management support for selfmanaged is **not done** if any of the following fail:
+Work claiming self-management support for safe-rm is **not done** if any of the following fail:
 
 1. User-facing lifecycle commands exist and are routed (`version-check`, `self-update`, `self-uninstall`, `about`).  
 2. Update path verifies integrity (pinned and/or companion digest policy) and uses atomic replace via install SSOT.  
@@ -243,10 +243,10 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | `docs/requirements/requirement-shell-output-requirements.md` | Lifecycle messaging / quiet / JSON |
 | `docs/requirements/requirement-shell-modular-function-design.md` | `inst_*` / `out_*` ownership |
 | `docs/requirements/index.md` | Registry SSOT |
-| `./src/selfmanaged` | Implementation under test |
+| `./src/safe-rm` | Implementation under test |
 
 ---
 
 **Last Updated**: 2026-09-17  
-**Owner**: selfmanaged project maintainers  
+**Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 5, 10, 11, 14, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

@@ -4,7 +4,7 @@
 
 ## 1. Purpose
 
-This requirement is the **project Single Source of Truth** for **modular function organization** of the selfmanaged POSIX shell CLI.
+This requirement is the **project Single Source of Truth** for **modular function organization** of the safe-rm POSIX shell CLI.
 
 It defines modular function organization for a **monolithic yet modular** single-file shell tool that remains `curl | sh` compatible.
 
@@ -15,12 +15,12 @@ It defines modular function organization for a **monolithic yet modular** single
 
 ### 1.1 Human-facing
 
-**In one sentence:** People still install **one file** (`./src/selfmanaged`); inside that file, functions stay in labeled families (`out_` print, `inst_` install, `app_` menu, `prompt_` questions) so a change to help does not rewrite download.
+**In one sentence:** People still install **one file** (`./src/safe-rm`); inside that file, functions stay in labeled families (`out_` print, `inst_` install, `app_` menu, `prompt_` questions) so a change to help does not rewrite download.
 
 | Box | Meaning | Example |
 |-----|---------|---------|
 | You / this login | Maintainer editing one family | Change `app_help`, leave `inst_perform_install` |
-| The other role | The `curl \| sh` user who needs a **single** downloadable file | One ship unit at `src/selfmanaged` |
+| The other role | The `curl \| sh` user who needs a **single** downloadable file | One ship unit at `src/safe-rm` |
 | Not this file | What each command **does** (CLI / lifecycle / output peers) | Prefix table here; behavior tables elsewhere |
 
 | Includes | Excludes |
@@ -30,11 +30,11 @@ It defines modular function organization for a **monolithic yet modular** single
 
 | Surface | What you open | What for |
 |---------|---------------|----------|
-| `./src/selfmanaged` | The one program file | Function families |
+| `./src/safe-rm` | The one program file | Function families |
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
-| Change a message | Edit an `out_*` helper, not a raw `echo` in install. | Open `./src/selfmanaged`, find `out_` |
+| Change a message | Edit an `out_*` helper, not a raw `echo` in install. | Open `./src/safe-rm`, find `out_` |
 | Change first-install ask | Edit `inst_maybe_install` / `prompt_yes_no`, not `app_help`. | Same file; different prefix |
 
 ---
@@ -52,7 +52,7 @@ CIAO-Lite shell CLIs distributed as one-liners **MUST** use:
 | **Documented units** | Every public helper carries a defensive header and safe defaults |
 | **Requirements extract policy** | Durable rules live in `requirement-*.md`; code comments encode intent and Protection Zones |
 
-The installable CLI **MUST** remain **one** file so `curl | sh` still works. This project ships that file at `src/selfmanaged` (companion `src/selfmanaged.sha256` beside it). A build that concatenates several authoring files is allowed only when the published channel is still that one file.
+The installable CLI **MUST** remain **one** file so `curl | sh` still works. This project ships that file at `src/safe-rm` (companion `src/safe-rm.sha256` beside it). A build that concatenates several authoring files is allowed only when the published channel is still that one file.
 
 ### 2.2 Official function prefix table (mandatory)
 
@@ -92,7 +92,7 @@ Every non-trivial function **MUST** include a defensive header of this shape (tr
 
 #### 2.3.1 Product-source documentation authority
 
-Optional `ALIGNMENT` / `See` / “fully synchronized with” lines in **product source** (`./src/selfmanaged`) **MUST** cite only **live** `docs/requirements/requirement-*.md` paths that exist on disk and appear in `docs/requirements/index.md`.
+Optional `ALIGNMENT` / `See` / “fully synchronized with” lines in **product source** (`./src/safe-rm`) **MUST** cite only **live** `docs/requirements/requirement-*.md` paths that exist on disk and appear in `docs/requirements/index.md`.
 
 | Allowed in product source comments | Forbidden in product source comments |
 |------------------------------------|--------------------------------------|
@@ -166,17 +166,17 @@ function_name() {
 
 ### 2.6 Implementation Notes (this project)
 
-| Item | Value for selfmanaged |
+| Item | Value for safe-rm |
 |------|------------------------|
-| **Product / binary** | `selfmanaged` (`APP_NAME`) |
-| **Single shipped script** | `src/selfmanaged` (~2k lines, `#!/bin/sh`) |
-| **`src/` directory** | Present but empty — **not** a multi-file runtime layout yet |
-| **Domain prefix `selfmanaged_*`** | **Not used** today (Type 0 lifecycle only; no product domain ops) |
-| **Bootstrap** | Direct execution when `${0##*/}` is `selfmanaged` or `selfmanaged.sh` → `app_main "$@"` |
+| **Product / binary** | `safe-rm` (`APP_NAME`) |
+| **Single shipped script** | `src/safe-rm` (`#!/bin/sh`, one file) |
+| **`src/` directory** | Ship unit and companion digest. Not a multi-file runtime |
+| **Domain prefix `srm_`** | Guard, classify, setup, and restore (`requirement-domain-safe-rm.md`) |
+| **Entry** | The file ends with `app_main "$@"` (no basename gate). Basename `rm` is the guard before the menu |
 
 #### Live prefix inventory (authoritative categories)
 
-| Prefix | Live examples in `./src/selfmanaged` |
+| Prefix | Live examples in `./src/safe-rm` |
 |--------|----------------------------------|
 | `out_` | `out_text`, `out_success`, `out_info`, `out_warn`, `out_error`, `out_die`, `out_plain`, `out_msg_n`, `out_empty_line`, `out_double_line`, `out_json`, `out_json_error` |
 | `inst_` | `inst_perform_install`, `inst_perform_install_prepare_target`, `inst_perform_install_download_with_checksum`, `inst_perform_install_download_without_checksum`, `inst_perform_install_atomic_install`, `inst_argv0_is_shell_interpreter`, `inst_resolve_self_script`, `inst_cli_dest_mode`, `inst_self_install_copy_from_script`, `inst_self_install`, `inst_maybe_install`, `inst_self_update`, `inst_self_uninstall` (+ determine_bin / confirm_and_remove / cleanup_path), `inst_is_installed`, `inst_get_version` |
@@ -185,6 +185,7 @@ function_name() {
 | `util_` | `util_json_escape`, `util_sha256_file`, `util_fetch_remote_version`, `util_get_install_bin_path`, `util_backup`, `util_resolve_storage` (**wired** from `app_main` / `app_about`; SSOT: `requirement-shell-cli-storage.md`), `util_get_current_shell` |
 | `prompt_` | `prompt_ask`, `prompt_yes_no` |
 | `app_` | `app_about`, `app_version` (dispatcher routes `version` here), `app_help`, `app_default`, `app_main` |
+| `srm_` | `srm_classify`, `srm_cmd_rm`, `srm_cmd_setup`, `srm_cmd_restore` (`requirement-domain-safe-rm.md`) |
 
 #### Structural notes (implementation status)
 
@@ -197,7 +198,7 @@ function_name() {
 
 #### New function checklist (this project)
 
-When adding a function to `./src/selfmanaged`:
+When adding a function to `./src/safe-rm`:
 
 1. Choose the correct prefix from §2.2 / this inventory.  
 2. Add the defensive header (full for non-trivial logic).  
@@ -252,7 +253,7 @@ When adding a function to `./src/selfmanaged`:
 
 ## 5. Definition of done (shell modular function design)
 
-A modular-structure change for selfmanaged is **not done** if any of the following fail:
+A modular-structure change for safe-rm is **not done** if any of the following fail:
 
 1. Every new function uses an approved prefix from this requirement.  
 2. Critical helpers retain defensive headers and Protection intent.  
@@ -288,10 +289,10 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | `docs/requirements/requirement-shell-idempotency.md` | Re-run safety inside ensure helpers |
 | `docs/requirements/requirement-shell-output-requirements.md` | `out_*` ownership |
 | `docs/requirements/index.md` | Registry SSOT |
-| `./src/selfmanaged` | Implementation under modular design rules |
+| `./src/safe-rm` | Implementation under modular design rules |
 
 ---
 
 **Last Updated**: 2026-09-17  
-**Owner**: selfmanaged project maintainers  
+**Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 6, 7, 8, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

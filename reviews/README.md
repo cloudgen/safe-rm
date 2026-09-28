@@ -1,12 +1,12 @@
-# Product reviews (selfmanaged)
+# Product reviews (safe-rm)
 
-**Purpose:** Public, git-tracked **product quality surface** for this bootstrap Type 0 CLI — peer of `tests/`. Holds the living review plan, test-plan lock-in, prior-report lessons, and committed run reports.
+**Purpose:** Public, git-tracked **product quality surface** for this CLI — peer of `tests/`. Holds the living review plan, test-plan lock-in, prior-report lessons, and committed run reports.
 
 **Not:** Product law (`docs/requirements/`). Not harness blank checklists (`docs/templates/checklists/`). Not session `/tmp` scratch (promote durable outcomes here).
 
-**Product class:** Bootstrap project (Type 0; no domain requirements SSOT).  
-**Ship unit:** `src/selfmanaged` (+ `src/selfmanaged.sha256`)  
-**Tests:** `./tests/run.sh`
+**Product:** safe-rm. Domain SSOT: `requirement-domain-safe-rm`.  
+**Ship unit:** `src/safe-rm` (+ `src/safe-rm.sha256`)  
+**Tests:** `./tests/run_dry_run.sh` (product). `./tests/run.sh` runs that suite, then the Type 0 snapshot suite.
 
 ## Layout
 

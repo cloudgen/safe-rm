@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.9] - 2026-09-27
+
+### Fixed
+
+- On Termux, `rm -rf $PREFIX/var` was allowed. `$PREFIX` stands for `/usr`, so that path is the same kind of directory as `/var`. The guard now refuses `$PREFIX`, `$PREFIX/bin` and anything inside it, and the exact directories `$PREFIX/etc`, `$PREFIX/var`, `$PREFIX/lib`, `$PREFIX/lib64`, `$PREFIX/opt`, `$PREFIX/sbin`, and `$PREFIX/boot`. A folder inside `$PREFIX/var`, such as `$PREFIX/var/log`, stays allowed. `$PREFIX/share`, `$PREFIX/include`, `$PREFIX/tmp`, and `$PREFIX/libexec` stay allowed
+
 ## [1.0.8] - 2026-09-27
 
 ### Fixed

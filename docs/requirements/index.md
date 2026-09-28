@@ -1,8 +1,8 @@
 # Requirements index
 
-**Product:** safe-rm (POSIX `/bin/sh` Type 0 CLI plus a guarded `rm`, specialized from selfmanaged)  
+**Product:** safe-rm (POSIX `/bin/sh` Type 0 CLI plus a guarded `rm`)  
 **Workspace state:** Specialized product law (not blank genesis); **software-development** class; one Active domain SSOT.  
-**Updated:** 2026-09-27 (Termux: `which rm` is `$PREFIX/bin/rm`; this login runs setup there and does not call `sudo`)
+**Updated:** 2026-09-27 (Termux blacklist: `$PREFIX/var` and the other prefix matches of the Linux system directories are refused; a folder inside `$PREFIX/var` stays allowed)
 
 | ID / key | Title | Area | Status | Path | Updated |
 |----------|-------|------|--------|------|---------|
@@ -20,7 +20,7 @@
 | requirement-shell-output-requirements | Central `out_*` output SSOT (stdout/stderr, modes; `@key` raw nested JSON) | shell | Active | `requirement-shell-output-requirements.md` | 2026-09-06 |
 | requirement-shell-script-coding | POSIX `/bin/sh` coding-style specialize-in home (without it, portable lessons arrive raw) | shell | Active | `requirement-shell-script-coding.md` | 2026-09-06 |
 | requirement-shell-self-management | Self-management lifecycle (version-check, update, uninstall, about) | shell | Active | `requirement-shell-self-management.md` | 2026-09-17 |
-| requirement-domain-safe-rm | Protected rm (swap system rm to this guard, origin-rm kept, restore; Alpine `/bin/rm` and `/usr/bin/rm` are different paths and both are checked; Termux `which rm` is `$PREFIX/bin/rm` and this login swaps that path with no sudo; the command named rm accepts origin-rm switches including -rf; a lifecycle `--` switch on that command is this program, and a bare word is a path; any home directory refused; a folder inside any home allowed; --dry-run) | domain | Active | `requirement-domain-safe-rm.md` | 2026-09-27 |
+| requirement-domain-safe-rm | Protected rm (swap system rm to this guard, origin-rm kept, restore; Alpine `/bin/rm` and `/usr/bin/rm` are different paths and both are checked; Termux `which rm` is `$PREFIX/bin/rm` and this login swaps that path with no sudo; on Termux `$PREFIX/var` and the other prefix matches of the Linux blacklist are refused, and a folder inside `$PREFIX/var` stays allowed; the command named rm accepts origin-rm switches including -rf; a lifecycle `--` switch on that command is this program, and a bare word is a path; any home directory refused; a folder inside any home allowed; --dry-run) | domain | Active | `requirement-domain-safe-rm.md` | 2026-09-27 |
 
 **Rules for agents:**
 

@@ -4,7 +4,7 @@
 
 ## 1. Purpose
 
-This requirement is the **project Single Source of Truth** for **idempotency (re-run safety)** of state-changing operations in the **POSIX shell CLI** for selfmanaged.
+This requirement is the **project Single Source of Truth** for **idempotency (re-run safety)** of state-changing operations in the **POSIX shell CLI** for safe-rm.
 
 It defines re-run safety for ensure-style shell lifecycle commands (install, PATH integration, self-update, self-uninstall, and related helpers). Read-only commands remain outside the “ensure-X” contract except where they must stay safe under repeat invocation.
 
@@ -19,8 +19,8 @@ It defines re-run safety for ensure-style shell lifecycle commands (install, PAT
 
 | Box | Meaning | Example |
 |-----|---------|---------|
-| You / this login | Re-running the one-liner or `install` after success | Second `selfmanaged` with no args |
-| The other role | Deliberate replace (`--force`) or a real failure that must stay loud | `selfmanaged install --force` |
+| You / this login | Re-running the one-liner or `install` after success | Second `safe-rm install` |
+| The other role | Deliberate replace (`--force`) or a real failure that must stay loud | `safe-rm install --force` |
 | Not this file | Empty-argv Case A/B/C wording (peer); checksum algorithm | `requirement-shell-cli-zero-arguments.md` |
 
 | Includes | Excludes |
@@ -30,13 +30,13 @@ It defines re-run safety for ensure-style shell lifecycle commands (install, PAT
 
 | Surface | What you open | What for |
 |---------|---------------|----------|
-| `selfmanaged` (no args) | Command | Second run = already installed |
-| `selfmanaged self-update` | Command | Second run = already latest |
+| `safe-rm install` (second time) | Command | Already installed |
+| `safe-rm self-update` | Command | Second run = already latest |
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
-| Re-run the one-liner | If the program is already in user or system bin, you get **already installed**, not help and not a second download. | `selfmanaged` |
-| Force a replace | Only `--force` means “download again on purpose.” | `selfmanaged install --force` |
+| Re-run the one-liner | If the program is already in user or system bin, you get **already installed**, not help and not a second download. | The same `curl … \| sh` pipe |
+| Force a replace | Only `--force` means “download again on purpose.” | `safe-rm install --force` |
 
 ---
 
@@ -88,10 +88,10 @@ Force **MUST NOT** be used as a silent way to skip integrity verification.
 
 ### 2.5 Implementation Notes (this project)
 
-| Item | Value for selfmanaged |
+| Item | Value for safe-rm |
 |------|------------------------|
-| **Product / binary** | `selfmanaged` (`APP_NAME`) |
-| **Implementation file** | `src/selfmanaged` |
+| **Product / binary** | `safe-rm` (`APP_NAME`) |
+| **Implementation file** | `src/safe-rm` |
 | **Install detect SSOT** | `inst_is_installed` / `inst_get_version` |
 | **Install ensure SSOT** | `inst_self_install` (copy when `$0` is a script) + download/atomic helpers for interpreter `$0` / `self-update` |
 | **Force reinstall var** | `FORCE_REINSTALL` (default `0`); CLI `--force` must set this per `requirement-shell-cli-interface.md` |
@@ -104,7 +104,7 @@ Force **MUST NOT** be used as a silent way to skip integrity verification.
 | Command / path | Desired state | Re-run when already good | Force / special |
 |----------------|---------------|--------------------------|-----------------|
 | `self-install` / `install` (alias) | Binary present at privilege-correct path | **Success no-op**; human: already installed; JSON success | `FORCE_REINSTALL=1` re-copies or re-downloads per `$0` |
-| Zero-arg install-ensure (**Type O**) | Binary present (local or global) | Second zero-arg when installed: **success no-op** “already installed” (not help, not reinstall) without force | Same force rules as install; see `requirement-shell-cli-zero-arguments.md` |
+| Zero-arg install-ensure (**Type O**, not a terminal menu) | Binary present (local or global) | Second non-interactive zero-arg when installed: **success no-op** “already installed” (not help, not reinstall) without force. A terminal with no arguments opens the menu and does not place | Same force rules as install; see `requirement-shell-cli-zero-arguments.md` |
 | `inst_maybe_install` | Installed, user declined, **or** quiet/json Case A placed | Already installed → return success without re-prompt storm. Quiet/json when **not** installed **MUST** place (not a success skip). | — |
 | `self-update` | Local version equals remote (or newer under project policy) | **Success no-op** “already latest” when versions equal and force off | When versions differ, reinstall via install path; force may force reinstall; **must not silent-downgrade** without explicit force policy (see self-management term) |
 | `self-uninstall` | Binary absent | **Success no-op** “not installed / nothing to uninstall” | Force may skip interactive confirm only; still no over-delete |
@@ -170,7 +170,7 @@ Force **MUST NOT** be used as a silent way to skip integrity verification.
 
 ## 5. Definition of done (shell idempotency)
 
-A state-changing shell change for selfmanaged is **not done** if any of the following fail:
+A state-changing shell change for safe-rm is **not done** if any of the following fail:
 
 1. Second `self-install` / `install` with healthy install and force off exits success without reinstall.  
 2. Second `self-update` when local equals remote and force off exits success without reinstall.  
@@ -205,10 +205,10 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | `docs/requirements/requirement-shell-self-management.md` | Lifecycle commands; integrity + downgrade policy |
 | `docs/requirements/requirement-shell-output-requirements.md` | Messages on no-op / already-done paths |
 | `docs/requirements/index.md` | Registry SSOT |
-| `./src/selfmanaged` | Implementation under test |
+| `./src/safe-rm` | Implementation under test |
 
 ---
 
 **Last Updated**: 2026-09-17  
-**Owner**: selfmanaged project maintainers  
+**Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; related `requirement-shell-cli-interface.md`; CIAO Principles 1, 2, 3, 11, 12, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-class-software-dev.md  
-**Status**: Active (Version 1.0.1 – selfmanaged class law + residual stack)  
+**Status**: Active (Version 1.0.1 – safe-rm class law + residual stack)  
 **Area**: class  
 **Key**: `requirement-class-software-dev`  
 **Philosophy**: CIAO **v2.10.2** / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered / Over-protect)
@@ -12,11 +12,11 @@ This file is **class law + residual SSOT**, not a second copy of Type 0 lifecycl
 
 ### 1.1 Human-facing
 
-**In one sentence:** This folder’s **project nature** is **software-development**: we write a POSIX `/bin/sh` program people can install (`./src/selfmanaged`), not a blank starter kit and not a server-maintenance allowlist.
+**In one sentence:** This folder’s **project nature** is **software-development**: we write a POSIX `/bin/sh` program people can install (`./src/safe-rm`), not a blank starter kit and not a server-maintenance allowlist.
 
 | Box | Meaning | Example |
 |-----|---------|---------|
-| You / this login | Someone building or installing this CLI | Ship unit `./src/selfmanaged` + `tests/run.sh` |
+| You / this login | Someone building or installing this CLI | Ship unit `./src/safe-rm` + `tests/run.sh` |
 | The other role | A genesis seed (empty law) or a server-maintenance tree (host allowlists) | Those are **not** this workspace |
 | Not this file | Install, help, checksum, storage — peer shell requirements own those tables | `requirement-shell-cli-interface.md` and peers |
 
@@ -27,13 +27,13 @@ This file is **class law + residual SSOT**, not a second copy of Type 0 lifecycl
 
 | Surface | What you open | What for |
 |---------|---------------|----------|
-| `./src/selfmanaged` | Program file people install | Live stack (POSIX `/bin/sh`) |
+| `./src/safe-rm` | Program file people install | Live stack (POSIX `/bin/sh`) |
 | This file | Class + residual notes | What kind of work this folder is |
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
 | Confirm the stack | Primary language is POSIX `/bin/sh`. There is no `package.json` / compiler. Tests are shell. | `./tests/run.sh` |
-| Look for install rules | They live on the empty-argv and CLI-interface requirements, not here. | Read those peer files; run `selfmanaged help` |
+| Look for install rules | They live on the empty-argv and CLI-interface requirements, not here. | Read those peer files; run `safe-rm help` |
 
 ---
 
@@ -90,9 +90,9 @@ This file is **class law + residual SSOT**, not a second copy of Type 0 lifecycl
 
 ### 2.7 Implementation Notes (this project)
 
-| Field | Value (selfmanaged) |
+| Field | Value (safe-rm) |
 |-------|---------------------|
-| **Project display name** | `selfmanaged` (product root `README.md` H1 SSOT) |
+| **Project display name** | `safe-rm` (product root `README.md` H1 SSOT) |
 | **Project class** | software-development |
 | **Class requirement basename** | `requirement-class-software-dev.md` |
 | **Primary language(s)** | `posix-sh` (`/bin/sh`) |
@@ -103,13 +103,13 @@ This file is **class law + residual SSOT**, not a second copy of Type 0 lifecycl
 | **Cross-compile in scope?** | no |
 | **Primary project/package tool** | **none** — no `package.json` / `pyproject` / language module system; ship unit is the source |
 | **Lockfile policy** | not used |
-| **Test runner** | `tests/run.sh` + `tests/test_cli.sh` + `tests/test_install_lifecycle.sh` (POSIX shell) |
+| **Test runner** | `tests/run_dry_run.sh` proves `src/safe-rm`. `tests/run.sh` runs that suite, then the Type 0 snapshot suite |
 | **Linter/formatter** | none as project law (shellcheck optional for maintainers, not required gate) |
 | **Primary runtime / OS family** | POSIX Linux (and compatible UNIX where `/bin/sh` + coreutils/`sha256sum`/`mktemp` exist) |
 | **Architectures supported** | any arch with a POSIX sh and the external tools the script invokes (no arch-specific binary) |
-| **Git surface** | used for product publish (`github.com/cloudgen/selfmanaged`) |
-| **Ship unit / install** | yes — `src/selfmanaged` + companion `src/selfmanaged.sha256`; Type 0 online install (peer shell REQs) |
-| **Product version SSOT** | `VERSION="…"` hard-assign in `src/selfmanaged` (currently `1.3.1`) |
+| **Git surface** | used for product publish (`github.com/cloudgen/safe-rm`) |
+| **Ship unit / install** | yes — `src/safe-rm` + companion `src/safe-rm.sha256`; Type 0 online install (peer shell REQs) |
+| **Product version SSOT** | `VERSION="…"` hard-assign in `src/safe-rm` (currently `1.0.9`) |
 
 **Residual ownership table:**
 
@@ -119,7 +119,7 @@ This file is **class law + residual SSOT**, not a second copy of Type 0 lifecycl
 | Primary language + toolchain policy | **this file** | posix-sh, unconstrained |
 | Package/build tool + lockfile | **this file** | none / not used |
 | Type 0 CLI surface / flags / dispatch | `requirement-shell-cli-interface` | Do not duplicate |
-| Empty argv Type O install-ensure | `requirement-shell-cli-zero-arguments` | Do not duplicate |
+| Empty argv | `requirement-shell-cli-zero-arguments` | Interactive menu; otherwise install-ensure |
 | Self-management lifecycle | `requirement-shell-self-management` | Do not duplicate |
 | Automatic companion digest | `requirement-shell-automatic-checksum` | Do not duplicate |
 | Output SSOT (`out_*`) | `requirement-shell-output-requirements` | Do not duplicate |
@@ -127,9 +127,9 @@ This file is **class law + residual SSOT**, not a second copy of Type 0 lifecycl
 | Idempotency / re-run safety | `requirement-shell-idempotency` | Do not duplicate |
 | Interactive vs non-interactive | `requirement-shell-interactive-vs-noninteractive` | Do not duplicate |
 | Modular prefixes / single-file layout | `requirement-shell-modular-function-design` | Do not duplicate |
-| Domain features / help / about extras | *none* (bootstrap — no domain SSOT) | Add `requirement-domain-*` only when domain ops exist |
+| Domain features / help / about extras | `requirement-domain-safe-rm` | Current domain SSOT |
 | Coding-style related REQ | `requirement-shell-script-coding` | Specialize-in home; this file **points** |
-| Actor / role / subject / approver | *none* (considered — **no dest approver**) | Bootstrap self-install CLI; no dest review machine |
+| Actor / role / subject / approver | `requirement-actor-role-subject` | Light table; no dest approver |
 
 ---
 
@@ -204,10 +204,10 @@ This file is **class law + residual SSOT**, not a second copy of Type 0 lifecycl
 
 | Date | Status | Note |
 |------|--------|------|
-| 2026-07-19 | Active | Specialized class law for selfmanaged (review fix F1) |
+| 2026-07-19 | Active | Specialized class law for safe-rm (review fix F1) |
 
 ---
 
 **Last Updated**: 2026-09-06  
-**Owner**: selfmanaged project maintainers  
+**Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 4, 5, 20, 21 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

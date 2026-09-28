@@ -1,13 +1,13 @@
 # safe-rm
 
-![Version](https://img.shields.io/badge/Version-1.0.8-blue?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.0.9-blue?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 [![CIAO](https://img.shields.io/badge/Philosophy-CIAO%20v2.10.*-purple.svg)](https://github.com/cloudgen/ciao)
 [![Stars](https://img.shields.io/github/stars/cloudgen/safe-rm?style=flat-square)](https://github.com/cloudgen/safe-rm)
 
-**safe-rm** is a POSIX `/bin/sh` program. `rm -rf` is too dangerous to leave as the raw binary, so setup moves that binary aside to `origin-rm` and points `rm` at this guard. It keeps the selfmanaged lifecycle: place itself, update itself, remove itself, and the numbered menu. `rm -rf` of any account home is refused, because that deletes the whole home. A folder inside any account home, such as a cache directory, may be removed. A refusal is an `out_*` error that tells you to stop.
+**safe-rm** is a POSIX `/bin/sh` program. `rm -rf` is too dangerous to leave as the raw binary, so setup moves that binary aside to `origin-rm` and points `rm` at this guard. It keeps the self-management lifecycle: place itself, update itself, remove itself, and the numbered menu. `rm -rf` of any account home is refused, because that deletes the whole home. A folder inside any account home, such as a cache directory, may be removed. A refusal is an `out_*` error that tells you to stop.
 
-The program people install is `src/safe-rm`. The lifecycle and `out_*` come from the **selfmanaged** bootstrap. The swap, `origin-rm`, and `restore` are the 2023 safe-rm setup. `safe-rm setup` is for an admin login on a Linux host. It checks `/usr/bin/rm` and `/bin/rm`. A directory with no `rm` does not cancel the other. It moves a regular `rm` aside to `origin-rm` and points `rm` at this program. On Termux, `which rm` is `$PREFIX/bin/rm` and this login runs that setup. `safe-rm restore` puts that file back. The test of that table uses a scratch directory under `/tmp` and does not delete a directory.
+The program people install is `src/safe-rm`. The lifecycle and `out_*` stay on this program. The swap, `origin-rm`, and `restore` are the 2023 safe-rm setup. `safe-rm setup` is for an admin login on a Linux host. It checks `/usr/bin/rm` and `/bin/rm`. A directory with no `rm` does not cancel the other. It moves a regular `rm` aside to `origin-rm` and points `rm` at this program. On Termux, `which rm` is `$PREFIX/bin/rm` and this login runs that setup. `safe-rm restore` puts that file back. The test of that table uses a scratch directory under `/tmp` and does not delete a directory.
 
 ## Alpine
 
@@ -20,6 +20,8 @@ On Alpine, `/bin` and `/usr/bin` are different directories. The `rm` people type
 On Termux, `which rm` prints `/data/data/com.termux/files/usr/bin/rm`. That is `$PREFIX/bin/rm`. It is not `/usr/bin/rm` or `/bin/rm`. This login owns that directory.
 
 `safe-rm setup` moves that file and does not call `sudo`. It does not ask for an admin login. It does not move `/usr/bin/rm` or `/bin/rm`. After setup, `$PREFIX/bin/rm` points at this program and `$PREFIX/bin/origin-rm` is the remover. When `rm` is a symlink to `coreutils`, `toybox`, or `busybox`, that symlink is not renamed, because those programs would then refuse to remove files. `origin-rm` runs that program's `rm`. `safe-rm restore` puts the original file back.
+
+The same blacklist applies under `$PREFIX`. `$PREFIX` stands for `/usr`. `$PREFIX/bin` and anything inside it stand for `/usr/bin` (Termux keeps `/bin` there too). These directories are refused exactly, the same way `/var` is refused: `$PREFIX/etc`, `$PREFIX/var`, `$PREFIX/lib`, `$PREFIX/lib64`, `$PREFIX/opt`, `$PREFIX/sbin`, and `$PREFIX/boot`. `rm -rf $PREFIX/var` stops. A folder inside `$PREFIX/var`, such as `$PREFIX/var/log`, may be removed. `$PREFIX/share`, `$PREFIX/include`, `$PREFIX/tmp`, and `$PREFIX/libexec` may be removed. `/`, `/dev`, `/proc`, and `/sys` stay the Linux paths. The login home stays refused.
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
@@ -39,6 +41,7 @@ On Termux, `which rm` prints `/data/data/com.termux/files/usr/bin/rm`. That is `
 | The text `$HOME/...`, `${HOME}/...`, or `~/...` | Allowed. Those stand for a folder inside the login home |
 | `/usr/bin` and anything inside it | Refused. Removing it breaks programs. A symlink that lands on `/usr/bin` is the same refusal |
 | `/`, `/usr`, `/bin`, `/sbin`, `/etc`, `/var`, `/boot`, `/root`, `/lib`, `/lib64`, `/opt`, `/dev`, `/proc`, `/sys` | Refused. System directories |
+| On Termux: `$PREFIX`, `$PREFIX/bin` and anything inside it, and exactly `$PREFIX/etc`, `$PREFIX/var`, `$PREFIX/lib`, `$PREFIX/lib64`, `$PREFIX/opt`, `$PREFIX/sbin`, `$PREFIX/boot` | Refused. These stand for the Linux rows above. A folder inside `$PREFIX/var`, and `$PREFIX/share`, `$PREFIX/include`, `$PREFIX/tmp`, and `$PREFIX/libexec`, may be removed |
 
 If one path in the command is refused, **no** path is removed. The error says `STOP` and tells you not to retry with `rm`, `/bin/rm`, or `/usr/bin/rm`.
 
@@ -58,7 +61,7 @@ Human output says whether the path exists and whether removal is allowed. JSON i
 
 ## Install
 
-Runtime version: `VERSION="1.0.8"` in `src/safe-rm`.
+Runtime version: `VERSION="1.0.9"` in `src/safe-rm`.
 
 Channel default:
 
@@ -100,7 +103,7 @@ safe-rm about
 At a terminal the front board is:
 
 ```text
-safe-rm(1.0.8) — Guarded rm that refuses login homes and system directories
+safe-rm(1.0.9) — Guarded rm that refuses login homes and system directories
 1. remove-guard: check a path and remove it only when it is allowed
 8. self-management: this CLI install, version, update, uninstall
 9. Exit
@@ -109,7 +112,7 @@ safe-rm(1.0.8) — Guarded rm that refuses login homes and system directories
 **1** opens:
 
 ```text
-safe-rm(1.0.8) — remove-guard
+safe-rm(1.0.9) — remove-guard
 11. rm: check each path and remove only when every path is allowed
 0. Back
 ```

@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| **1.0.8** (current) | Yes — on Termux, `setup` moves `$PREFIX/bin/rm` as this login and does not call `sudo` |
+| **1.0.9** (current) | Yes — on Termux, `$PREFIX/var` and the other prefix matches of the Linux system directories are refused |
+| **1.0.8** | Yes — on Termux, `setup` moves `$PREFIX/bin/rm` as this login and does not call `sudo` |
 | **1.0.7** | Yes — `setup` checks `/usr/bin/rm` and `/bin/rm`, including a BusyBox `rm` |
 | **1.0.6** | Yes — a local `install` copies this file and does not download |
 | **1.0.5** | Yes — on the command named `rm`, a bare word is a path |
@@ -16,7 +17,7 @@
 
 ## Remove guard
 
-`rm -rf` of any account home is refused. A folder inside any account home may be removed. `/home`, `/usr/bin`, and the system directories named in the product README are refused. One refused path cancels the whole command. `--dry-run` does not call `origin-rm`. `safe-rm setup` is the admin check of that swap on a Linux host. It checks `/usr/bin/rm` and `/bin/rm`. On Alpine those are different paths: `rm` is `/bin/rm` (BusyBox) and `/usr/bin/rm` may be absent. A login that cannot move the `rm` that exists is refused, and nothing is moved. On Termux, `which rm` is `$PREFIX/bin/rm` (`/data/data/com.termux/files/usr/bin/rm`). This login runs that setup and does not call `sudo`. `/usr/bin/rm` and `/bin/rm` stay untouched. Tests of the before/after table use a scratch directory and do not delete a directory.
+`rm -rf` of any account home is refused. A folder inside any account home may be removed. `/home`, `/usr/bin`, and the system directories named in the product README are refused. One refused path cancels the whole command. `--dry-run` does not call `origin-rm`. `safe-rm setup` is the admin check of that swap on a Linux host. It checks `/usr/bin/rm` and `/bin/rm`. On Alpine those are different paths: `rm` is `/bin/rm` (BusyBox) and `/usr/bin/rm` may be absent. A login that cannot move the `rm` that exists is refused, and nothing is moved. On Termux, `which rm` is `$PREFIX/bin/rm` (`/data/data/com.termux/files/usr/bin/rm`). This login runs that setup and does not call `sudo`. `/usr/bin/rm` and `/bin/rm` stay untouched. The same blacklist applies under `$PREFIX`: `$PREFIX/var` and the other prefix matches of those system directories are refused, and a folder inside `$PREFIX/var` may be removed. Tests of the before/after table use a scratch directory and do not delete a directory.
 
 ## Reporting a Vulnerability
 

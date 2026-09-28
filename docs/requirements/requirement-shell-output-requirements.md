@@ -4,7 +4,7 @@
 
 ## 1. Purpose
 
-This requirement is the **project Single Source of Truth** for **all CLI output** of the selfmanaged POSIX shell tool: human messages, machine JSON, channel split (stdout vs stderr), and mode behavior (normal / quiet / JSON / debug).
+This requirement is the **project Single Source of Truth** for **all CLI output** of the safe-rm POSIX shell tool: human messages, machine JSON, channel split (stdout vs stderr), and mode behavior (normal / quiet / JSON / debug).
 
 It defines the centralized output system and stdout/stderr channel contracts for this shell project.
 
@@ -17,7 +17,7 @@ It defines the centralized output system and stdout/stderr channel contracts for
 
 | Box | Meaning | Example |
 |-----|---------|---------|
-| You / this login | Reading the terminal or parsing JSON | `selfmanaged version` vs `selfmanaged --json version` |
+| You / this login | Reading the terminal or parsing JSON | `safe-rm version` vs `safe-rm --json version` |
 | The other role | Automation that must not see banners mixed into JSON | `--json` on stdout; errors still visible |
 | Not this file | Whether to ask a yes/no; whether empty argv installs | Interactive + zero-arguments peers |
 
@@ -28,13 +28,13 @@ It defines the centralized output system and stdout/stderr channel contracts for
 
 | Surface | What you open | What for |
 |---------|---------------|----------|
-| `selfmanaged --json about` | Command | One JSON object |
-| `./src/selfmanaged` | Program file | `out_*` helpers |
+| `safe-rm --json about` | Command | One JSON object |
+| `./src/safe-rm` | Program file | `out_*` helpers |
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
-| Read as a person | Colored `[OK]` / `[ERROR]` on a terminal; `--quiet` hides chatter but **not** fatals. | `selfmanaged about` |
-| Read as a machine | Exactly one JSON object on stdout; no human banners. | `selfmanaged --json about` |
+| Read as a person | Colored `[OK]` / `[ERROR]` on a terminal; `--quiet` hides chatter but **not** fatals. | `safe-rm about` |
+| Read as a machine | Exactly one JSON object on stdout; no human banners. | `safe-rm --json about` |
 
 ---
 
@@ -51,11 +51,11 @@ It defines the centralized output system and stdout/stderr channel contracts for
 | Ad-hoc `echo >&2` diagnostics | `out_warn` / `out_error` / `out_debug` |
 | Second parallel “print helper” that bypasses mode guards | Extend `out_text` / wrappers only |
 
-**Not every `printf` / `echo` is a violation.** The ban targets **product messaging** (what the CLI user or machine consumer sees as the command’s message/JSON). The following exceptions are **allowed** and intentional in this project (aligned with live `./src/selfmanaged` practice and §2.1.1 below).
+**Not every `printf` / `echo` is a violation.** The ban targets **product messaging** (what the CLI user or machine consumer sees as the command’s message/JSON). The following exceptions are **allowed** and intentional in this project (aligned with live `./src/safe-rm` practice and §2.1.1 below).
 
 ### 2.1.1 Allowed `printf` / `echo` exceptions (this project)
 
-| Exception class | Rule | Live examples in `./src/selfmanaged` |
+| Exception class | Rule | Live examples in `./src/safe-rm` |
 |-----------------|------|-----------------------------------|
 | **A. Inside output SSOT** | Only `out_text`, `out_json`, and `out_json_error` may `printf` to fd 1/2 for **product** human or JSON lines. Nested `printf … \| sed` used only to escape strings for those emitters is part of the same SSOT. | `out_text` level cases; `out_json` / `out_json_error` body builders |
 | **B. Function return-via-stdout** | A helper may `printf '%s' "$value"` (or `echo "$value"`) **solely** so callers capture it with `$(…)`. That write is a **data return**, not product UI. Callers must capture it; bare top-level invocation must not be used as the user-facing message path. | `inst_self_uninstall_determine_bin`, `util_get_install_bin_path`, `inst_get_version`, `util_resolve_storage`, `util_get_current_shell`, `prompt_ask` (answer/default return only; prompt text still via `out_*`). On `src/safe-rm` the same class covers `util_preferred_cache_dir`, `util_fallback_cache_dir`, `util_fallback2_cache_dir`, and `util_resolve_persistent_storage` |
@@ -98,7 +98,7 @@ Align with SSOT-of-stdout and SSOT-of-stderr terms:
 1. **Errors never as the primary success payload on stdout** in a way that corrupts JSON pipes — fatal paths use `out_die` / `out_json_error`.  
 2. **JSON purity:** In JSON mode, stdout is reserved for the structured result; no colors, banners, or progress mixed in.  
 3. **Capture pattern for agents/CI:**  
-   `selfmanaged --json <cmd> 2>err.log` → stdout = JSON; stderr = diagnostics as mode allows.  
+   `safe-rm --json <cmd> 2>err.log` → stdout = JSON; stderr = diagnostics as mode allows.  
 4. **No secrets** on either channel (tokens, passwords, private keys).
 
 ### 2.4 Mode behavior (portable)
@@ -140,10 +140,10 @@ Align with SSOT-of-stdout and SSOT-of-stderr terms:
 
 ### 2.6 Implementation Notes (this project)
 
-| Item | Value for selfmanaged |
+| Item | Value for safe-rm |
 |------|------------------------|
-| **Product / binary** | `selfmanaged` (`APP_NAME`) |
-| **Implementation file** | `src/selfmanaged` |
+| **Product / binary** | `safe-rm` (`APP_NAME`) |
+| **Implementation file** | `src/safe-rm` |
 | **Human SSOT** | `out_text` |
 | **JSON SSOT** | `out_json` / `out_json_error` |
 | **Mode flags** | `QUIET`, `JSON`, `DEBUG`, `TTY` (defaults `0` except TTY when stdin/stdout are TTYs) |
@@ -153,7 +153,7 @@ Align with SSOT-of-stdout and SSOT-of-stderr terms:
 
 #### Live `out_*` inventory
 
-| Function | Role in `./src/selfmanaged` |
+| Function | Role in `./src/safe-rm` |
 |----------|-------------------------|
 | `out_text` | Human SSOT; JSON short-circuit; quiet filter; channel by level |
 | `out_success` / `out_info` / `out_warn` / `out_error` | Level wrappers |
@@ -238,7 +238,7 @@ Align with SSOT-of-stdout and SSOT-of-stderr terms:
 
 1. Add raw `echo`, `printf`, or direct fd writes for **product** user/machine messages outside the central output functions (do not “ban” legitimate §2.1.1 exceptions).  
 2. Misuse return-via-stdout, file redirects, or tool pipes as cover for user-facing banners without `out_*`.  
-3. Cite `template-*.md` or `skill-*.md` in **product source** (`./src/selfmanaged`) as output authority — cite this requirement file only.  
+3. Cite `template-*.md` or `skill-*.md` in **product source** (`./src/safe-rm`) as output authority — cite this requirement file only.  
 4. Bypass `out_*` for “quick debug” on stdout.  
 5. Remove or weaken **`--json` forces quiet** / human-suppression in `out_text`.  
 6. Emit human banners on stdout while claiming JSON mode.  
@@ -255,7 +255,7 @@ Align with SSOT-of-stdout and SSOT-of-stderr terms:
 
 ## 5. Definition of done (shell output requirements)
 
-Output-related work for selfmanaged is **not done** if any of the following fail:
+Output-related work for safe-rm is **not done** if any of the following fail:
 
 1. All new **product** user-facing messages use `out_*` only (exceptions limited to §2.1.1).  
 2. Non-product `printf`/`echo` sites document their exception class in the function comment block when they are intentional helpers.  
@@ -286,10 +286,10 @@ Output-related work for selfmanaged is **not done** if any of the following fail
 | `docs/requirements/requirement-shell-modular-function-design.md` | `out_*` prefix ownership |
 | `docs/requirements/requirement-shell-interactive-vs-noninteractive.md` | Mode interaction with quiet/json |
 | `docs/requirements/index.md` | Registry SSOT |
-| `./src/selfmanaged` | Implementation under test |
+| `./src/safe-rm` | Implementation under test |
 
 ---
 
 **Last Updated**: 2026-09-06 (TP-JSON-RAW-01 DTV)  
-**Owner**: selfmanaged project maintainers  
+**Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 5, 14, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

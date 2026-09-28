@@ -1138,6 +1138,147 @@ case "$TX" in
 esac
 unset _kind KD kd_before TX tx_before usr_before
 
+# TP-SRM-31 Termux blacklist. $PREFIX stands for /usr.
+# $PREFIX/var stands for /var. The fixture is only /tmp/safe-rm-swap.*.
+# Every remove check is a dry-run. The symlink named rm is this program.
+BL=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
+mkdir -p "$BL/bin" "$BL/etc" "$BL/var/log" "$BL/lib/inside" "$BL/lib64" \
+    "$BL/opt" "$BL/sbin" "$BL/boot" "$BL/share" "$BL/tmp" "$BL/include" \
+    "$BL/libexec"
+printf 'tool\n' > "$BL/bin/tool"
+printf 'extra\n' > "$BL/sbin/extra"
+ln -s "$SAFE_RM" "$BL/bin/rm"
+
+tx_refuse() {
+    _label=$1
+    _path=$2
+    _expect=$3
+    out=$(SRM_TERMUX_PREFIX="$BL" sh "$SAFE_RM" --dry-run rm --dry-run "$_path" 2>"$err")
+    ec=$?
+    assert_eq "TP-SRM-31 ${_label} exit" 1 "$ec"
+    assert_contains "TP-SRM-31 ${_label} refuses" "$(cat "$err")" "Refusing to remove"
+    assert_contains "TP-SRM-31 ${_label} reason" "$(cat "$err")" "$_expect"
+    if [ -e "$_path" ] || [ -L "$_path" ]; then
+        t_pass "TP-SRM-31 ${_label} still exists"
+    else
+        t_fail "TP-SRM-31 ${_label} was removed"
+    fi
+}
+
+tx_allow() {
+    _label=$1
+    _path=$2
+    out=$(SRM_TERMUX_PREFIX="$BL" sh "$SAFE_RM" --dry-run rm --dry-run "$_path" 2>"$err")
+    ec=$?
+    assert_eq "TP-SRM-31 ${_label} exit" 0 "$ec"
+    assert_contains "TP-SRM-31 ${_label} allowed" "$out" "Removal is allowed"
+    if [ -e "$_path" ] || [ -L "$_path" ]; then
+        t_pass "TP-SRM-31 ${_label} still exists"
+    else
+        t_fail "TP-SRM-31 ${_label} was removed"
+    fi
+}
+
+tx_refuse "prefix" "$BL" "system directory"
+tx_refuse "var" "$BL/var" "system directory"
+tx_refuse "var slash" "$BL/var/" "system directory"
+tx_refuse "etc" "$BL/etc" "system directory"
+tx_refuse "lib" "$BL/lib" "system directory"
+tx_refuse "lib64" "$BL/lib64" "system directory"
+tx_refuse "opt" "$BL/opt" "system directory"
+tx_refuse "sbin" "$BL/sbin" "system directory"
+tx_refuse "boot" "$BL/boot" "system directory"
+tx_refuse "bin" "$BL/bin" "${BL}/bin"
+tx_refuse "bin tool" "$BL/bin/tool" "${BL}/bin"
+tx_refuse "bin rm" "$BL/bin/rm" "${BL}/bin"
+
+tx_allow "share" "$BL/share"
+tx_allow "include" "$BL/include"
+tx_allow "tmp" "$BL/tmp"
+tx_allow "libexec" "$BL/libexec"
+tx_allow "var log" "$BL/var/log"
+tx_allow "lib inside" "$BL/lib/inside"
+tx_allow "sbin extra" "$BL/sbin/extra"
+
+# The tablet command: rm -rf $PREFIX/var --dry-run
+out=$(SRM_TERMUX_PREFIX="$BL" "$BL/bin/rm" -rf "$BL/var" --dry-run 2>"$err")
+ec=$?
+assert_eq "TP-SRM-31 phone form exit" 1 "$ec"
+assert_contains "TP-SRM-31 phone form refuses" "$(cat "$err")" "Refusing to remove ${BL}/var"
+assert_contains "TP-SRM-31 phone form system" "$(cat "$err")" "system directory"
+if [ -d "$BL/var" ]; then
+    t_pass "TP-SRM-31 phone form var remains"
+else
+    t_fail "TP-SRM-31 phone form removed var"
+fi
+
+out=$(SRM_TERMUX_PREFIX="$BL" sh "$SAFE_RM" --dry-run rm --dry-run "$BL/share" "$BL/var" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-31 mixed exit" 1 "$ec"
+if [ -d "$BL/share" ] && [ -d "$BL/var" ]; then
+    t_pass "TP-SRM-31 mixed paths remain"
+else
+    t_fail "TP-SRM-31 mixed removed a path"
+fi
+
+out=$(sh "$SAFE_RM" --dry-run rm --dry-run "$BL/var" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-31 no prefix exit" 0 "$ec"
+assert_contains "TP-SRM-31 no prefix allows scratch var" "$out" "Removal is allowed"
+if [ -d "$BL/var" ]; then
+    t_pass "TP-SRM-31 no prefix var remains"
+else
+    t_fail "TP-SRM-31 no prefix removed var"
+fi
+
+out=$(SRM_TERMUX_PREFIX=/tmp/not-a-swap sh "$SAFE_RM" --dry-run rm --dry-run "$BL/var" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-31 foreign prefix exit" 0 "$ec"
+assert_contains "TP-SRM-31 foreign prefix allows scratch var" "$out" "Removal is allowed"
+
+out=$(sh "$SAFE_RM" --dry-run rm --dry-run /var 2>"$err")
+ec=$?
+assert_eq "TP-SRM-31 /var exit" 1 "$ec"
+assert_contains "TP-SRM-31 /var refused" "$(cat "$err")" "system directory"
+if [ -d /var ]; then
+    t_pass "TP-SRM-31 /var still exists"
+else
+    t_fail "TP-SRM-31 /var missing"
+fi
+
+out=$(SRM_TERMUX_PREFIX="$BL" sh "$SAFE_RM" --dry-run rm --dry-run /var 2>"$err")
+ec=$?
+assert_eq "TP-SRM-31 /var with prefix exit" 1 "$ec"
+assert_contains "TP-SRM-31 /var with prefix refused" "$(cat "$err")" "system directory"
+
+out=$(SRM_TERMUX_PREFIX="$BL" sh "$SAFE_RM" --dry-run rm --dry-run /usr/bin 2>"$err")
+ec=$?
+assert_eq "TP-SRM-31 /usr/bin with prefix exit" 1 "$ec"
+assert_contains "TP-SRM-31 /usr/bin sentence" "$(cat "$err")" "/usr/bin or something inside it"
+if [ -d /usr/bin ]; then
+    t_pass "TP-SRM-31 /usr/bin still exists"
+else
+    t_fail "TP-SRM-31 /usr/bin missing"
+fi
+
+out=$(SRM_TERMUX_PREFIX="$BL" sh "$SAFE_RM" --json --dry-run rm --dry-run "$BL/var" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-31 json exit" 1 "$ec"
+assert_contains "TP-SRM-31 json class" "$out" '"class":"DENY-HOST"'
+assert_contains "TP-SRM-31 json verdict" "$out" '"verdict":"refuse"'
+
+out=$(sh "$SAFE_RM" help 2>/dev/null)
+assert_contains "TP-SRM-31 help names prefix var" "$out" "\$PREFIX/var"
+out=$(sh "$SAFE_RM" about 2>/dev/null)
+assert_contains "TP-SRM-31 about names prefix var" "$out" "\$PREFIX/var"
+
+case "$BL" in
+    /tmp/safe-rm-swap.*)
+        scratch_rm -rf -- "$BL"
+        ;;
+esac
+unset _label _path _expect BL
+
 printf '\n== summary ==\n'
 printf 'PASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 if [ "$FAIL" -gt 0 ]; then

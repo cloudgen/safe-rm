@@ -50,8 +50,8 @@ APP_NAME="safe-rm"
 : "${SHORT_DESCRIPTION:=${APP_DESC}}"
 : "${DESCRIPTION:=POSIX /bin/sh program you install for yourself. It keeps self-install and self-update, and it refuses to remove the login home itself, every account home in /etc/passwd, /home, another login's folder under /home, /usr/bin, or other system directories. A named folder inside the login home, such as a cache directory, may be removed. --dry-run reports whether a path exists and whether removal is allowed, and removes nothing.}"
 # Product version SSOT (semver). Extractors use: grep '^VERSION="'
-VERSION="1.0.8"
-: "${VERSION:=1.0.8}"
+VERSION="1.0.9"
+: "${VERSION:=1.0.9}"
 
 # Runtime flags (safe defaults)
 : "${QUIET:=0}"
@@ -2955,7 +2955,7 @@ app_about() {
     out_info "Persistence storage: ${PERSISTENT_STORAGE_DIR}"
 
     # --- DOMAIN_ABOUT_FIELDS (specializee injection) ---
-    out_info "Remove guard:      on (refuses the login home itself and every account home in /etc/passwd; a named folder inside the login home may be removed; also refuses /home, /usr/bin, and system directories)"
+    out_info "Remove guard:      on (refuses the login home itself and every account home in /etc/passwd; a named folder inside the login home may be removed; also refuses /home, /usr/bin, and system directories; on Termux also refuses \$PREFIX, \$PREFIX/bin and anything inside it, and \$PREFIX/etc, \$PREFIX/var, \$PREFIX/lib, \$PREFIX/lib64, \$PREFIX/opt, \$PREFIX/sbin, and \$PREFIX/boot)"
     out_info "Dry-run:           ${APP_NAME} rm --dry-run <path>"
     # --- end DOMAIN_ABOUT_FIELDS ---
 
@@ -3058,6 +3058,7 @@ app_help() {
     out_plain "  rm --dry-run         Remove nothing. Say whether each path exists and whether it may be removed"
     out_plain "  --dry-run            Same switch, before or after rm"
     out_plain "                       A refused path stops the command. Do not retry with rm, /bin/rm, or /usr/bin/rm"
+    out_plain "                       On Termux the same blacklist is \$PREFIX, \$PREFIX/bin and anything inside it, \$PREFIX/etc, \$PREFIX/var, \$PREFIX/lib, \$PREFIX/lib64, \$PREFIX/opt, \$PREFIX/sbin, and \$PREFIX/boot. A folder inside \$PREFIX/var may be removed, and so may \$PREFIX/share, \$PREFIX/include, \$PREFIX/tmp, and \$PREFIX/libexec"
     out_plain "                       On a terminal, choice 11 lists subfolders of the current path and one custom path"
     out_empty_line
     # --- end DOMAIN_HELP_ROWS ---
@@ -3251,7 +3252,31 @@ srm_msg_refuse() {
     _class=${2-}
     case "$_class" in
         DENY-USR-BIN)
-            printf '%s\n' "Refusing to remove ${_path}. That path is /usr/bin or something inside it. Removing it breaks programs on this machine. STOP. Do not retry with rm, /bin/rm, or /usr/bin/rm. Next: stop."
+            _tp=$(srm_termux_prefix 2>/dev/null || true)
+            _said=0
+            _look=${3-$_path}
+            case "${_look}" in
+                */) _look=${_look%/} ;;
+            esac
+            _name=${_path}
+            case "${_name}" in
+                */) _name=${_name%/} ;;
+            esac
+            if [ -n "${_tp}" ]; then
+                case "${_name}" in
+                    "${_tp}"/bin|"${_tp}"/bin/*) _said=1 ;;
+                esac
+                case "${_look}" in
+                    "${_tp}"/bin|"${_tp}"/bin/*) _said=1 ;;
+                esac
+                if [ "$_said" -eq 1 ]; then
+                    printf '%s\n' "Refusing to remove ${_path}. That path is ${_tp}/bin or something inside it. Removing it breaks programs on this machine. STOP. Do not retry with rm, /bin/rm, or /usr/bin/rm. Next: stop."
+                fi
+            fi
+            if [ "$_said" -eq 0 ]; then
+                printf '%s\n' "Refusing to remove ${_path}. That path is /usr/bin or something inside it. Removing it breaks programs on this machine. STOP. Do not retry with rm, /bin/rm, or /usr/bin/rm. Next: stop."
+            fi
+            unset _tp _said _look _name
             ;;
         DENY-LOGIN-HOME)
             printf '%s\n' "Refusing to remove ${_path}. That path is the login home. Removing it destroys files and projects. STOP. Do not retry with rm, /bin/rm, or /usr/bin/rm. Next: ${APP_NAME} rm --dry-run on a folder inside the login home, such as a cache directory, or stop."
@@ -3426,8 +3451,19 @@ srm_classify() {
         else
             SRM_CLASS=DENY-UNRESOLVED
         fi
+        _tclass=$(srm_termux_guard_class "$SRM_RESOLVED" 2>/dev/null || true)
+        if [ -n "${_tclass}" ]; then
+            case "$SRM_CLASS" in
+                DENY-LOGIN-HOME|DENY-ACCOUNT-HOME)
+                    ;;
+                *)
+                    SRM_CLASS=$_tclass
+                    ;;
+            esac
+        fi
+        unset _tclass
         SRM_VERDICT=refuse
-        SRM_MESSAGE=$(srm_msg_refuse "$SRM_RAW" "$SRM_CLASS")
+        SRM_MESSAGE=$(srm_msg_refuse "$SRM_RAW" "$SRM_CLASS" "$SRM_RESOLVED")
         return 0
     }
 
@@ -3467,6 +3503,25 @@ srm_classify() {
             SRM_CLASS=ALLOW
             ;;
     esac
+
+    _tclass=$(srm_termux_guard_class "$SRM_RESOLVED" 2>/dev/null || true)
+    if [ -z "${_tclass}" ]; then
+        _lex=$(srm_lexical_abs "$SRM_RAW" 2>/dev/null || true)
+        if [ -n "${_lex}" ] && [ "${_lex}" != "$SRM_RESOLVED" ]; then
+            _tclass=$(srm_termux_guard_class "$_lex" 2>/dev/null || true)
+        fi
+        unset _lex
+    fi
+    if [ -n "${_tclass}" ]; then
+        case "$SRM_CLASS" in
+            DENY-ROOT|DENY-HOME-ANCESTOR)
+                ;;
+            *)
+                SRM_CLASS=$_tclass
+                ;;
+        esac
+    fi
+    unset _tclass
 
     if [ "$SRM_RESOLVED" = "$_home" ]; then
         SRM_CLASS=DENY-LOGIN-HOME
@@ -3519,7 +3574,7 @@ srm_classify() {
         fi
     else
         SRM_VERDICT=refuse
-        SRM_MESSAGE=$(srm_msg_refuse "$SRM_RAW" "$SRM_CLASS")
+        SRM_MESSAGE=$(srm_msg_refuse "$SRM_RAW" "$SRM_CLASS" "$SRM_RESOLVED")
     fi
 }
 
@@ -3767,6 +3822,36 @@ srm_termux_prefix() {
     fi
     printf '%s\n' "${_tp}"
     unset _tp
+    return 0
+}
+
+# Termux form of the Linux blacklist. $PREFIX stands for /usr.
+# $PREFIX/bin stands for /usr/bin, /bin, and /sbin, including everything inside bin.
+# The other names are exact, the same way /var is exact and /var/log is not.
+# Class name on stdout. Return 1 when the path is not on this list.
+srm_termux_guard_class() {
+    _p=${1-}
+    _tp=$(srm_termux_prefix 2>/dev/null || true)
+    if [ -z "${_tp}" ] || [ -z "${_p}" ]; then
+        unset _p _tp
+        return 1
+    fi
+    case "${_p}" in
+        */) _p=${_p%/} ;;
+    esac
+    case "${_p}" in
+        "${_tp}"/bin|"${_tp}"/bin/*)
+            printf '%s\n' DENY-USR-BIN
+            ;;
+        "${_tp}"|"${_tp}"/etc|"${_tp}"/var|"${_tp}"/lib|"${_tp}"/lib64|"${_tp}"/opt|"${_tp}"/sbin|"${_tp}"/boot)
+            printf '%s\n' DENY-HOST
+            ;;
+        *)
+            unset _p _tp
+            return 1
+            ;;
+    esac
+    unset _p _tp
     return 0
 }
 

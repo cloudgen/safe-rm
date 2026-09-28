@@ -4,7 +4,7 @@
 
 ## 1. Purpose
 
-This requirement is the **project Single Source of Truth** for the **POSIX shell CLI interface** of the selfmanaged tool: command surface, privilege typing, global flags, dispatcher behavior, output modes, and interactive vs non-interactive rules.
+This requirement is the **project Single Source of Truth** for the **POSIX shell CLI interface** of the safe-rm tool: command surface, privilege typing, global flags, dispatcher behavior, output modes, and interactive vs non-interactive rules.
 
 It defines a **Type 0–centric self-managed shell CLI** (install / update / uninstall of the tool itself). It does **not** invent Type 1 host-bootstrap or Type 2 system-user app-ops commands unless a future requirement adds them.
 
@@ -17,7 +17,7 @@ It defines a **Type 0–centric self-managed shell CLI** (install / update / uni
 
 | Box | Meaning | Example |
 |-----|---------|---------|
-| You / this login | The person who types the command | `selfmanaged help` · `selfmanaged version` |
+| You / this login | The person who types the command | `safe-rm help` · `safe-rm version` |
 | The other role | Empty argv (install-ensure) and lifecycle safety | `requirement-shell-cli-zero-arguments.md` · `requirement-shell-self-management.md` |
 | Not this file | Checksum, storage paths, `out_*` internals | Peer requirements |
 
@@ -28,13 +28,13 @@ It defines a **Type 0–centric self-managed shell CLI** (install / update / uni
 
 | Surface | What you open | What for |
 |---------|---------------|----------|
-| `selfmanaged help` | Command | Listed verbs and flags |
-| `./src/selfmanaged` | Program file | Dispatcher |
+| `safe-rm help` | Command | Listed verbs and flags |
+| `./src/safe-rm` | Program file | Dispatcher |
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
-| See the menu | Help lists self-install, version, about, self-update, self-uninstall, and flags. An unknown word is an error, not a silent no-op. | `selfmanaged help` |
-| Ask for JSON | Same verbs; structured objects; no human banners. | `selfmanaged --json version` |
+| See the menu | Help lists self-install, version, about, self-update, self-uninstall, and flags. An unknown word is an error, not a silent no-op. | `safe-rm help` |
+| Ask for JSON | Same verbs; structured objects; no human banners. | `safe-rm --json version` |
 
 ---
 
@@ -108,7 +108,7 @@ In JSON mode, help **MUST NOT** dump long human text; return a short structured 
 5. Global options  
 6. Environment / channel vars (never `CHECKSUM` on help)
 
-Ship-unit injection anchors (comments in `./src/selfmanaged`): `DOMAIN_HELP_ROWS`, `DOMAIN_ABOUT_FIELDS`, `DOMAIN_DISPATCH_FLAGS`, `DOMAIN_DISPATCH_COMMANDS`, `DOMAIN_DISPATCH_ROUTES`.
+Ship-unit injection anchors (comments in `./src/safe-rm`): `DOMAIN_HELP_ROWS`, `DOMAIN_ABOUT_FIELDS`, `DOMAIN_DISPATCH_FLAGS`, `DOMAIN_DISPATCH_COMMANDS`, `DOMAIN_DISPATCH_ROUTES`.
 
 ### 2.5.1 Specializee contract (bootstrap origin → specialized B)
 
@@ -117,7 +117,7 @@ When specializing product **B** from this bootstrap (**A → B only**):
 | Concern | MUST | MUST NOT |
 |---------|------|----------|
 | **Channel** | B Config defaults `REPO_USER` / `REPO_NAME` / `SCRIPT_URL` for **B’s** product channel | Point B’s default channel at A’s raw URL (or A at B’s) without explicit user order |
-| **Identity** | Retarget `APP_NAME`, descriptions, product `VERSION` on B | Leave `APP_NAME=selfmanaged` on B ship unit |
+| **Identity** | Retarget `APP_NAME`, descriptions, product `VERSION` on B | Leave `APP_NAME=safe-rm` on B ship unit |
 | **Output** | All domain user/machine messages via `out_*` (temporary shims → `out_*` OK) | Parallel `echo`/`printf` banners or a second JSON family as product UI |
 | **Host-mutating domain** | Privilege gate (**root** / designed escalation) **before** any host mutation on **every** path (interactive **and** non-interactive) | Non-interactive “success” after partial host writes as non-root |
 | **Dispatch** | Single `app_main`; add domain verbs in the same parse pass as Type 0 | Drop Type 0 routes while claiming same architecture as A |
@@ -128,15 +128,15 @@ When specializing product **B** from this bootstrap (**A → B only**):
 
 ### 2.6 Implementation Notes (this project)
 
-| Item | Value for selfmanaged |
+| Item | Value for safe-rm |
 |------|------------------------|
-| **Product / binary name** | `selfmanaged` (`APP_NAME`, default `selfmanaged`) |
-| **Primary executable** | `src/selfmanaged` (POSIX `/bin/sh`, single-file for `curl \| sh`) |
+| **Product / binary name** | `safe-rm` (`APP_NAME`, default `safe-rm`) |
+| **Primary executable** | `src/safe-rm` (POSIX `/bin/sh`, single-file for `curl \| sh`) |
 | **Dispatcher** | `app_main` (always invoked at end of script: `app_main "$@"` — no `${0##*/}` / APP_NAME basename gate; required for `curl \| sh`) |
 | **Output SSOT** | `out_text` + wrappers (`out_info`, `out_success`, `out_warn`, `out_error`, `out_die`, `out_plain`, `out_json`, …) |
-| **Version SSOT** | `VERSION` default `1.3.1` (script header / config block: `VERSION="1.3.1"`) |
+| **Version SSOT** | `VERSION` default `1.0.9` (script header / config block: `VERSION="1.0.9"`) |
 | **Install paths** | Global: `GLOBAL_BIN` default `/usr/local/bin`; User: `USER_BIN` default `${HOME}/.local/bin` |
-| **Remote channel env (help surface)** | `REPO_USER` / `REPO_NAME` / `SCRIPT_RELPATH` (defaults `cloudgen` / `selfmanaged` / `src/selfmanaged`); `SCRIPT_URL` composed default `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/${SCRIPT_RELPATH}` (literal product default: `https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged`; override via env). **`help` MUST list `REPO_USER`, `REPO_NAME`, `SCRIPT_RELPATH`, and `SCRIPT_URL`, and MUST NOT list `CHECKSUM`. `about` MUST NOT list `CHECKSUM`** (install-path runtime pin only; see `requirement-shell-automatic-checksum.md`) |
+| **Remote channel env (help surface)** | `REPO_USER` / `REPO_NAME` / `SCRIPT_RELPATH` (defaults `cloudgen` / `safe-rm` / `src/safe-rm`); `SCRIPT_URL` composed default `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/${SCRIPT_RELPATH}` (literal product default: `https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm`; override via env). **`help` MUST list `REPO_USER`, `REPO_NAME`, `SCRIPT_RELPATH`, and `SCRIPT_URL`, and MUST NOT list `CHECKSUM`. `about` MUST NOT list `CHECKSUM`** (install-path runtime pin only; see `requirement-shell-automatic-checksum.md`) |
 | **Type 1 / Type 2 commands** | **None** on current surface — this tool is CLI lifecycle only |
 | **Dedicated system user** | **Not required** for Type 0 CLI self-management |
 
@@ -149,8 +149,8 @@ Every command is also a switch of the same name. `help` and `--help` are the sam
 | *(no command — 0-argv)* | Type 0 | `app_main` → `app_default` or `inst_self_install` | **Interactive**, including `safe-rm --debug` (`--debug` is not a command): main menu. **Non-interactive / quiet / json:** Type O CLI self-install-ensure (not help, not the menu). See `requirement-shell-cli-zero-arguments.md` · `requirement-shell-cli-default-interaction.md` |
 | `menu` | Type 0 | `app_default` | Numbered list on a TTY (front **1** / **8** / **9**; remove-guard **11**; self-management **82–87**). Off a TTY: help. Sample: `safe-rm menu` |
 | `main` | Type 0 | `app_default` | Alias of `menu` |
-| `self-install` | Type 0 | `inst_self_install` | Place **this CLI** (copy when `$0` is a script; download when piped). Dest **0700** local / **0755** global. Dual mention: `requirement-shell-cli-self-install.md`. Sample: `selfmanaged self-install` |
-| `install` | Type 0 | `inst_self_install` | **Alias of `self-install`** (this product has no payload). Same copy/download/dest-mode contract. Sample: `selfmanaged install` |
+| `self-install` | Type 0 | `inst_self_install` | Place **this CLI** (copy when `$0` is a script; download when piped). Dest **0700** local / **0755** global. Dual mention: `requirement-shell-cli-self-install.md`. Sample: `safe-rm self-install` |
+| `install` | Type 0 | `inst_self_install` | **Alias of `self-install`** (this product has no payload). Same copy/download/dest-mode contract. Sample: `safe-rm install` |
 | `version`, `--version` | Type 0 | `app_main` / `app_version` | Print local version; JSON object when `--json`. On the command named `rm`, `--version` is this command. The bare word `version` is a path, including a link |
 | `about` | Type 0 | `app_about` | Diagnostics: install presence, global/local paths, user, shell, TTY; **Cache folder used**, **Cache folder (preferred)**, **Cache folder (1st fallback)**, **Cache folder (2nd fallback)** when that host has one, and **Persistence storage** (`requirement-shell-cli-storage`); JSON when `--json`; **no `CHECKSUM` field** |
 | `version-check` | Type 0 | `ver_check` | Compare local vs remote `VERSION` from `SCRIPT_URL`; fail clearly if URL unset/unreachable |
@@ -173,7 +173,7 @@ Every command is also a switch of the same name. `help` and `--help` are the sam
 
 #### Dispatcher acceptance criteria (this project)
 
-1. Unknown token after flag parse → `out_die` with pointer to `selfmanaged help`. A remover switch on the command named `rm` is not an unknown token (`requirement-domain-safe-rm.md`).  
+1. Unknown token after flag parse → `out_die` with pointer to `safe-rm help`. A remover switch on the command named `rm` is not an unknown token (`requirement-domain-safe-rm.md`).  
 2. Zero-arg → interactive: numbered menu. Non-interactive / quiet / json: CLI self-install-ensure (not help, not the menu); failures non-zero. Basename `rm` is the remove, not this split.  
 3. Command routing table in `app_main` **must** include every row in the command table above.  
 4. Help text **must** stay aligned with that table (no orphan commands, no listed-but-unrouted commands).  
@@ -229,7 +229,7 @@ Every command is also a switch of the same name. `help` and `--help` are the sam
 
 ## 5. Definition of done (CLI interface)
 
-This requirement is satisfied for the selfmanaged shell CLI when all of the following hold:
+This requirement is satisfied for the safe-rm shell CLI when all of the following hold:
 
 1. Every command in §2.6 is routed and documented.  
 2. Global flags in §2.6 are parsed and honored.  
@@ -261,10 +261,10 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | `docs/requirements/requirement-shell-self-management.md` | Lifecycle command semantics |
 | `docs/requirements/requirement-shell-output-requirements.md` | Output SSOT and channels |
 | `docs/requirements/requirement-shell-interactive-vs-noninteractive.md` | TTY / automation mode behavior |
-| `docs/requirements/requirement-shell-cli-zero-arguments.md` | Empty argv install-ensure (not installed / local / global) |
+| `docs/requirements/requirement-shell-cli-zero-arguments.md` | Empty argv: interactive menu; otherwise install-ensure |
 | `docs/requirements/requirement-shell-cli-self-install.md` | Dual mention `self-install`; `$0` copy vs download; dest 0755/0700 |
 | `docs/requirements/requirement-shell-idempotency.md` | Re-run safety for ensure ops |
-| `docs/requirements/requirement-shell-modular-function-design.md` | Prefix ownership (`app_`, `inst_`, `out_*`) |
+| `docs/requirements/requirement-shell-modular-function-design.md` | Prefix ownership (`app_`, `inst_`, `out_*`, `srm_`) |
 | `docs/requirements/index.md` | Registry SSOT |
 | `./src/selfmanaged` | Bootstrap origin ship unit (do not overwrite from safe-rm) |
 | `requirement-domain-safe-rm.md` | Domain SSOT for `rm` and `--dry-run` |
@@ -273,5 +273,5 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 ---
 
 **Last Updated**: 2026-09-27 (1.2.5 — on Termux this login runs setup against `$PREFIX/bin/rm` and does not call `sudo`; Git Bash and Windows cmd still do not run the swap)  
-**Owner**: selfmanaged project maintainers  
+**Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 5, 6, 10, 16, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

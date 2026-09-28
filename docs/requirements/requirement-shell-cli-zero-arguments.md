@@ -4,11 +4,11 @@
 
 ## 1. Purpose
 
-This requirement is the **project Single Source of Truth** for **zero-argument (empty argv) dispatcher behavior** of the selfmanaged POSIX `/bin/sh` Type 0 CLI.
+This requirement is the **project Single Source of Truth** for **zero-argument (empty argv) dispatcher behavior** of the safe-rm POSIX `/bin/sh` Type 0 CLI.
 
 ### 1.0 Product type (template dual-model)
 
-| Field | Value for selfmanaged |
+| Field | Value for safe-rm |
 |-------|------------------------|
 | **Empty-argv type** | **Type O — Online-install** (not Type N) |
 | **Rationale** | Product advertises `curl … \| sh` one-liner install; empty argv is install-ensure, not help |
@@ -18,7 +18,7 @@ Type N (non-online-install → empty argv = help) does **not** apply to this pro
 It defines what happens when the tool is invoked with **no command and no flags**, including the classic one-liner:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged | /bin/sh
+curl -fsSL https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm | /bin/sh
 ```
 
 Interactive empty argv (`TTY=1`, not quiet, not json) opens the numbered menu and does not use the three cases below. Non-interactive empty argv means **install-ensure** for three detect cases:
@@ -26,8 +26,8 @@ Interactive empty argv (`TTY=1`, not quiet, not json) opens the numbered menu an
 | Case | Meaning |
 |------|---------|
 | **Not installed** | No managed binary at the resolved install path(s) |
-| **Installed (local)** | Managed binary at the user path (`USER_BIN` / `${HOME}/.local/bin/selfmanaged`) |
-| **Installed (global)** | Managed binary at the global path (`GLOBAL_BIN` / `/usr/local/bin/selfmanaged`) |
+| **Installed (local)** | Managed binary at the user path (`USER_BIN` / `${HOME}/.local/bin/safe-rm`) |
+| **Installed (global)** | Managed binary at the global path (`GLOBAL_BIN` / `/usr/local/bin/safe-rm`) |
 
 **Scope:** Empty-argv routing, detect cases (global / local / absent), messages, force boundary, exit status, interaction with TTY / quiet / json.  
 **Out of scope (own requirements):** Full command catalog (`requirement-shell-cli-interface.md`); **how** place copies vs downloads and dest mode (`requirement-shell-cli-self-install.md`); download/checksum detail (`requirement-shell-automatic-checksum.md`); full self-update/uninstall lifecycle (`requirement-shell-self-management.md`); output function catalog (`requirement-shell-output-requirements.md`); general idempotency matrix beyond empty-argv rows (`requirement-shell-idempotency.md`).
@@ -38,25 +38,25 @@ Interactive empty argv (`TTY=1`, not quiet, not json) opens the numbered menu an
 
 | Box | Meaning | Example |
 |-----|---------|---------|
-| You / this login | First-time install or a healthy re-run of the one-liner | `curl -fsSL …/selfmanaged \| /bin/sh` |
-| The other role | Explicit verbs: help, force reinstall, uninstall | `selfmanaged help` · `selfmanaged install --force` |
+| You / this login | First-time install or a healthy re-run of the one-liner | `curl -fsSL …/safe-rm \| /bin/sh` |
+| The other role | Explicit verbs: help, force reinstall, uninstall | `safe-rm help` · `safe-rm install --force` |
 | Not this file | Full command list, checksum, update/uninstall, output printers | `requirement-shell-cli-interface.md` and peers |
 
 | Includes | Excludes |
 |----------|----------|
-| Zero tokens (`$# -eq 0`): pipe one-liner, `./src/selfmanaged` with nothing after the name | `selfmanaged --json` / `selfmanaged --quiet` (those have argv; default command stays help unless you also pass `install`) |
+| Zero tokens (`$# -eq 0`): pipe one-liner, `./src/safe-rm` with nothing after the name | `safe-rm --json` / `safe-rm --quiet` (those have argv; default command stays help unless you also pass `install`) |
 | Not installed / already in user bin / already in system bin | Domain setup, host packages, dedicated-account ops |
 
 | Surface | What you open | What for |
 |---------|---------------|----------|
-| `./src/selfmanaged` | Program file people install | Live empty-argv behavior |
-| `selfmanaged` with no args | Command | Install-ensure |
+| `./src/safe-rm` | Program file people install | Live empty-argv behavior |
+| `safe-rm` with no args | Command | Numbered menu on a terminal; install-ensure otherwise |
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
-| First install from the internet | No program is on disk yet. The pipe has no human to answer a question, so the tool **places itself** (user bin for a normal login; system bin if you already ran as root). Failure must be a real error, not a fake success. | `curl -fsSL https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged \| /bin/sh` |
-| Run it again when it is already installed | Same one-liner **must succeed and say it is already installed**. It must not dump help and must not require `--force`. | `selfmanaged` (no arguments) |
-| Quiet or JSON with **no arguments** | No yes/no question. The tool still **places** the program (or no-ops if already installed). A helper that returns success without placing is a defect. | Environment already `JSON=1` or `QUIET=1`, then `selfmanaged` with empty argv — **not** `selfmanaged --json` alone |
+| First install from the internet | No program is on disk yet. The pipe has no human to answer a question, so the tool **places itself** (user bin for a normal login; system bin if you already ran as root). Failure must be a real error, not a fake success. | `curl -fsSL https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm \| /bin/sh` |
+| Run the one-liner again when it is already installed | Same one-liner **must succeed and say it is already installed**. It must not dump help and must not require `--force`. | The same `curl … \| /bin/sh` pipe |
+| Quiet or JSON with **no arguments** | No yes/no question. The tool still **places** the program (or no-ops if already installed). A helper that returns success without placing is a defect. | Environment already `JSON=1` or `QUIET=1`, then `safe-rm` with empty argv — **not** `safe-rm --json` alone |
 
 Jargon: **Type O** (letter) means “no arguments = install-ensure.” That is **not** Type **0** (digit: you run as yourself).
 
@@ -66,15 +66,15 @@ Jargon: **Type O** (letter) means “no arguments = install-ensure.” That is *
 
 ### 2.1 Definitions (portable + project)
 
-| Term | Definition for selfmanaged |
+| Term | Definition for safe-rm |
 |------|----------------------------|
 | **Type O** | Online-install empty-argv product type: empty argv = install-ensure (this product). |
-| **Type N** | Non-online-install empty-argv type: empty argv = help — **out of scope** for selfmanaged. |
+| **Type N** | Non-online-install empty-argv type: empty argv = help — **out of scope** for safe-rm. |
 | **Empty argv / zero-arg** | `$# -eq 0` at entry to `app_main` (no command tokens; classic `curl \| sh` with no trailing args). |
-| **Install-ensure** | Converge to “managed `selfmanaged` binary present”; either perform install or success no-op. |
+| **Install-ensure** | Converge to “managed `safe-rm` binary present”; either perform install or success no-op. |
 | **Not installed** | `inst_is_installed` returns false (`inst_get_version` → `not installed`). |
-| **Installed (local)** | Executable at `${USER_BIN}/selfmanaged` (default `USER_BIN=${HOME}/.local/bin`) observed by install-detect SSOT. |
-| **Installed (global)** | Executable at `${GLOBAL_BIN}/selfmanaged` (default `GLOBAL_BIN=/usr/local/bin`) observed by install-detect SSOT. |
+| **Installed (local)** | Executable at `${USER_BIN}/safe-rm` (default `USER_BIN=${HOME}/.local/bin`) observed by install-detect SSOT. |
+| **Installed (global)** | Executable at `${GLOBAL_BIN}/safe-rm` (default `GLOBAL_BIN=/usr/local/bin`) observed by install-detect SSOT. |
 | **Force / reinstall** | `FORCE_REINSTALL=1` from `--force` (and related force wiring in `app_main`). Required only for deliberate replace, not for ensure. |
 
 ### 2.2 Split meaning of empty argv
@@ -144,8 +144,8 @@ Empty-argv quiet/json in `app_main` is **not** a license for the helper to no-op
 
 | Invoker | Target |
 |---------|--------|
-| root (`id -u` 0), e.g. `curl … \| sudo sh` | `${GLOBAL_BIN}/selfmanaged` → `/usr/local/bin/selfmanaged` |
-| non-root | `${USER_BIN}/selfmanaged` → `${HOME}/.local/bin/selfmanaged` |
+| root (`id -u` 0), e.g. `curl … \| sudo sh` | `${GLOBAL_BIN}/safe-rm` → `/usr/local/bin/safe-rm` |
+| non-root | `${USER_BIN}/safe-rm` → `${HOME}/.local/bin/safe-rm` |
 
 ### 2.5 Equivalence to explicit `install`
 
@@ -169,11 +169,11 @@ Empty-argv quiet/json in `app_main` is **not** a license for the helper to no-op
 
 ### 2.7 Implementation Notes (this project)
 
-| Item | Value for selfmanaged |
+| Item | Value for safe-rm |
 |------|------------------------|
 | **Empty-argv type** | **Type O — Online-install** (install-ensure; not Type N help-default) |
-| **Product / binary** | `selfmanaged` (`APP_NAME`) |
-| **Ship unit** | `src/selfmanaged` |
+| **Product / binary** | `safe-rm` (`APP_NAME`) |
+| **Ship unit** | `src/safe-rm` |
 | **Dispatcher** | `app_main` — empty-argv block **before** flag/command parse default help |
 | **Install ensure** | `inst_self_install` on non-interactive / quiet / json empty argv (copy when `$0` is a script) |
 | **Interactive empty argv** | `app_default` (numbered menu). No place side effect |
@@ -212,7 +212,7 @@ app_main:
 - **CIAO Principle 2 – Intentional** (https://github.com/cloudgen/ciao): Empty argv has one meaning for not-installed, local, and global.  
 - **CIAO Principle 3 – Anti-fragile** (https://github.com/cloudgen/ciao): Dual install paths + `curl \| sh` + TTY.  
 - **CIAO Principle 6 – Single Point of Entry** (https://github.com/cloudgen/ciao): `app_main` owns empty-argv before help default.  
-- **CIAO Principle 16 – Interactive vs Non-Interactive** (https://github.com/cloudgen/ciao): Case A auto under pipe; optional TTY confirm.  
+- **CIAO Principle 16 – Interactive vs Non-Interactive** (https://github.com/cloudgen/ciao): Case A auto under pipe; interactive empty argv is the menu.  
 - **CIAO Principle 4 (O) / Principle 20 – Over-protect / Protect Against AI & Human Modification** (https://github.com/cloudgen/ciao): Protection Rule against help-fallback regression.
 
 ---
@@ -297,7 +297,7 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | `docs/requirements/requirement-shell-self-management.md` | self-update / uninstall (not empty-argv default) |
 | `docs/requirements/requirement-shell-output-requirements.md` | out_* / JSON purity |
 | `docs/requirements/requirement-shell-automatic-checksum.md` | Integrity on install download path |
-| `src/selfmanaged` | Implementation (`app_main`, `inst_*`) |
+| `src/safe-rm` | Implementation (`app_main`, `inst_*`) |
 | `tests/test_cli.sh`, `tests/test_install_lifecycle.sh` | Regression coverage |
 
 ---
@@ -315,6 +315,6 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 ---
 
 **Last Updated**: 2026-09-27  
-**Owner**: selfmanaged project maintainers  
+**Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 6, 16, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).
 

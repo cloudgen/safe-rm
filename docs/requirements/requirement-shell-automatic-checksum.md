@@ -4,12 +4,12 @@
 
 ## 1. Purpose
 
-This requirement is the **project Single Source of Truth** for **automatic companion-digest integrity** of the selfmanaged POSIX shell tool: downloading a SHA-256 sidecar next to the install channel, verifying install/self-update downloads, and reporting the process **transparently** (companion **link**, expected **value**, and verification **result**).
+This requirement is the **project Single Source of Truth** for **automatic companion-digest integrity** of the safe-rm POSIX shell tool: downloading a SHA-256 sidecar next to the install channel, verifying install/self-update downloads, and reporting the process **transparently** (companion **link**, expected **value**, and verification **result**).
 
 **Scope:** Automatic `${SCRIPT_URL}.sha256` path; transparency of integrity messaging; publisher companion file; relationship to optional env pin; product README primary integrity story.  
 **Out of scope (cited, not re-owned):** Full install one-liner / bootstrap (`requirement-shell-cli-interface.md`, online-install patterns in self-management); full self-update semver gates (`requirement-shell-self-management.md`); full `out_*` catalog (`requirement-shell-output-requirements.md`); package-manager signatures / cosign (not claimed here).
 
-**Must not confuse with:** Embedding a hash of `./src/selfmanaged` *inside* `./src/selfmanaged`; requiring operators to set `CHECKSUM` for every install; claiming independent host authenticity from same-channel SHA-256 alone.
+**Must not confuse with:** Embedding a hash of `./src/safe-rm` *inside* `./src/safe-rm`; requiring operators to set `CHECKSUM` for every install; claiming independent host authenticity from same-channel SHA-256 alone.
 
 ### 1.1 Human-facing
 
@@ -17,24 +17,24 @@ This requirement is the **project Single Source of Truth** for **automatic compa
 
 | Box | Meaning | Example |
 |-----|---------|---------|
-| You / this login | Someone installing or updating from the channel | `curl … \| sh` · `selfmanaged self-update` |
+| You / this login | Someone installing or updating from the channel | `curl … \| sh` · `safe-rm self-update` |
 | The other role | Optional extra pin (`CHECKSUM=…`) for a stricter lock | Env pin, not the everyday path |
 | Not this file | Help/about must **not** advertise `CHECKSUM`; install routing lives elsewhere | `requirement-shell-cli-interface.md` |
 
 | Includes | Excludes |
 |----------|----------|
 | Companion `.sha256` next to the download URL; transparent pass/fail | Cosign / package-manager signatures (not claimed) |
-| Publisher ships `selfmanaged.sha256` beside the program | Embedding the hash *inside* the program file |
+| Publisher ships `safe-rm.sha256` beside the program | Embedding the hash *inside* the program file |
 
 | Surface | What you open | What for |
 |---------|---------------|----------|
-| `./src/selfmanaged.sha256` | Companion digest | Publisher sidecar |
+| `./src/safe-rm.sha256` | Companion digest | Publisher sidecar |
 | Install / self-update output | Messages | Link, value, result |
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
-| Install from the channel | The tool downloads the program **and** the sidecar, then reports whether the bytes matched. A mismatch **must fail**. | `curl -fsSL …/selfmanaged \| /bin/sh` |
-| Read help | Help and about **must not** tell people to set `CHECKSUM`. | `selfmanaged help` |
+| Install from the channel | The tool downloads the program **and** the sidecar, then reports whether the bytes matched. A mismatch **must fail**. | `curl -fsSL …/safe-rm \| /bin/sh` |
+| Read help | Help and about **must not** tell people to set `CHECKSUM`. | `safe-rm help` |
 
 ---
 
@@ -47,8 +47,8 @@ This requirement is the **project Single Source of Truth** for **automatic compa
 | **Default path** | When `CHECKSUM` is **unset** / empty, install and self-update download paths **MUST** use automatic companion verification (not “no integrity”). |
 | **No operator pin required** | Primary online install and self-update **MUST** work without exporting `CHECKSUM`. |
 | **Companion URL** | Companion is **`${SCRIPT_URL}.sha256`** (same scheme/host/path as channel + `.sha256` suffix). |
-| **In-repo publisher SSOT** | Companion file **`src/selfmanaged.sha256`** (bare SHA-256 hex of `src/selfmanaged`) **MUST** ship next to the installable script for the release channel. |
-| **Regenerate on change** | After every edit to `src/selfmanaged` that is published, regenerate `src/selfmanaged.sha256` so automatic mode can match. |
+| **In-repo publisher SSOT** | Companion file **`src/safe-rm.sha256`** (bare SHA-256 hex of `src/safe-rm`) **MUST** ship next to the installable script for the release channel. |
+| **Regenerate on change** | After every edit to `src/safe-rm` that is published, regenerate `src/safe-rm.sha256` so automatic mode can match. |
 | **Shared orchestrator** | Automatic verify **MUST** run on the shared install download path used by first install and self-update (no parallel unverified curl-to-final-path). |
 
 ### 2.2 Transparency (sacred emphasis)
@@ -102,7 +102,7 @@ Automatic integrity **MUST NOT** be silent magic. In **human / normal** mode, th
 |-------------|---------|
 | **Runtime / install-path variable** | `CHECKSUM` is an **optional** shell/env variable read **only** by the install/download verify path (e.g. `inst_perform_install*`). Empty default. |
 | **When set** | Download must match the pin exactly; mismatch aborts. |
-| **Outside payload** | Pin is env/operator/CI for that process — **MUST NOT** be embedded inside `./src/selfmanaged` as a self-hash of that file. |
+| **Outside payload** | Pin is env/operator/CI for that process — **MUST NOT** be embedded inside `./src/safe-rm` as a self-hash of that file. |
 | **Not a help/about surface** | **`help` and `about` MUST NOT list, print, or advertise `CHECKSUM`** (name, value, or “optional pin” line). Avoids operators treating it as a required public setting. |
 | **Not primary UX** | Product README **MUST NOT** present `CHECKSUM` as the main or required integrity method when automatic mode exists. |
 | **Not higher same-origin assurance** | Fetching the sidecar from the same origin into `CHECKSUM` then installing is **not** stronger than automatic mode and **MUST NOT** be documented as “highest assurance.” |
@@ -110,7 +110,7 @@ Automatic integrity **MUST NOT** be silent magic. In **human / normal** mode, th
 
 ### 2.5 Forbidden patterns
 
-1. Hash of `./src/selfmanaged` stored **inside** `./src/selfmanaged` as the verify target.  
+1. Hash of `./src/safe-rm` stored **inside** `./src/safe-rm` as the verify target.  
 2. Primary docs that force newcomers to set external `CHECKSUM` when automatic companion fetch exists.  
 3. **Displaying `CHECKSUM` in `help` or `about`** (human or JSON fields).  
 4. Silent skip of companion fetch with no link/value/result messaging in human mode.  
@@ -122,7 +122,7 @@ Automatic integrity **MUST NOT** be silent magic. In **human / normal** mode, th
 
 When this requirement is **Active** for the product:
 
-1. Product root **`README.md` MUST** explain **automatic** checksum as the default: algorithm (SHA-256), companion URL pattern, in-repo `src/selfmanaged.sha256`, match / mismatch / missing outcomes.  
+1. Product root **`README.md` MUST** explain **automatic** checksum as the default: algorithm (SHA-256), companion URL pattern, in-repo `src/safe-rm.sha256`, match / mismatch / missing outcomes.  
 2. README **MUST** state that the program **downloads** the companion itself and is designed to show **link**, **value**, and **result** (human mode).  
 3. README **MUST NOT** push hardcoding or env-first external pin as the primary install integrity path.  
 4. Optional process-env pin — if documented at all — lives under Advanced / automation only, with honest same-channel vs out-of-band trust language; **not** in `help` / `about`.  
@@ -131,17 +131,17 @@ When this requirement is **Active** for the product:
 
 ### 2.7 Implementation Notes (this project)
 
-| Item | Value for selfmanaged |
+| Item | Value for safe-rm |
 |------|------------------------|
-| **Product / binary** | `selfmanaged` (`APP_NAME`) |
-| **Implementation file** | `src/selfmanaged` |
+| **Product / binary** | `safe-rm` (`APP_NAME`) |
+| **Implementation file** | `src/safe-rm` |
 | **Orchestrator** | `inst_perform_install` |
 | **Automatic download helper** | `inst_perform_install_download_without_checksum` (name = without **env** pin; still performs companion verify) |
 | **Strict pin helper** | `inst_perform_install_download_with_checksum` when runtime `CHECKSUM` non-empty (not shown in help/about) |
 | **Atomic install** | `inst_perform_install_atomic_install` |
-| **Channel SSOT** | `SCRIPT_URL` default `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/${SCRIPT_RELPATH}` with `SCRIPT_RELPATH` default `src/${APP_NAME}` → `https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged` |
-| **Companion URL** | `${SCRIPT_URL}.sha256` → `https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged.sha256` |
-| **In-repo companion** | `src/selfmanaged.sha256` (bare 64-char hex) |
+| **Channel SSOT** | `SCRIPT_URL` default `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/${SCRIPT_RELPATH}` with `SCRIPT_RELPATH` default `src/${APP_NAME}` → `https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm` |
+| **Companion URL** | `${SCRIPT_URL}.sha256` → `https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm.sha256` |
+| **In-repo companion** | `src/safe-rm.sha256` (bare 64-char hex) |
 | **Algorithm** | SHA-256 via `sha256sum` |
 | **Missing sidecar policy** | Warn + continue (best-effort) |
 | **Mismatch policy** | Abort (human `out_die` / JSON `checksum_mismatch`) |
@@ -197,10 +197,10 @@ When this requirement is **Active** for the product:
 **Future AI assistants, Grok, or maintainers MUST NOT**:
 
 1. Remove automatic `${SCRIPT_URL}.sha256` fetch while this requirement is Active.  
-2. Embed the expected SHA-256 of `./src/selfmanaged` **inside** `./src/selfmanaged` as verification.  
+2. Embed the expected SHA-256 of `./src/safe-rm` **inside** `./src/safe-rm` as verification.  
 3. Require or **primary-document** external `CHECKSUM` for normal online install when automatic mode exists.  
 4. **List or print `CHECKSUM` in `help` or `about`** (human Environment block, diagnostics, or JSON about fields).  
-5. Document same-origin `CHECKSUM=$(curl …/selfmanaged.sha256)` as higher assurance than automatic companion verification.  
+5. Document same-origin `CHECKSUM=$(curl …/safe-rm.sha256)` as higher assurance than automatic companion verification.  
 6. Drop human-mode transparency of companion **link**, expected **value**, and verification **result** without an explicit redesign of this requirement.  
 7. Claim always-verified when missing-sidecar continues with a warning.  
 8. Add a self-update download path that skips this integrity model.  
@@ -212,7 +212,7 @@ Violating this rule is a requirements failure and must be recorded (incident or 
 
 ## 5. Definition of done (automatic checksum)
 
-Integrity work for selfmanaged is **not done** if any of the following fail:
+Integrity work for safe-rm is **not done** if any of the following fail:
 
 1. When `CHECKSUM` env is unset, install download path attempts automatic companion fetch at `${SCRIPT_URL}.sha256`.  
 2. Companion mismatch aborts install (fail closed); no corrupt binary left as success.  
@@ -245,8 +245,8 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | `requirement-shell-output-requirements.md` | `out_*` / JSON error channel for integrity messages |
 | `requirement-shell-cli-interface.md` | Install command surface / modes |
 | `requirement-shell-interactive-vs-noninteractive.md` | Quiet/json/pipe mode interaction with messaging |
-| `./src/selfmanaged` | Ship unit implementation |
-| `src/selfmanaged.sha256` | In-repo companion digest |
+| `./src/safe-rm` | Ship unit implementation |
+| `src/safe-rm.sha256` | In-repo companion digest |
 | Product root `README.md` | User-facing automatic integrity story |
 
 ---
@@ -262,5 +262,5 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 ---
 
 **Last Updated**: 2026-09-06  
-**Owner**: selfmanaged project maintainers  
+**Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 5, 14, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

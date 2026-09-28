@@ -4,18 +4,18 @@
 
 ## 1. Purpose
 
-This requirement is the product law for **how selfmanaged places itself**: the `self-install` verb, and **empty argv** (`curl | sh`, quiet, json, TTY confirm). That path puts the program file on disk (or says it is already there). This product has **no payload** — there is no package install or host daemon on this path.
+This requirement is the product law for **how safe-rm places itself**: the `self-install` verb, and **non-interactive empty argv** (`curl | sh`, quiet, json). That path puts the program file on disk (or says it is already there). This product has **no payload** — there is no package install or host daemon on this path.
 
 `install` is a **compatibility alias** of `self-install` (same CLI place). It is **not** a second payload verb.
 
 ### 1.1 Human-facing
 
-**In one sentence:** A pipe with no extra words copies **this program** into your bin; if you already ran the file (`./src/selfmanaged self-install`), it copies **that file** and does not download.
+**In one sentence:** A pipe with no extra words copies **this program** into your bin; if you already ran the file (`./src/safe-rm self-install`), it copies **that file** and does not download.
 
 | Box | Meaning | Example |
 |-----|---------|---------|
-| You / this login | First-time pipe, or a checkout you already have | `curl … \| sh` · `./src/selfmanaged self-install` |
-| The other role | Channel refresh of an already-managed binary | `selfmanaged self-update` |
+| You / this login | First-time pipe, or a checkout you already have | `curl … \| sh` · `./src/safe-rm self-install` |
+| The other role | Channel refresh of an already-managed binary | `safe-rm self-update` |
 | Not this file | Checksum math; uninstall confirm; TTY vs pipe prompt rules | `requirement-shell-automatic-checksum.md` · `requirement-shell-self-management.md` |
 
 | Includes | Excludes |
@@ -25,14 +25,14 @@ This requirement is the product law for **how selfmanaged places itself**: the `
 
 | Surface | What you open | What for |
 |---------|---------------|----------|
-| `./src/selfmanaged` | Ship unit | Copy source when you run it |
-| `selfmanaged self-install` | Command | Same ensure as a pipe with no args |
+| `./src/safe-rm` | Ship unit | Copy source when you run it |
+| `safe-rm self-install` | Command | Same ensure as a pipe with no args |
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
-| First install from the internet | The pipe has no human to answer. `$0` is the shell (`sh` / `bash` / …). The program **downloads** itself into user bin, or system bin if you are root. | `curl -fsSL https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged \| /bin/sh` |
-| Install from a file you already have | `$0` is the script, not `sh`. Copy that file into bin. No network. Interactive yes/no still copies this file — it does **not** re-download. | `./src/selfmanaged self-install` · `sh ./src/selfmanaged self-install` · `./src/selfmanaged` (TTY yes) |
-| Name the place verb | Online self-manageable place is **`self-install`**, not a payload `install`. `install` still works as the same place. | `selfmanaged self-install` |
+| First install from the internet | The pipe has no human to answer. `$0` is the shell (`sh` / `bash` / …). The program **downloads** itself into user bin, or system bin if you are root. | `curl -fsSL https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm \| /bin/sh` |
+| Install from a file you already have | `$0` is the script, not `sh`. Copy that file into bin. No network. Interactive yes/no still copies this file — it does **not** re-download. | `./src/safe-rm self-install` · `sh ./src/safe-rm self-install` · `./src/safe-rm` (TTY yes) |
+| Name the place verb | Online self-manageable place is **`self-install`**, not a payload `install`. `install` still works as the same place. | `safe-rm self-install` |
 
 Jargon: **Type O** (letter) means pipe / no-args **places the CLI**. That is not Type **0** (you run as yourself).
 
@@ -57,8 +57,8 @@ When this product is **bootstrap origin A** for specialized product **B** (A→B
 ### 2.1 Route
 
 1. When argv is empty and the run is **non-interactive** (no TTY, or `JSON=1`, or `QUIET=1`), `app_main` **MUST** call `inst_self_install` — **MUST NOT** call `inst_perform_install` as the empty-argv default, **MUST NOT** open a menu, **MUST NOT** call `app_help`.  
-2. `selfmanaged self-install` **MUST** call `inst_self_install`.  
-3. `selfmanaged install` **MUST** call `inst_self_install` (alias; this product has no payload). Dual mention: `requirement-shell-cli-interface.md`.  
+2. `safe-rm self-install` **MUST** call `inst_self_install`.  
+3. `safe-rm install` **MUST** call `inst_self_install` (alias; this product has no payload). Dual mention: `requirement-shell-cli-interface.md`.  
 4. Interactive empty argv **MUST** open the numbered menu (`requirement-shell-cli-default-interaction.md`) and **MUST NOT** place as a side effect. Choosing **87** or `self-install` on that menu **MUST** call `inst_self_install` (copy when `$0` is the script).  
 5. `inst_maybe_install` **MAY** still confirm on a TTY when a caller invokes the helper directly. Empty argv **MUST NOT** call it.
 
@@ -87,8 +87,8 @@ When `$0` is not a shell interpreter, the file is already on disk. **MUST NOT** 
 
 | Invoker | Path | Mode |
 |---------|------|------|
-| root | `${GLOBAL_BIN}/selfmanaged` | **0755** |
-| non-root | `${USER_BIN}/selfmanaged` | **0700** |
+| root | `${GLOBAL_BIN}/safe-rm` | **0755** |
+| non-root | `${USER_BIN}/safe-rm` | **0700** |
 
 Global **0755** is other-read + exec so unprivileged `/bin/sh` can **open** the shebang file. Local **0700** is this-login owner-only. **MUST NOT** leave local dest **0711** or global dest **0700** / **0711** on this path.
 
@@ -100,7 +100,7 @@ Force off → `out_success` already installed; exit 0; no re-copy; no download. 
 
 ### 2.6 Implementation Notes (this project)
 
-| Item | Value for selfmanaged |
+| Item | Value for safe-rm |
 |------|-------------------|
 | **Handler** | `inst_self_install` |
 | **Detect** | `inst_argv0_is_shell_interpreter` · `inst_resolve_self_script` |
@@ -112,7 +112,7 @@ Force off → `out_success` already installed; exit 0; no re-copy; no download. 
 | **TTY first-shot** | Numbered menu (`app_default`). Place only when the person chooses **87** / `self-install` |
 | **Global bin** | `/usr/local/bin` |
 | **Local bin** | `${HOME}/.local/bin` |
-| **Channel** | `SCRIPT_URL` default `https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged` (pipe / interpreter `$0` only) |
+| **Channel** | `SCRIPT_URL` default `https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm` (pipe / interpreter `$0` only) |
 | **Tests** | `tests/test_cli.sh` **TP-SI-01** .. **TP-SI-06**; helper quiet/json still **TP-LC-10** / **TP-INST-MAYBE-01** |
 
 #### Dispatcher sample
@@ -132,10 +132,10 @@ fi
 
 | Verb | Sample |
 |------|--------|
-| empty argv (pipe) | `curl -fsSL https://raw.githubusercontent.com/cloudgen/selfmanaged/main/src/selfmanaged \| /bin/sh` |
-| `self-install` | `selfmanaged self-install` · `./src/selfmanaged self-install` |
-| `install` (alias) | `selfmanaged install` · `sudo src/safe-rm install --force` (copies this file into `/usr/local/bin/`; no download) · `src/safe-rm install` (copies into `${HOME}/.local/bin/`) |
-| empty argv (TTY checkout) | `./src/selfmanaged` then yes → copy from that file |
+| empty argv (pipe) | `curl -fsSL https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm \| /bin/sh` |
+| `self-install` | `safe-rm self-install` · `./src/safe-rm self-install` |
+| `install` (alias) | `safe-rm install` · `sudo src/safe-rm install --force` (copies this file into `/usr/local/bin/`; no download) · `src/safe-rm install` (copies into `${HOME}/.local/bin/`) |
+| empty argv (TTY checkout) | `./src/safe-rm` opens the numbered menu and does not place (`requirement-shell-cli-default-interaction.md`) |
 
 ### 2.x Why This Requirement Exists (Direct CIAO Alignment)
 
@@ -174,7 +174,7 @@ When Termux, Git Bash, Windows cmd, or the same class is detected: Type 1/2 unus
 ## 5. Definition of done
 
 1. NI empty argv places the CLI (copy or download per `$0`).  
-2. `./src/selfmanaged self-install` with a dead `SCRIPT_URL` still places (copy).  
+2. `./src/safe-rm self-install` with a dead `SCRIPT_URL` still places (copy).  
 3. Interactive TTY yes with script `$0` copies (no download).  
 4. Local dest **0700**; global dest **0755**.  
 5. Already-installed no-op.  
@@ -205,10 +205,10 @@ When Termux, Git Bash, Windows cmd, or the same class is detected: Type 1/2 unus
 | `docs/requirements/requirement-shell-cli-zero-arguments.md` | Empty argv Type O ensure (points here for how) |
 | `docs/requirements/requirement-shell-cli-interface.md` | Dual mention `self-install` / `install` alias |
 | `docs/requirements/requirement-shell-self-management.md` | `self-update` still downloads; `self-uninstall` |
-| `docs/requirements/requirement-shell-interactive-vs-noninteractive.md` | TTY confirm vs pipe auto |
+| `docs/requirements/requirement-shell-interactive-vs-noninteractive.md` | Numbered menu vs pipe auto |
 | `docs/requirements/requirement-shell-automatic-checksum.md` | Integrity on **download** path only |
-| `./src/selfmanaged` | Implementation |
+| `./src/safe-rm` | Implementation |
 
 **Last Updated**: 2026-09-27  
-**Owner**: selfmanaged project maintainers  
+**Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; **CIAO** (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).
