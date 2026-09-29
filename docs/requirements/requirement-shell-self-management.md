@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-self-management.md  
-**Status**: Active (Version 1.0.1)  
+**Status**: Active (Version 1.0.3)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -137,18 +137,19 @@ Root may write global install path; non-root uses user path. Do not assume root 
 | **Companion digest** | Default `${SCRIPT_URL}.sha256` via `inst_perform_install_download_without_checksum` — law + transparency: `requirement-shell-automatic-checksum.md` |
 | **Force reinstall** | `FORCE_REINSTALL`; CLI `--force` required by CLI interface requirement |
 | **Uninstall steps** | `inst_self_uninstall_determine_bin` → `inst_self_uninstall_confirm_and_remove` → `inst_self_uninstall_cleanup_path` |
-| **PATH ensure** | `path_add_shell` / bash / zsh / fish helpers on user install |
+| **PATH ensure** | `path_add_shell`. **Path-ensure** writes `.bashrc`, `.zshenv` when zsh applies, and fish. **Profile-ensure** creates a missing `${HOME}/.profile` that sources `.bashrc` and does not write the PATH line (`requirement-shell-cli-self-install.md` §2.7) |
+| **PATH cleanup** | `inst_self_uninstall_cleanup_path` removes the path-ensure block from `.bashrc`, `.zshenv`, and fish only when `${HOME}/.local/bin` is empty. It does not delete `.profile` and does not strip the profile-ensure sample |
 | **Privilege** | Type 0 only for self-management surface; no dedicated system user |
-| **Version SSOT** | `VERSION` default `1.0.9` in script config block (`VERSION="1.0.9"`) |
+| **Version SSOT** | `VERSION` default `1.0.11` in script config block (`VERSION="1.0.11"`) |
 
 #### Normative acceptance behaviors (this project)
 
 1. **`version-check`:** Fetch remote `VERSION` from `SCRIPT_URL`; report local vs remote; JSON fields include local/remote and latest-status semantics; fail if channel missing/unreachable.  
 2. **`self-update`:**  
    - Fail if remote version cannot be fetched.  
-   - If local equals remote and force off → success no-op (“already latest”).  
-   - If remote is **older** than local and force off → **refuse** (no silent downgrade).  
-   - If remote is newer (or force policy allows reinstall) → set reinstall and call `inst_perform_install` with integrity + atomic replace.  
+   - If local equals remote and force off → success (“already latest”), then run setup when this login may. The guard bytes are the placed file (`requirement-domain-safe-rm.md`).  
+   - If remote is **older** than local and force off → **refuse** (no silent downgrade). Do not run setup on that refusal.  
+   - If remote is newer (or force policy allows reinstall) → set reinstall and call `inst_perform_install` with integrity + atomic replace, then run setup when this login may. The guard bytes are the file just placed, not an older running `$0`.  
 3. **`self-uninstall`:** Resolve binary; confirm when interactive and force off; remove only that binary; clean PATH only if `~/.local/bin` empty (non-root); never delete unrelated trees.  
 4. **`about`:** Human diagnostics + JSON about object; no secrets; **no `CHECKSUM` name/value**.  
 5. **Shared install path:** Self-update **must not** introduce a parallel curl-to-final-path overwrite outside `inst_perform_install*`.
@@ -224,7 +225,7 @@ Work claiming self-management support for safe-rm is **not done** if any of the 
 
 This product may run on Termux, Git Bash, Windows cmd, or the same class (this login only).
 
-**This requirement:** `version-check`, `self-update`, `self-uninstall`, and `about` run as **this login**. Global-bin uninstall may warn that Linux root is needed; that warning **MUST NOT** become an in-tool `sudo` wrap on Termux / Git Bash / Windows cmd. **MUST NOT** recommend `sudo curl | sh` as the self-update path on that class. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
+**This requirement:** `version-check`, `self-update`, `self-uninstall`, and `about` run as **this login**. A finished `self-update` then runs setup §2.0.5, so Linux measure 2 may re-exec through `sudo`. That is not an uninstall wrap. Global-bin uninstall may warn that Linux root is needed; that warning **MUST NOT** become an in-tool `sudo` wrap. **MUST NOT** recommend `sudo curl | sh`. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
 
 | MUST | MUST NOT |
 |------|----------|
@@ -247,6 +248,6 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 
 ---
 
-**Last Updated**: 2026-09-17  
+**Last Updated**: 2026-09-29 (1.0.3 — path-ensure cleanup stays off `.profile`; profile-ensure sample is kept; uninstall still does not call `sudo`)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 5, 10, 11, 14, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

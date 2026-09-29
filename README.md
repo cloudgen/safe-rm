@@ -1,13 +1,13 @@
 # safe-rm
 
-![Version](https://img.shields.io/badge/Version-1.0.9-blue?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.0.11-blue?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 [![CIAO](https://img.shields.io/badge/Philosophy-CIAO%20v2.10.*-purple.svg)](https://github.com/cloudgen/ciao)
 [![Stars](https://img.shields.io/github/stars/cloudgen/safe-rm?style=flat-square)](https://github.com/cloudgen/safe-rm)
 
 **safe-rm** is a POSIX `/bin/sh` program. `rm -rf` is too dangerous to leave as the raw binary, so setup moves that binary aside to `origin-rm` and points `rm` at this guard. It keeps the self-management lifecycle: place itself, update itself, remove itself, and the numbered menu. `rm -rf` of any account home is refused, because that deletes the whole home. A folder inside any account home, such as a cache directory, may be removed. A refusal is an `out_*` error that tells you to stop.
 
-The program people install is `src/safe-rm`. The lifecycle and `out_*` stay on this program. The swap, `origin-rm`, and `restore` are the 2023 safe-rm setup. `safe-rm setup` is for an admin login on a Linux host. It checks `/usr/bin/rm` and `/bin/rm`. A directory with no `rm` does not cancel the other. It moves a regular `rm` aside to `origin-rm` and points `rm` at this program. On Termux, `which rm` is `$PREFIX/bin/rm` and this login runs that setup. `safe-rm restore` puts that file back. The test of that table uses a scratch directory under `/tmp` and does not delete a directory.
+The program people install is `src/safe-rm`. The lifecycle and `out_*` stay on this program. The swap, `origin-rm`, and `restore` are the 2023 safe-rm setup, in two layers. `safe-rm setup` first writes `${HOME}/.local/bin`: `safe-rm` (mode `0700`), a `rm` symlink, and `origin-rm`. On Linux it then re-execs through `sudo` and moves `/usr/bin/rm` and `/bin/rm` to `origin-rm`. A directory with no `rm` does not cancel the other. On macOS, `/bin/rm` stays Apple's binary and the home `origin-rm` execs that file. On Termux, `which rm` is `$PREFIX/bin/rm` and this login runs that swap with no `sudo`. `safe-rm restore` puts the system file back, then removes the home `rm` and `origin-rm`. The test of that table uses a scratch directory under `/tmp` and does not delete a directory. A missing `~/.profile` is created so a bash login sources `~/.bashrc`, where the `~/.local/bin` PATH line lives. Zsh keeps that line on `~/.zshenv`.
 
 ## Alpine
 
@@ -61,7 +61,7 @@ Human output says whether the path exists and whether removal is allowed. JSON i
 
 ## Install
 
-Runtime version: `VERSION="1.0.9"` in `src/safe-rm`.
+Runtime version: `VERSION="1.0.11"` in `src/safe-rm`.
 
 Channel default:
 
@@ -86,16 +86,17 @@ sudo src/safe-rm install --force
 src/safe-rm install
 ```
 
-Root copies it into `/usr/local/bin/`. This login copies it into `${HOME}/.local/bin/`. The program does not run `sudo` itself. `sudo` on the command is what makes the copy global.
+Root copies it into `/usr/local/bin/`. This login copies it into `${HOME}/.local/bin/`. The place step does not call `sudo`. On Linux, `safe-rm setup` calls `sudo` only to move `/usr/bin/rm` and `/bin/rm`. `sudo` on the install command is what makes the copy global.
 
 ```sh
 ./src/safe-rm self-install
 safe-rm about
 ```
 
-- Non-root install lands in `${HOME}/.local/bin/safe-rm` (mode `0700`)
-- Root install lands in `/usr/local/bin/safe-rm` (mode `0755`)
-- When `origin-rm` is already present, that root install also replaces `/usr/bin/safe-rm` (the file `rm` runs) with this program. It does not move `origin-rm` again
+- This login's install lands in `${HOME}/.local/bin/safe-rm` (mode `0700`), writes the home guard, and creates a missing `~/.profile` that sources `~/.bashrc`. On Linux it then asks `sudo` to move the system `rm`
+- Root install lands in `/usr/local/bin/safe-rm` (mode `0755`) and runs both layers. When `SUDO_USER` is set, the home guard is that account's `~/.local/bin`
+- `self-update` runs the same setup, including when the bin copy is already current
+- When `origin-rm` is already present, that setup replaces `/usr/bin/safe-rm` and does not move `origin-rm` again. When it is absent, setup performs the first move
 - On a terminal, no arguments opens the numbered list (same as `safe-rm menu`)
 - A pipe, `--quiet`, or `--json` with no arguments still places the program
 - Online install checks `src/safe-rm.sha256` when the companion is on the same channel
@@ -103,7 +104,7 @@ safe-rm about
 At a terminal the front board is:
 
 ```text
-safe-rm(1.0.9) — Guarded rm that refuses login homes and system directories
+safe-rm(1.0.11) — Guarded rm that refuses login homes and system directories
 1. remove-guard: check a path and remove it only when it is allowed
 8. self-management: this CLI install, version, update, uninstall
 9. Exit
@@ -112,7 +113,7 @@ safe-rm(1.0.9) — Guarded rm that refuses login homes and system directories
 **1** opens:
 
 ```text
-safe-rm(1.0.9) — remove-guard
+safe-rm(1.0.11) — remove-guard
 11. rm: check each path and remove only when every path is allowed
 0. Back
 ```

@@ -50,8 +50,8 @@ APP_NAME="safe-rm"
 : "${SHORT_DESCRIPTION:=${APP_DESC}}"
 : "${DESCRIPTION:=POSIX /bin/sh program you install for yourself. It keeps self-install and self-update, and it refuses to remove the login home itself, every account home in /etc/passwd, /home, another login's folder under /home, /usr/bin, or other system directories. A named folder inside the login home, such as a cache directory, may be removed. --dry-run reports whether a path exists and whether removal is allowed, and removes nothing.}"
 # Product version SSOT (semver). Extractors use: grep '^VERSION="'
-VERSION="1.0.9"
-: "${VERSION:=1.0.9}"
+VERSION="1.0.11"
+: "${VERSION:=1.0.11}"
 
 # Runtime flags (safe defaults)
 : "${QUIET:=0}"
@@ -663,7 +663,9 @@ inst_perform_install() {
         return 1
     fi
 
-    return 0
+    # The file just placed is what rm must run. Setup uses INSTALL_PATH.
+    srm_after_place_setup
+    return $?
 }
 
 # =============================================================================
@@ -1234,9 +1236,9 @@ inst_self_install() {
             out_success "${APP_NAME} is already installed."
             out_info "Use --force only to replace deliberately (or run: ${APP_NAME} self-update)."
         fi
-        # Already swapped: the rm people type is /usr/bin/safe-rm, not GLOBAL_BIN.
-        srm_place_refreshes_guard
-        return 0
+        # The rm people type is the guard. Setup replaces it with this place.
+        srm_after_place_setup
+        return $?
     fi
 
     if ! inst_perform_install_prepare_target; then
@@ -1270,8 +1272,8 @@ inst_self_install() {
         else
             out_success "${APP_NAME} ${REMOTE_VERSION} successfully installed to ${INSTALL_PATH}"
         fi
-        srm_place_refreshes_guard
-        return 0
+        srm_after_place_setup
+        return $?
     fi
 
     _tmp=$(mktemp -t "${APP_NAME}-XXXXXX")
@@ -1305,8 +1307,8 @@ inst_self_install() {
         return 1
     fi
     chmod "${_mode}" "${INSTALL_PATH}" 2>/dev/null || true
-    srm_place_refreshes_guard
-    return 0
+    srm_after_place_setup
+    return $?
 }
 
 # =============================================================================
@@ -1480,7 +1482,10 @@ inst_self_update() {
         else
             out_success "Already running the latest version (${REMOTE_VERSION})."
         fi
-        return 0
+        # Already current in the bin directory can still leave an older guard
+        # as the rm people type. Setup copies the placed file onto that guard.
+        srm_after_place_setup
+        return $?
     fi
 
     # No silent downgrade: remote older than local requires --force
@@ -1713,15 +1718,19 @@ inst_self_uninstall_cleanup_path() {
     # Escape sed | delimiter characters in USER_BIN for path-line removal
     escaped_bin=$(printf '%s' "${bin_dir}" | sed 's/[\\/&|]/\\&/g')
 
-    for config in "${HOME}/.bashrc" "${HOME}/.zshrc" "${HOME}/.config/fish/config.fish"; do
+    # .zshrc is the previous PATH writer. Profile-ensure's .profile sample stays.
+    for config in "${HOME}/.bashrc" "${HOME}/.zshenv" "${HOME}/.zshrc" "${HOME}/.config/fish/config.fish"; do
         if [ -f "$config" ]; then
             if sed -i.bak \
-                -e '/# Added by .* installer/d' \
-                -e "\|${escaped_bin}|d" \
+                -e "/^# Added by ${APP_NAME} installer/d" \
+                -e '/^export PATH="\${HOME}\/\.local\/bin:\$PATH"$/d' \
+                -e '/^set -gx PATH \${HOME}\/\.local\/bin \$PATH$/d' \
+                -e "\|^export PATH=\"${escaped_bin}:\\\$PATH\"\$|d" \
+                -e "\|^set -gx PATH ${escaped_bin} \\\$PATH\$|d" \
                 "$config" 2>/dev/null; then
                 cleaned=1
             fi
-            rm -f "${config}.bak" 2>/dev/null || true
+            unlink -- "${config}.bak" 2>/dev/null || unlink "${config}.bak" 2>/dev/null || true
         fi
     done
 
@@ -2009,79 +2018,171 @@ ver_check() {
 
 
 # =============================================================================
-# path_add_bashrc() - Add ~/.local/bin to ~/.bashrc
+# path_chown_file() - Corresponding-user owner after a create
 # =============================================================================
 #
 # GENERAL PURPOSE:
-# Appends the PATH export to ~/.bashrc only if not already present.
+# chown to SRM_RC_OWNER, or this login, when that account is in the password
+# database. Skip when getent is missing. No sudo.
 #
-# Returns 0 if added (or was already present), 1 if file missing or failed.
+# Returns 1 when chown was attempted and failed.
+# =============================================================================
+
+path_chown_file() {
+    _pc=${1-}
+    [ -n "${_pc}" ] && [ -e "${_pc}" ] || {
+        unset _pc
+        return 0
+    }
+    _pc_user=${SRM_RC_OWNER:-$(id -un 2>/dev/null || true)}
+    _pc_group=${SRM_RC_GROUP:-$(id -gn 2>/dev/null || true)}
+    if [ -n "${_pc_user}" ] && command -v getent >/dev/null 2>&1 && getent passwd "${_pc_user}" >/dev/null 2>&1; then
+        if ! chown "${_pc_user}:${_pc_group}" "${_pc}"; then
+            unset _pc _pc_user _pc_group
+            return 1
+        fi
+    fi
+    unset _pc _pc_user _pc_group
+    return 0
+}
+
+# Exact user-bin export. The default keeps ${HOME} literal in the file.
+# A different USER_BIN is written expanded. Stdout is the line (class B).
+path_export_line() {
+    : "${HOME:=/tmp}"
+    : "${USER_BIN:=${HOME}/.local/bin}"
+    if [ "${USER_BIN}" = "${HOME}/.local/bin" ]; then
+        printf '%s\n' 'export PATH="${HOME}/.local/bin:$PATH"'
+    else
+        printf 'export PATH="%s:$PATH"\n' "${USER_BIN}"
+    fi
+}
+
+path_fish_line() {
+    : "${HOME:=/tmp}"
+    : "${USER_BIN:=${HOME}/.local/bin}"
+    if [ "${USER_BIN}" = "${HOME}/.local/bin" ]; then
+        printf '%s\n' 'set -gx PATH ${HOME}/.local/bin $PATH'
+    else
+        printf 'set -gx PATH %s $PATH\n' "${USER_BIN}"
+    fi
+}
+
+# Append the exact line once. $1 file, $2 line, $3 human shell name.
+# Create the file only when $4 is 1. Returns 0 when the line was added.
+path_append_exact() {
+    _pa_file=${1-}
+    _pa_line=${2-}
+    _pa_shell=${3-}
+    _pa_create=${4:-0}
+    [ -n "${_pa_file}" ] && [ -n "${_pa_line}" ] || {
+        unset _pa_file _pa_line _pa_shell _pa_create
+        return 1
+    }
+    if [ -e "${_pa_file}" ] && [ ! -f "${_pa_file}" ]; then
+        unset _pa_file _pa_line _pa_shell _pa_create
+        return 1
+    fi
+    if [ ! -e "${_pa_file}" ]; then
+        if [ "${_pa_create}" -ne 1 ]; then
+            unset _pa_file _pa_line _pa_shell _pa_create
+            return 1
+        fi
+        if ! : > "${_pa_file}"; then
+            unset _pa_file _pa_line _pa_shell _pa_create
+            return 1
+        fi
+        chmod 0644 "${_pa_file}" || {
+            unset _pa_file _pa_line _pa_shell _pa_create
+            return 1
+        }
+        path_chown_file "${_pa_file}" || {
+            unset _pa_file _pa_line _pa_shell _pa_create
+            return 1
+        }
+    fi
+    if grep -Fxq -- "${_pa_line}" "${_pa_file}" 2>/dev/null; then
+        unset _pa_file _pa_line _pa_shell _pa_create
+        return 1
+    fi
+    {
+        printf '\n# Added by %s installer (%s)\n' "${APP_NAME}" "${VERSION}"
+        printf '%s\n' "${_pa_line}"
+    } >> "${_pa_file}" || {
+        unset _pa_file _pa_line _pa_shell _pa_create
+        return 1
+    }
+    if [ "${JSON}" -eq 0 ]; then
+        out_plain "→ Added ${USER_BIN} to PATH for ${_pa_shell}"
+    fi
+    unset _pa_file _pa_line _pa_shell _pa_create
+    return 0
+}
+
+# =============================================================================
+# path_add_bashrc() - Path-ensure on ~/.bashrc
+# =============================================================================
+#
+# GENERAL PURPOSE:
+# Create ~/.bashrc when it is missing (mode 0644) and append the exact
+# user-bin export once. A mention of the directory on some other line is
+# not already present.
+#
+# Returns 0 when the line was added, 1 when it was already present or the
+# write failed.
 #
 # PRINTF EXCEPTION (class C – file I/O redirect):
 # printf … >> "$bashrc" writes shell config content to a file, not product
 # stdout/stderr. User-visible “→ Added …” lines use out_plain.
 # See requirement-shell-output-requirements.md §2.1.1.
 #
-# Last reviewed: 2026-07-12
+# Last reviewed: 2026-09-29
 # =============================================================================
 
 path_add_bashrc() {
     : "${HOME:=/tmp}"
     : "${USER_BIN:=${HOME}/.local/bin}"
-    local bashrc="${HOME}/.bashrc"
+    : "${BASHRC:=${HOME}/.bashrc}"
     local path_line
-    path_line=$(printf 'export PATH="%s:$PATH"' "${USER_BIN}")
-    if [ ! -f "$bashrc" ]; then
-        return 1
-    fi
-
-    if ! grep -qF "${USER_BIN}" "$bashrc" 2>/dev/null; then
-        printf "\n# Added by %s installer (%s)\n" "$APP_NAME" "$VERSION" >> "$bashrc"
-        printf '%s\n' "${path_line}" >> "$bashrc"
-        if [ "${JSON}" -eq 0 ]; then
-            out_plain "→ Added ${USER_BIN} to PATH for bash"
-        fi
-        return 0
-    fi
-    return 1  # already present
+    path_line=$(path_export_line)
+    path_append_exact "${BASHRC}" "${path_line}" "bash" 1
 }
 
 # =============================================================================
-# path_add_zshrc() - Add ~/.local/bin to ~/.zshrc
+# path_add_zshenv() - Path-ensure on ~/.zshenv
 # =============================================================================
 #
 # GENERAL PURPOSE:
-# Appends the PATH export to ~/.zshrc only if not already present.
+# Zsh USER_BIN PATH lives on .zshenv. Create that file when this login's
+# shell is zsh, or ZSHENV is set, or the file already exists. Never write
+# the PATH line to .zshrc.
 #
-# Returns 0 if added (or was already present), 1 if file missing or failed.
-#
-# PRINTF EXCEPTION (class C – file I/O redirect):
-# printf … >> "$zshrc" writes shell config content to a file, not product
-# stdout/stderr. User-visible “→ Added …” lines use out_plain.
-# See requirement-shell-output-requirements.md §2.1.1.
-#
-# Last reviewed: 2026-07-12
+# Last reviewed: 2026-09-29
 # =============================================================================
 
-path_add_zshrc() {
+path_add_zshenv() {
     : "${HOME:=/tmp}"
     : "${USER_BIN:=${HOME}/.local/bin}"
-    local zshrc="${HOME}/.zshrc"
-    local path_line
-    path_line=$(printf 'export PATH="%s:$PATH"' "${USER_BIN}")
-    if [ ! -f "$zshrc" ]; then
+    local zshenv path_line create=0 shell_base
+    if [ -n "${ZSHENV+x}" ]; then
+        create=1
+        zshenv=${ZSHENV}
+    else
+        zshenv=${HOME}/.zshenv
+    fi
+    shell_base=${SHELL:-}
+    shell_base=${shell_base##*/}
+    if [ "${shell_base}" = "zsh" ]; then
+        create=1
+    fi
+    if [ -f "${zshenv}" ]; then
+        create=1
+    fi
+    if [ "${create}" -eq 0 ]; then
         return 1
     fi
-
-    if ! grep -qF "${USER_BIN}" "$zshrc" 2>/dev/null; then
-        printf "\n# Added by %s installer (%s)\n" "$APP_NAME" "$VERSION" >> "$zshrc"
-        printf '%s\n' "${path_line}" >> "$zshrc"
-        if [ "${JSON}" -eq 0 ]; then
-            out_plain "→ Added ${USER_BIN} to PATH for zsh"
-        fi
-        return 0
-    fi
-    return 1  # already present
+    path_line=$(path_export_line)
+    path_append_exact "${zshenv}" "${path_line}" "zsh" 1
 }
 
 # =============================================================================
@@ -2105,24 +2206,58 @@ path_add_zshrc() {
 path_add_fish() {
     : "${HOME:=/tmp}"
     : "${USER_BIN:=${HOME}/.local/bin}"
-    local fish_config="${HOME}/.config/fish/config.fish"
-    local path_line
-    path_line=$(printf 'set -gx PATH %s $PATH' "${USER_BIN}")
+    : "${FISH_CONFIG:=${HOME}/.config/fish/config.fish}"
+    local path_line fish_dir
+    path_line=$(path_fish_line)
+    fish_dir=${FISH_CONFIG%/*}
+    if [ ! -d "${fish_dir}" ] && ! mkdir -p "${fish_dir}" 2>/dev/null; then
+        return 1
+    fi
+    path_chown_file "${fish_dir}" || return 1
+    path_append_exact "${FISH_CONFIG}" "${path_line}" "fish shell" 1
+}
 
-    # Ensure directory exists
-    if [ ! -d "${HOME}/.config/fish" ] && ! mkdir -p "${HOME}/.config/fish" 2>/dev/null; then
+# =============================================================================
+# path_ensure_profile() - Profile-ensure: missing ~/.profile sources bashrc
+# =============================================================================
+#
+# GENERAL PURPOSE:
+# When PROFILE is absent, create it mode 0644 with a sample that sources
+# ~/.bashrc for bash. When the file is present, leave the body. No PATH line.
+#
+# Returns 0 when created, 1 when the file was already present or the write failed.
+#
+# PRINTF EXCEPTION (class C – file I/O redirect):
+# The sample is file content. The “→ Created” line uses out_plain.
+#
+# Last reviewed: 2026-09-29
+# =============================================================================
+
+path_ensure_profile() {
+    : "${HOME:=/tmp}"
+    : "${PROFILE:=${HOME}/.profile}"
+    : "${APP_NAME:=safe-rm}"
+    : "${JSON:=0}"
+
+    if [ -e "${PROFILE}" ]; then
         return 1
     fi
 
-    if [ -f "$fish_config" ] && grep -qF "${USER_BIN}" "$fish_config" 2>/dev/null; then
-        return 1  # already present
-    fi
+    {
+        printf '# BEGIN %s profile source-bashrc\n' "${APP_NAME}"
+        printf '%s\n' '# Created so a bash login shell sources interactive rc.'
+        printf '%s\n' 'if [ -n "${BASH_VERSION:-}" ]; then'
+        printf '%s\n' '    if [ -f "${HOME}/.bashrc" ]; then'
+        printf '%s\n' '        . "${HOME}/.bashrc"'
+        printf '%s\n' '    fi'
+        printf '%s\n' 'fi'
+        printf '# END %s profile source-bashrc\n' "${APP_NAME}"
+    } > "${PROFILE}" || return 1
 
-    printf "\n# Added by %s installer (%s)\n" "$APP_NAME" "$VERSION" >> "$fish_config"
-    printf '%s\n' "${path_line}" >> "$fish_config"
-
+    chmod 0644 "${PROFILE}" || return 1
+    path_chown_file "${PROFILE}" || return 1
     if [ "${JSON}" -eq 0 ]; then
-        out_plain "→ Added ${USER_BIN} to PATH for fish shell"
+        out_plain "→ Created ${PROFILE}"
     fi
     return 0
 }
@@ -2132,47 +2267,76 @@ path_add_fish() {
 # =============================================================================
 #
 # GENERAL PURPOSE:
-# Adds ${USER_BIN} (default ${HOME}/.local/bin) to bash, zsh, and fish
-# configuration files if not already present. Thin orchestrator for path_add_*.
+# Path-ensure on bashrc, zshenv, and Fish, then profile-ensure.
+# Zsh PATH is .zshenv. .profile receives the source-bashrc sample only.
+# A root login with SUDO_USER writes that account's home, then restores HOME.
 #
 # Respects --json mode (silent in JSON).
 #
-# Last reviewed: 29 April 2026
+# Last reviewed: 2026-09-29
 # =============================================================================
 
 path_add_shell() {
     local added=0
     local shell_config="N/A"
+    local _ps_home_saved _ps_bin_saved _ps_own=0
+    _ps_home_saved=${HOME-}
+    _ps_bin_saved=${USER_BIN-}
 
-    # Bash
-    if path_add_bashrc; then
-        added=1
-        shell_config="${HOME}/.bashrc"
+    if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ] && [ -n "${SUDO_USER-}" ] && [ "${SUDO_USER}" != "root" ]; then
+        HOME=$(srm_login_home)
+        USER_BIN=${HOME}/.local/bin
+        SRM_RC_OWNER=${SUDO_USER}
+        SRM_RC_GROUP=$(id -gn "${SUDO_USER}" 2>/dev/null || true)
+        _ps_own=1
     fi
 
-    # Zsh
-    if path_add_zshrc; then
+    if path_add_bashrc; then
+        added=1
+        shell_config="${BASHRC:-${HOME}/.bashrc}"
+    fi
+
+    if path_add_zshenv; then
         added=1
         if [ "$shell_config" = "N/A" ]; then
-            shell_config="${HOME}/.zshrc"
+            shell_config="${ZSHENV:-${HOME}/.zshenv}"
         else
-            shell_config="${shell_config} ${HOME}/.zshrc"
+            shell_config="${shell_config} ${ZSHENV:-${HOME}/.zshenv}"
         fi
     fi
 
-    # Fish
     if path_add_fish; then
         added=1
         if [ "$shell_config" = "N/A" ]; then
-            shell_config="${HOME}/.config/fish/config.fish"
+            shell_config="${FISH_CONFIG:-${HOME}/.config/fish/config.fish}"
         else
-            shell_config="${shell_config} ${HOME}/.config/fish/config.fish"
+            shell_config="${shell_config} ${FISH_CONFIG:-${HOME}/.config/fish/config.fish}"
+        fi
+    fi
+
+    if path_ensure_profile; then
+        added=1
+        if [ "$shell_config" = "N/A" ]; then
+            shell_config="${PROFILE:-${HOME}/.profile}"
+        else
+            shell_config="${shell_config} ${PROFILE:-${HOME}/.profile}"
         fi
     fi
 
     if [ "$added" -eq 1 ] && [ "${JSON}" -eq 0 ]; then
         out_plain "→ Restart your terminal or run: source ${shell_config}"
     fi
+
+    if [ "${_ps_own}" -eq 1 ]; then
+        unset SRM_RC_OWNER SRM_RC_GROUP
+    fi
+    if [ -n "${_ps_home_saved}" ]; then
+        HOME=${_ps_home_saved}
+    fi
+    if [ -n "${_ps_bin_saved}" ]; then
+        USER_BIN=${_ps_bin_saved}
+    fi
+    unset _ps_home_saved _ps_bin_saved _ps_own
 }
 
 # =============================================================================
@@ -2962,8 +3126,8 @@ app_about() {
     out_empty_line
     out_info "Useful commands:"
     out_info "   ${APP_NAME} help           → Full usage"
-    out_info "   ${APP_NAME} self-install   → Place this CLI (copy when you run the file)"
-    out_info "   ${APP_NAME} self-update    → Update to latest version"
+    out_info "   ${APP_NAME} self-install   → Place this CLI, then run setup when this login may"
+    out_info "   ${APP_NAME} self-update    → Update to latest version, then run setup when this login may"
     out_info "   ${APP_NAME} self-uninstall → Clean removal from system"
     out_info "   ${APP_NAME} --json         → Machine-readable output"
 
@@ -3020,15 +3184,15 @@ app_help() {
     out_empty_line
 
     out_info "Self-Management (Type 0 - any user):"
-    out_plain "  self-install         Place this file. Root copies it into /usr/local/bin/. This login copies it into \${HOME}/.local/bin/. A shell pipe still downloads"
+    out_plain "  self-install         Place this file. Root copies it into /usr/local/bin/. This login copies it into \${HOME}/.local/bin/. A shell pipe still downloads. When this login may run setup, that setup runs"
     out_plain "  install              Same as self-install. sudo src/safe-rm install --force copies this file and does not download"
     out_plain "  version              Show current version"
     out_plain "  about                Show detailed diagnostics"
     out_plain "  version-check        Compare local vs remote version (needs SCRIPT_URL)"
-    out_plain "  self-update          Update ${APP_NAME} to a newer remote version"
+    out_plain "  self-update          Update ${APP_NAME} to a newer remote version. When this login may run setup, that setup runs"
     out_plain "  self-uninstall       Remove ${APP_NAME} (safe PATH cleanup)"
     out_plain "  help                 Show this help"
-    out_plain "  setup                Check /usr/bin/rm and /bin/rm. On Termux, which rm is \$PREFIX/bin/rm (/data/data/com.termux/files/usr/bin/rm). This login moves that file. No sudo"
+    out_plain "  setup                Home guard in \${HOME}/.local/bin. Then Linux moves /usr/bin/rm and /bin/rm through sudo. On Termux, which rm is \$PREFIX/bin/rm (/data/data/com.termux/files/usr/bin/rm). This login moves that file. No sudo. macOS leaves /bin/rm"
     out_plain "  restore              Put origin-rm back as rm. Same as -restore"
     out_plain "  menu                 Numbered list on a terminal (1 remove-guard, 8 self-management, 9 Exit). Help off a terminal"
     out_plain "  main                 Same as menu"
@@ -3649,22 +3813,6 @@ srm_origin_rm() {
             unset _self _list _c _t _tprefix
             return 0
         fi
-        _c="${_tprefix}/bin/rm"
-        if [ -x "$_c" ] && [ "$_c" != "$_self" ]; then
-            _skip=0
-            if [ -L "$_c" ]; then
-                _t=$(readlink -- "$_c" 2>/dev/null || true)
-                case "$_t" in
-                    *safe-rm*) _skip=1 ;;
-                esac
-            fi
-            if [ "$_skip" -eq 0 ]; then
-                printf '%s\n' "$_c"
-                unset _self _list _c _t _tprefix _skip
-                return 0
-            fi
-            unset _skip
-        fi
         unset _self _list _c _t _tprefix
         return 1
     fi
@@ -3675,24 +3823,11 @@ srm_origin_rm() {
     if [ -n "${SRM_SWAP_ROOT-}" ]; then
         _list="${SRM_SWAP_ROOT}/origin-rm ${_list}"
     fi
+    _list="${_list} ${HOME:-}/.local/bin/origin-rm"
     for _c in ${_list}; do
+        [ -n "$_c" ] || continue
         [ -x "$_c" ] || continue
         [ -L "$_c" ] && continue
-        printf '%s\n' "$_c"
-        unset _self _list _c _t
-        return 0
-    done
-    for _c in /bin/rm /usr/bin/rm; do
-        [ -x "$_c" ] || continue
-        if [ "$_c" = "$_self" ]; then
-            continue
-        fi
-        if [ -L "$_c" ]; then
-            _t=$(readlink -- "$_c" 2>/dev/null || true)
-            case "$_t" in
-                *safe-rm*) continue ;;
-            esac
-        fi
         printf '%s\n' "$_c"
         unset _self _list _c _t
         return 0
@@ -3720,6 +3855,7 @@ srm_drop_symlink() {
 srm_install_guard() {
     _ig_src=${1-}
     _ig_guard=${2-}
+    _ig_mode=${3:-0755}
     if [ -z "$_ig_src" ] || [ ! -f "$_ig_src" ]; then
         out_die "Could not find this program file to install as safe-rm. Nothing was moved."
     fi
@@ -3727,8 +3863,9 @@ srm_install_guard() {
         out_die "Refusing to replace a directory at ${_ig_guard}. Nothing was moved."
     fi
     if [ -f "$_ig_guard" ] && cmp -s "$_ig_src" "$_ig_guard"; then
+        chmod "${_ig_mode}" "$_ig_guard" 2>/dev/null || true
         out_info "Guard is already this program: ${_ig_guard}"
-        unset _ig_src _ig_guard
+        unset _ig_src _ig_guard _ig_mode
         return 0
     fi
     _ig_dir=${_ig_guard%/*}
@@ -3738,7 +3875,7 @@ srm_install_guard() {
         unlink -- "$_ig_tmp" 2>/dev/null || unlink "$_ig_tmp" 2>/dev/null || true
         out_die "Could not copy this program to ${_ig_guard}."
     fi
-    chmod 0755 "$_ig_tmp" 2>/dev/null || true
+    chmod "${_ig_mode}" "$_ig_tmp" 2>/dev/null || true
     if [ -e "$_ig_guard" ]; then
         _ig_verb="Replaced"
     else
@@ -3749,7 +3886,7 @@ srm_install_guard() {
         out_die "Could not copy this program to ${_ig_guard}."
     fi
     out_info "${_ig_verb} ${_ig_guard}"
-    unset _ig_src _ig_guard _ig_dir _ig_tmp _ig_verb
+    unset _ig_src _ig_guard _ig_dir _ig_tmp _ig_verb _ig_mode
     return 0
 }
 
@@ -3855,64 +3992,36 @@ srm_termux_guard_class() {
     return 0
 }
 
-# Termux, Git Bash, and Windows cmd do not refresh /usr/bin.
-# Termux refreshes $PREFIX/bin when origin-rm is already there.
-srm_swap_host_skipped() {
-    if [ -n "${TERMUX_VERSION-}" ] || [ -n "${MSYSTEM-}" ]; then
-        return 0
-    fi
-    case "$(uname -s 2>/dev/null)" in
-        Linux) ;;
-        *)
-            return 0
-            ;;
-    esac
-    return 1
-}
-
-# Root place only. Does not move rm. When origin-rm is already there, the
-# command people type is the guard in that directory, not GLOBAL_BIN.
-srm_place_refreshes_guard() {
-    _tprefix=$(srm_termux_prefix 2>/dev/null || true)
-    if [ -n "${_tprefix}" ]; then
-        if [ -e "${_tprefix}/bin/origin-rm" ]; then
-            _pg_src=$(srm_script_source 2>/dev/null || true)
-            if [ -z "${_pg_src}" ] || [ ! -f "${_pg_src}" ]; then
-                _pg_src=${INSTALL_PATH-}
-            fi
-            if [ -n "${_pg_src}" ] && [ -f "${_pg_src}" ]; then
-                srm_install_guard "${_pg_src}" "${_tprefix}/bin/safe-rm"
-            fi
-            unset _pg_src
-        fi
-        unset _tprefix
-        return 0
-    fi
-    unset _tprefix
-    if srm_swap_host_skipped; then
-        return 0
-    fi
-    if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
-        return 0
-    fi
-    _pg_src=$(srm_script_source 2>/dev/null || true)
-    if [ -z "${_pg_src}" ] || [ ! -f "${_pg_src}" ]; then
-        _pg_src=${INSTALL_PATH-}
-    fi
-    if [ -z "${_pg_src}" ] || [ ! -f "${_pg_src}" ]; then
-        unset _pg_src
-        return 0
-    fi
-    if [ -e /usr/bin/origin-rm ]; then
-        srm_install_guard "${_pg_src}" "/usr/bin/safe-rm"
-    fi
-    if [ -d /bin ] && ! srm_same_file /bin /usr/bin; then
-        if [ -e /bin/origin-rm ]; then
-            srm_install_guard "${_pg_src}" "/bin/safe-rm"
+# After self-install or self-update. Measure 1 always runs.
+# Measure 2 follows the host table. A redirected GLOBAL_BIN is a test place:
+# setup still writes the home guard and does not call sudo for the host rm.
+srm_after_place_setup() {
+    : "${APP_NAME:=safe-rm}"
+    : "${GLOBAL_BIN:=/usr/local/bin}"
+    : "${HOME:=/tmp}"
+    : "${USER_BIN:=${HOME}/.local/bin}"
+    if [ -z "${INSTALL_PATH-}" ] || [ ! -f "${INSTALL_PATH}" ]; then
+        if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
+            INSTALL_PATH="${GLOBAL_BIN}/${APP_NAME}"
+        else
+            INSTALL_PATH="${USER_BIN}/${APP_NAME}"
         fi
     fi
-    unset _pg_src
-    return 0
+    _setup_prev=${SRM_SETUP_SOURCE-}
+    if [ -n "${INSTALL_PATH-}" ] && [ -f "${INSTALL_PATH}" ]; then
+        SRM_SETUP_SOURCE=${INSTALL_PATH}
+    fi
+    SRM_PLACE_SETUP=1
+    srm_cmd_setup
+    _setup_rc=$?
+    unset SRM_PLACE_SETUP
+    if [ -n "${_setup_prev}" ]; then
+        SRM_SETUP_SOURCE=${_setup_prev}
+    else
+        unset SRM_SETUP_SOURCE
+    fi
+    unset _setup_prev
+    return ${_setup_rc}
 }
 
 # Symlink text when $1 is a link whose target name is busybox. Empty otherwise.
@@ -4196,8 +4305,290 @@ srm_script_source() {
     unset _src
 }
 
-srm_cmd_setup() {
-    _src=$(srm_script_source) || out_die "Could not find this program file to install as safe-rm. Nothing was moved."
+# Password-database home. Root with SUDO_USER uses that account, not /root.
+srm_login_home() {
+    _lh=${HOME:-/tmp}
+    if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ] && [ -n "${SUDO_USER-}" ] && [ "${SUDO_USER}" != "root" ]; then
+        _lh_pw=
+        if command -v getent >/dev/null 2>&1; then
+            _lh_pw=$(getent passwd "${SUDO_USER}" 2>/dev/null | awk -F: 'NR==1 { print $6; exit }')
+        fi
+        if [ -z "${_lh_pw}" ] && [ -r /etc/passwd ]; then
+            _lh_pw=$(awk -F: -v u="${SUDO_USER}" '$1 == u { print $6; exit }' /etc/passwd)
+        fi
+        if [ -n "${_lh_pw}" ]; then
+            _lh=${_lh_pw}
+        fi
+        unset _lh_pw
+    fi
+    printf '%s\n' "${_lh}"
+    unset _lh
+}
+
+# Test seam: SRM_UNAME stands in for uname -s. Darwin and Git Bash skip measure 2.
+srm_host_kernel() {
+    if [ -n "${SRM_UNAME-}" ]; then
+        printf '%s\n' "${SRM_UNAME}"
+        return 0
+    fi
+    uname -s 2>/dev/null || true
+}
+
+srm_measure2_skipped_host() {
+    if [ -n "${MSYSTEM-}" ]; then
+        return 0
+    fi
+    _k=$(srm_host_kernel)
+    case "${_k}" in
+        Darwin|MINGW*|MSYS*|CYGWIN*)
+            unset _k
+            return 0
+            ;;
+    esac
+    unset _k
+    return 1
+}
+
+# Bytes for the system guard: the home file when it exists, else the place.
+srm_setup_source_path() {
+    if [ -n "${SRM_SETUP_SOURCE-}" ] && [ -f "${SRM_SETUP_SOURCE}" ]; then
+        printf '%s\n' "${SRM_SETUP_SOURCE}"
+        return 0
+    fi
+    _sp_home=$(srm_login_home)
+    if [ -f "${_sp_home}/.local/bin/${APP_NAME:-safe-rm}" ]; then
+        printf '%s\n' "${_sp_home}/.local/bin/${APP_NAME:-safe-rm}"
+        unset _sp_home
+        return 0
+    fi
+    unset _sp_home
+    srm_script_source
+}
+
+# $1 is setup or restore. The child is measure 2 only. No password on the line.
+srm_sudo_reexec() {
+    _verb=${1:-setup}
+    _sd=${SRM_SUDO:-sudo}
+    set -- env SRM_SETUP_MEASURE=2
+    if [ -n "${SRM_SETUP_SOURCE-}" ] && [ -f "${SRM_SETUP_SOURCE}" ]; then
+        set -- "$@" "SRM_SETUP_SOURCE=${SRM_SETUP_SOURCE}"
+    fi
+    if [ -n "${SRM_SWAP_ROOT-}" ]; then
+        set -- "$@" "SRM_SWAP_ROOT=${SRM_SWAP_ROOT}"
+    fi
+    if [ -n "${SRM_SWAP_BIN-}" ]; then
+        set -- "$@" "SRM_SWAP_BIN=${SRM_SWAP_BIN}"
+    fi
+    if [ -n "${SRM_UNAME-}" ]; then
+        set -- "$@" "SRM_UNAME=${SRM_UNAME}"
+    fi
+    set -- "$@" "$0" "${_verb}"
+    "${_sd}" "$@"
+    _rc=$?
+    unset _verb _sd
+    return ${_rc}
+}
+
+srm_link_is_guard() {
+    _lg=${1-}
+    _gg=${2-}
+    [ -L "${_lg}" ] || return 1
+    _lt=$(readlink -- "${_lg}" 2>/dev/null || readlink "${_lg}" 2>/dev/null || true)
+    [ "${_lt}" = "safe-rm" ] && {
+        unset _lg _gg _lt
+        return 0
+    }
+    [ "${_lt}" = "${_gg}" ] && {
+        unset _lg _gg _lt
+        return 0
+    }
+    _ld=${_lg%/*}
+    if [ -e "${_ld}/${_lt}" ] && [ "${_ld}/${_lt}" -ef "${_gg}" ]; then
+        unset _lg _gg _lt _ld
+        return 0
+    fi
+    unset _lg _gg _lt _ld
+    return 1
+}
+
+# Copy the original remover into the home origin before any system rm moves.
+# Darwin writes a program that execs /bin/rm. Returns 1 when there is no original.
+srm_home_capture_origin() {
+    _dest=${1-}
+    [ -n "${_dest}" ] || return 1
+    if [ -e "${_dest}" ]; then
+        unset _dest
+        return 0
+    fi
+    _os=$(srm_host_kernel)
+    if [ "${_os}" = "Darwin" ]; then
+        _dtmp=$(mktemp "${_dest%/*}/origin-rm.XXXXXX") || {
+            unset _dest _os
+            out_die "Could not stage ${HOME}/.local/bin/origin-rm. Nothing else was changed."
+        }
+        if ! printf '%s\n' '#!/bin/sh' '# safe-rm darwin-origin' 'exec /bin/rm "$@"' > "${_dtmp}"; then
+            unlink -- "${_dtmp}" 2>/dev/null || unlink "${_dtmp}" 2>/dev/null || true
+            unset _dest _os _dtmp
+            out_die "Could not write ${HOME}/.local/bin/origin-rm. Nothing else was changed."
+        fi
+        chmod 0700 "${_dtmp}" 2>/dev/null || true
+        if ! mv -- "${_dtmp}" "${_dest}"; then
+            unlink -- "${_dtmp}" 2>/dev/null || unlink "${_dtmp}" 2>/dev/null || true
+            unset _dest _os _dtmp
+            out_die "Could not write ${HOME}/.local/bin/origin-rm. Nothing else was changed."
+        fi
+        out_info "Wrote ${_dest}"
+        unset _dest _os _dtmp
+        return 0
+    fi
+    unset _os
+    _dirs=
+    if [ -n "${SRM_SWAP_ROOT-}" ]; then
+        _dirs="${_dirs} ${SRM_SWAP_ROOT}"
+    fi
+    if [ -n "${SRM_SWAP_BIN-}" ]; then
+        _dirs="${_dirs} ${SRM_SWAP_BIN}"
+    fi
+    _tp=$(srm_termux_prefix 2>/dev/null || true)
+    if [ -n "${_tp}" ]; then
+        _dirs="${_dirs} ${_tp}/bin"
+    fi
+    unset _tp
+    if [ -z "${_dirs}" ]; then
+        _dirs="/usr/bin /bin"
+    fi
+    for _d in ${_dirs}; do
+        _rmp="${_d}/rm"
+        _orp="${_d}/origin-rm"
+        _bb_text=$(srm_busybox_link_text "${_rmp}" 2>/dev/null || true)
+        _bb_kind=busybox
+        if [ -z "${_bb_text}" ]; then
+            _bb_text=$(srm_busybox_link_text "${_rmp}" toybox 2>/dev/null || true)
+            _bb_kind=toybox
+        fi
+        if [ -z "${_bb_text}" ]; then
+            _bb_text=$(srm_busybox_link_text "${_rmp}" coreutils 2>/dev/null || true)
+            _bb_kind=coreutils
+        fi
+        if [ -n "${_bb_text}" ]; then
+            _bb_abs=$(srm_busybox_abs "${_rmp}" "${_bb_text}")
+            if [ ! -f "${_bb_abs}" ]; then
+                out_die "${_bb_kind} rm at ${_rmp} does not point at a usable file. Nothing was moved."
+            fi
+            srm_install_busybox_origin "${_dest}" "${_bb_text}" "${_bb_abs}" "${_bb_kind}"
+            chmod 0700 "${_dest}" 2>/dev/null || true
+            unset _dest _dirs _d _rmp _orp _bb_text _bb_kind _bb_abs
+            return 0
+        fi
+        if [ -f "${_rmp}" ] && [ ! -L "${_rmp}" ]; then
+            if cp -- "${_rmp}" "${_dest}"; then
+                chmod 0700 "${_dest}" 2>/dev/null || true
+                out_info "Saved ${_dest}"
+                unset _dest _dirs _d _rmp _orp _bb_text _bb_kind
+                return 0
+            fi
+            unset _dest _dirs _d _rmp _orp _bb_text _bb_kind
+            out_die "Could not save ${HOME}/.local/bin/origin-rm. Nothing else was changed."
+        fi
+        if [ -f "${_orp}" ] && [ ! -L "${_orp}" ]; then
+            if cp -- "${_orp}" "${_dest}"; then
+                chmod 0700 "${_dest}" 2>/dev/null || true
+                out_info "Saved ${_dest}"
+                unset _dest _dirs _d _rmp _orp _bb_text _bb_kind
+                return 0
+            fi
+            unset _dest _dirs _d _rmp _orp _bb_text _bb_kind
+            out_die "Could not save ${HOME}/.local/bin/origin-rm. Nothing else was changed."
+        fi
+        unset _bb_text _bb_kind
+    done
+    unset _dest _dirs _d _rmp _orp
+    return 1
+}
+
+# Measure 1. This login. No sudo. Stops before measure 2 when rm is foreign.
+srm_measure1() {
+    _m1_home_saved=${HOME-}
+    _m1_bin_saved=${USER_BIN-}
+    HOME=$(srm_login_home)
+    USER_BIN=${HOME}/.local/bin
+    _bin=${USER_BIN}
+    _guard=${_bin}/safe-rm
+    _link=${_bin}/rm
+    _origin=${_bin}/origin-rm
+    if [ -e "${_link}" ] || [ -L "${_link}" ]; then
+        if ! srm_link_is_guard "${_link}" "${_guard}"; then
+            out_die "${_link} is not the safe-rm link. Nothing further was written. Nothing was moved."
+        fi
+    fi
+    if [ ! -d "${_bin}" ] && ! mkdir -p "${_bin}"; then
+        out_die "Could not create ${_bin}. Nothing was moved."
+    fi
+    _src=$(srm_setup_source_path) || out_die "Could not find this program file to install as safe-rm. Nothing was moved."
+    srm_install_guard "${_src}" "${_guard}" 0700
+    srm_home_capture_origin "${_origin}" || true
+    if [ ! -e "${_link}" ] && [ ! -L "${_link}" ]; then
+        ln -s safe-rm "${_link}" || out_die "Could not point ${_link} at ${_guard}."
+        out_info "Pointed ${_link} at ${_guard}"
+    fi
+    if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ] && [ -n "${SUDO_USER-}" ] && [ "${SUDO_USER}" != "root" ]; then
+        SRM_RC_OWNER=${SUDO_USER}
+        SRM_RC_GROUP=$(id -gn "${SUDO_USER}" 2>/dev/null || true)
+        path_chown_file "${_bin}" || true
+        path_chown_file "${_guard}" || true
+        path_chown_file "${_link}" || true
+        if [ -e "${_origin}" ]; then
+            path_chown_file "${_origin}" || true
+        fi
+    fi
+    path_add_shell
+    if [ -n "${_m1_home_saved}" ]; then
+        HOME=${_m1_home_saved}
+    fi
+    if [ -n "${_m1_bin_saved}" ]; then
+        USER_BIN=${_m1_bin_saved}
+    fi
+    unset _m1_home_saved _m1_bin_saved _bin _guard _link _origin _src
+    return 0
+}
+
+# Remove the home rm link and home origin-rm. Leave safe-rm.
+srm_restore_home() {
+    _rh=$(srm_login_home)
+    _bin=${_rh}/.local/bin
+    _link=${_bin}/rm
+    _origin=${_bin}/origin-rm
+    _did=0
+    if [ -L "${_link}" ] || [ -f "${_link}" ]; then
+        if [ -d "${_link}" ]; then
+            out_die "Refusing to remove a directory at ${_link}. Nothing was moved."
+        fi
+        if [ -L "${_link}" ]; then
+            srm_drop_symlink "${_link}" || out_die "Could not remove ${_link}."
+        else
+            unlink -- "${_link}" 2>/dev/null || unlink "${_link}" 2>/dev/null || out_die "Could not remove ${_link}."
+        fi
+        out_info "Removed ${_link}"
+        _did=1
+    fi
+    if [ -L "${_origin}" ] || [ -f "${_origin}" ]; then
+        if [ -d "${_origin}" ]; then
+            out_die "Refusing to remove a directory at ${_origin}. Nothing was moved."
+        fi
+        if [ -L "${_origin}" ]; then
+            srm_drop_symlink "${_origin}" || out_die "Could not remove ${_origin}."
+        else
+            unlink -- "${_origin}" 2>/dev/null || unlink "${_origin}" 2>/dev/null || out_die "Could not remove ${_origin}."
+        fi
+        out_info "Removed ${_origin}"
+        _did=1
+    fi
+    unset _rh _bin _link _origin _did
+    return 0
+}
+
+srm_measure2_apply() {
+    _src=$(srm_setup_source_path) || out_die "Could not find this program file to install as safe-rm. Nothing was moved."
     if [ -n "${SRM_SWAP_ROOT-}" ] || [ -n "${SRM_SWAP_BIN-}" ]; then
         if [ -n "${SRM_SWAP_ROOT-}" ]; then
             srm_swap_root_ok "${SRM_SWAP_ROOT}" || out_die "Refusing setup outside a /tmp/safe-rm-swap.* directory. Nothing was moved."
@@ -4206,10 +4597,10 @@ srm_cmd_setup() {
             srm_swap_root_ok "${SRM_SWAP_BIN}" || out_die "Refusing setup outside a /tmp/safe-rm-swap.* directory. Nothing was moved."
         fi
         if [ -n "${SRM_SWAP_ROOT-}" ] && [ -n "${SRM_SWAP_BIN-}" ]; then
-            srm_swap_either "${SRM_SWAP_ROOT}" "${SRM_SWAP_BIN}" "$_src"
+            srm_swap_either "${SRM_SWAP_ROOT}" "${SRM_SWAP_BIN}" "${_src}"
         else
             _one=${SRM_SWAP_ROOT:-${SRM_SWAP_BIN}}
-            if ! srm_swap_one "$_one" "$_src"; then
+            if ! srm_swap_one "${_one}" "${_src}"; then
                 out_die "No original rm binary in ${_one}. Nothing was moved."
             fi
             unset _one
@@ -4217,27 +4608,73 @@ srm_cmd_setup() {
         unset _src
         return 0
     fi
-    _tprefix=$(srm_termux_prefix 2>/dev/null || true)
-    if [ -n "${_tprefix}" ]; then
-        _tbin="${_tprefix}/bin"
-        if [ ! -d "${_tbin}" ]; then
-            out_die "Termux rm is ${_tbin}/rm. That directory is missing. Nothing was moved."
-        fi
-        if ! srm_swap_one "${_tbin}" "$_src"; then
-            out_die "No original rm at ${_tbin}/rm. Nothing was moved."
-        fi
-        unset _tprefix _tbin _src
-        return 0
-    fi
     if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
-        out_die "Setup checks /usr/bin/rm and /bin/rm and may move the system rm. That needs an admin login. Nothing was moved."
+        unset _src
+        out_die "Measure 2 moves /usr/bin/rm and /bin/rm. The child is not root. Nothing was moved."
     fi
-    srm_swap_either "/usr/bin" "/bin" "$_src"
+    srm_swap_either "/usr/bin" "/bin" "${_src}"
     unset _src
     return 0
 }
 
-srm_cmd_restore() {
+srm_measure2_termux() {
+    _tprefix=${1-}
+    _src=$(srm_setup_source_path) || out_die "Could not find this program file to install as safe-rm. Nothing was moved."
+    _tbin="${_tprefix}/bin"
+    if [ ! -d "${_tbin}" ]; then
+        out_die "Termux rm is ${_tbin}/rm. That directory is missing. Nothing was moved."
+    fi
+    if ! srm_swap_one "${_tbin}" "${_src}"; then
+        out_die "No original rm at ${_tbin}/rm. Nothing was moved."
+    fi
+    unset _tprefix _src _tbin
+    return 0
+}
+
+# Linux non-root delegates measure 2. A fixture without SRM_DELEGATE_MEASURE2
+# swaps in-process so the suite never calls the real sudo. A place whose
+# GLOBAL_BIN is not /usr/local/bin is a test place and does not escalate.
+srm_measure2_dispatch() {
+    _tp=$(srm_termux_prefix 2>/dev/null || true)
+    if [ -n "${_tp}" ]; then
+        srm_measure2_termux "${_tp}"
+        _rc=$?
+        unset _tp
+        return ${_rc}
+    fi
+    unset _tp
+    if srm_measure2_skipped_host; then
+        return 0
+    fi
+    if [ -n "${SRM_SWAP_ROOT-}" ] || [ -n "${SRM_SWAP_BIN-}" ]; then
+        if [ "${SRM_DELEGATE_MEASURE2-}" != "1" ]; then
+            srm_measure2_apply
+            return $?
+        fi
+    fi
+    if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
+        srm_measure2_apply
+        return $?
+    fi
+    if [ "${SRM_PLACE_SETUP-}" = "1" ]; then
+        : "${GLOBAL_BIN:=/usr/local/bin}"
+        if [ "${GLOBAL_BIN}" != "/usr/local/bin" ] && [ -z "${SRM_SWAP_ROOT-}" ] && [ -z "${SRM_SWAP_BIN-}" ]; then
+            return 0
+        fi
+    fi
+    _lh=$(srm_login_home)
+    if [ -f "${_lh}/.local/bin/${APP_NAME:-safe-rm}" ]; then
+        SRM_SETUP_SOURCE=${_lh}/.local/bin/${APP_NAME:-safe-rm}
+    fi
+    unset _lh
+    if srm_sudo_reexec setup; then
+        return 0
+    fi
+    out_error "/usr/bin/rm and /bin/rm were not moved."
+    return 1
+}
+
+srm_restore_system() {
     if [ -n "${SRM_SWAP_ROOT-}" ] || [ -n "${SRM_SWAP_BIN-}" ]; then
         _rdid=0
         if [ -n "${SRM_SWAP_ROOT-}" ]; then
@@ -4252,7 +4689,8 @@ srm_cmd_restore() {
                 _rdid=1
             fi
         fi
-        if [ "$_rdid" -eq 0 ]; then
+        if [ "${_rdid}" -eq 0 ]; then
+            unset _rdid
             out_die "No origin-rm to restore. Nothing was moved."
         fi
         unset _rdid
@@ -4266,8 +4704,9 @@ srm_cmd_restore() {
         unset _tprefix
         return 0
     fi
+    unset _tprefix
     if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
-        out_die "Restore puts origin-rm back as rm. That needs an admin login. Nothing was moved."
+        out_die "Measure 2 restore puts origin-rm back as rm. The child is not root. Nothing was moved."
     fi
     _rdid=0
     if [ -e /usr/bin/origin-rm ]; then
@@ -4282,11 +4721,73 @@ srm_cmd_restore() {
             fi
         fi
     fi
-    if [ "$_rdid" -eq 0 ]; then
+    if [ "${_rdid}" -eq 0 ]; then
+        unset _rdid
         out_die "No origin-rm at /usr/bin/origin-rm or /bin/origin-rm. Nothing was moved."
     fi
     unset _rdid
     return 0
+}
+
+srm_restore_dispatch() {
+    if [ "${SRM_SETUP_MEASURE-}" = "2" ]; then
+        srm_restore_system
+        return $?
+    fi
+    _tp=$(srm_termux_prefix 2>/dev/null || true)
+    if [ -n "${_tp}" ]; then
+        srm_restore_system || return $?
+        unset _tp
+        srm_restore_home
+        return $?
+    fi
+    unset _tp
+    if srm_measure2_skipped_host; then
+        srm_restore_home
+        return $?
+    fi
+    if [ -n "${SRM_SWAP_ROOT-}" ] || [ -n "${SRM_SWAP_BIN-}" ]; then
+        if [ "${SRM_DELEGATE_MEASURE2-}" != "1" ]; then
+            srm_restore_system || return $?
+            srm_restore_home
+            return $?
+        fi
+    fi
+    if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
+        srm_restore_system || return $?
+        srm_restore_home
+        return $?
+    fi
+    if srm_sudo_reexec restore; then
+        srm_restore_home
+        return $?
+    fi
+    out_error "/usr/bin/rm and /bin/rm were not restored."
+    return 1
+}
+
+srm_cmd_setup() {
+    # The measure-2 child must not write the home and must not call sudo again.
+    if [ "${SRM_SETUP_MEASURE-}" = "2" ]; then
+        _tp=$(srm_termux_prefix 2>/dev/null || true)
+        if [ -n "${_tp}" ]; then
+            srm_measure2_termux "${_tp}"
+            _rc=$?
+            unset _tp
+            return ${_rc}
+        fi
+        unset _tp
+        srm_measure2_apply
+        return $?
+    fi
+    srm_measure1 || return $?
+    srm_measure2_dispatch
+    return $?
+}
+
+srm_cmd_restore() {
+    srm_restore_dispatch
+    return $?
 }
 
 # !!! DO NOT MODIFY OR SIMPLIFY THE DRY-RUN GUARD !!!
@@ -4573,9 +5074,9 @@ app_default_print_self_menu() {
     out_menu_choice "82" "version" "show current version"
     out_menu_choice "83" "about" "show detailed diagnostics"
     out_menu_choice "84" "version-check" "compare local vs remote version"
-    out_menu_choice "85" "self-update" "update ${APP_NAME} to a newer remote version"
+    out_menu_choice "85" "self-update" "update ${APP_NAME} to a newer remote version, then run setup when this login may"
     out_menu_choice "86" "self-uninstall" "remove ${APP_NAME}"
-    out_menu_choice "87" "self-install" "copy this file into /usr/local/bin or \${HOME}/.local/bin (download only when a shell pipe starts it)"
+    out_menu_choice "87" "self-install" "copy this file into /usr/local/bin or \${HOME}/.local/bin, then run setup when this login may"
     out_menu_choice "0" "Back"
 }
 

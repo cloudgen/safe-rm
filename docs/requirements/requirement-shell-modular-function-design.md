@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-modular-function-design.md  
-**Status**: Active (Version 1.0.1)  
+**Status**: Active (Version 1.0.4)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -65,7 +65,7 @@ The installable CLI **MUST** remain **one** file so `curl | sh` still works. Thi
 | `util_` | General utilities | Reusable helpers (backup, path resolve, storage) | `util_backup`, `util_resolve_storage`, `util_get_install_bin_path` |
 | `app_` | General app CLI surface (product-neutral) | Entry, dispatch, about/help/version presentation | `app_main`, `app_about`, `app_help`, `app_version` |
 | `ver_` | Version comparison | Semantic version handling | `ver_gt`, `ver_check` |
-| `path_` | Shell PATH & environment | PATH manipulation and shell config | `path_add_shell`, `path_add_bashrc` |
+| `path_` | Shell PATH & environment | PATH manipulation and shell config | `path_add_shell`, `path_add_bashrc`, `path_ensure_profile` |
 | `prompt_` | Interactive prompts | TTY-safe confirmations and questions | `prompt_yes_no`, `prompt_ask` |
 | `{{APP_NAME}}_` | Domain / product business logic | Product-specific ops (start, configure, deploy) | *None required until domain ops exist* |
 
@@ -181,7 +181,7 @@ function_name() {
 | `out_` | `out_text`, `out_success`, `out_info`, `out_warn`, `out_error`, `out_die`, `out_plain`, `out_msg_n`, `out_empty_line`, `out_double_line`, `out_json`, `out_json_error` |
 | `inst_` | `inst_perform_install`, `inst_perform_install_prepare_target`, `inst_perform_install_download_with_checksum`, `inst_perform_install_download_without_checksum`, `inst_perform_install_atomic_install`, `inst_argv0_is_shell_interpreter`, `inst_resolve_self_script`, `inst_cli_dest_mode`, `inst_self_install_copy_from_script`, `inst_self_install`, `inst_maybe_install`, `inst_self_update`, `inst_self_uninstall` (+ determine_bin / confirm_and_remove / cleanup_path), `inst_is_installed`, `inst_get_version` |
 | `ver_` | `ver_gt`, `ver_check` |
-| `path_` | `path_add_bashrc`, `path_add_zshrc`, `path_add_fish`, `path_add_shell` |
+| `path_` | Live in `1.0.11`: `path_add_bashrc`, `path_add_zshenv`, `path_add_fish`, `path_add_shell`, `path_ensure_profile`. Path-ensure does not write `.zshrc` |
 | `util_` | `util_json_escape`, `util_sha256_file`, `util_fetch_remote_version`, `util_get_install_bin_path`, `util_backup`, `util_resolve_storage` (**wired** from `app_main` / `app_about`; SSOT: `requirement-shell-cli-storage.md`), `util_get_current_shell` |
 | `prompt_` | `prompt_ask`, `prompt_yes_no` |
 | `app_` | `app_about`, `app_version` (dispatcher routes `version` here), `app_help`, `app_default`, `app_main` |
@@ -271,7 +271,7 @@ A modular-structure change for safe-rm is **not done** if any of the following f
 
 This product may run on Termux, Git Bash, Windows cmd, or the same class (this login only).
 
-**This requirement:** prefixes stay `out_` / `inst_` / `app_` / `util_` / `prompt_` for this-login self-care. **MUST NOT** add an elevation prefix or `util_sudo` family on that class. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
+**This requirement:** prefixes stay `out_` / `inst_` / `app_` / `util_` / `prompt_` / `srm_` / `path_`. **MUST NOT** add a `util_sudo` family. The one `sudo` is a re-exec inside `srm_cmd_setup` for Linux measure 2 (`requirement-domain-safe-rm.md` §2.0.5). Termux, Git Bash, Windows cmd, and macOS **MUST NOT** call it. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
 
 | MUST | MUST NOT |
 |------|----------|
@@ -293,6 +293,6 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 
 ---
 
-**Last Updated**: 2026-09-17  
+**Last Updated**: 2026-09-29 (1.0.4 — ship unit `1.0.11` defines `path_ensure_profile` and `path_add_zshenv`)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 6, 7, 8, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

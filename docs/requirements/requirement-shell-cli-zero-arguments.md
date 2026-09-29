@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-zero-arguments.md  
-**Status**: Active (Version 1.3.1)  
+**Status**: Active (Version 1.3.2)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -277,12 +277,12 @@ This requirement is satisfied when all of the following hold:
 
 This product may run on Termux, Git Bash, Windows cmd, or the same class (this login only).
 
-**This requirement:** empty command line still means **install or re-check install for this login**. On that class, Case A **MUST** place into `USER_BIN` (this login). **MUST NOT** escalate, wrap `sudo`, or recommend `sudo curl | sh` as the empty-argv path there. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
+**This requirement:** empty command line still means **install or re-check install for this login**. On that class, Case A **MUST** place into `USER_BIN` (this login). The place **MUST NOT** call `sudo`. After the place, setup §2.0.5 runs: measure 1 stays this login, and measure 2 **MUST NOT** call `sudo` on Termux, Git Bash, Windows cmd, or macOS. **MUST NOT** recommend `sudo curl | sh`. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
 
 | MUST | MUST NOT |
 |------|----------|
-| Empty-argv ensure as this login | Empty argv that tries to become root on Termux / Git Bash / Windows cmd |
-| Quiet/json helper still places or fail closed | Add an admin-privilege empty-argv branch |
+| Empty-argv ensure as this login, then measure 1 | Empty argv that calls `sudo` on Termux, Git Bash, Windows cmd, or macOS |
+| Quiet/json helper still places or fail closed | Add an admin-privilege empty-argv branch on that class |
 
 ---
 
@@ -314,7 +314,7 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 
 ---
 
-**Last Updated**: 2026-09-27  
+**Last Updated**: 2026-09-29 (1.3.2 — empty argv still places as this login; Linux setup after that place may `sudo` for measure 2 only)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 6, 16, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).
 

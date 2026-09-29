@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-idempotency.md  
-**Status**: Active (Version 1.0.1)  
+**Status**: Active (Version 1.0.3)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -96,7 +96,7 @@ Force **MUST NOT** be used as a silent way to skip integrity verification.
 | **Install ensure SSOT** | `inst_self_install` (copy when `$0` is a script) + download/atomic helpers for interpreter `$0` / `self-update` |
 | **Force reinstall var** | `FORCE_REINSTALL` (default `0`); CLI `--force` must set this per `requirement-shell-cli-interface.md` |
 | **Remote channel** | `SCRIPT_URL` (required for version-check / self-update network steps) |
-| **User PATH integration** | `path_add_*` / `path_add_shell` — append only if marker/line absent |
+| **User PATH integration** | **Path-ensure** appends the exact user-bin line only when that line is absent. **Profile-ensure** creates a missing `.profile` that sources `.bashrc` and does not overwrite an existing body (`requirement-shell-cli-self-install.md` §2.7) |
 | **Uninstall PATH cleanup** | `inst_self_uninstall_cleanup_path` — only if `~/.local/bin` empty |
 
 #### Command-level idempotency matrix (normative)
@@ -110,15 +110,18 @@ Force **MUST NOT** be used as a silent way to skip integrity verification.
 | `self-uninstall` | Binary absent | **Success no-op** “not installed / nothing to uninstall” | Force may skip interactive confirm only; still no over-delete |
 | `version-check` | N/A (read/compare) | Safe to re-run; network fetch each time is allowed; must not mutate install state | — |
 | `version`, `about`, `help` | N/A (read-only) | Safe to re-run; no install mutation | — |
-| PATH add (`path_add_bashrc` / zsh / fish) | PATH line already present | No second identical append | — |
-| PATH cleanup on uninstall | `~/.local/bin` empty **or** PATH lines already removed | No thrash; if bin dir still has files, **keep** PATH (do not strip shared dir) | — |
+| Path-ensure (`.bashrc`, `.zshenv`, fish) | Exact user-bin PATH line already present | No second identical append | — |
+| Profile-ensure (`.profile`) | File exists. Body kept | A missing `.profile` is created once and sources `.bashrc`. An existing body is not replaced | — |
+| PATH cleanup on uninstall | `~/.local/bin` empty **or** PATH lines already removed | No thrash; if bin dir still has files, **keep** PATH (do not strip shared dir). Do not delete `.profile` or strip the profile-ensure sample | — |
+| setup measure 1 | `${HOME}/.local/bin/rm` points at this program and `origin-rm` is present | Do not replace `origin-rm`. Replace `safe-rm` only when bytes differ. Do not call `sudo` | A home `rm` that is not this symlink stops measure 1 and does not start measure 2 |
+| setup measure 2 on Linux | System `origin-rm` present and system `safe-rm` bytes match | Do not move `origin-rm`. The `sudo` re-exec still runs when the invoker is not root, and the child changes nothing when the bytes match | Child **MUST NOT** call `sudo` again |
 
 #### Concrete detect → act expectations (this project)
 
 1. **Install:** If `inst_is_installed` and `FORCE_REINSTALL=0` → return 0 without download/move.  
 2. **Self-update:** Fetch remote `VERSION` from `SCRIPT_URL`; if equal to local and force off → return 0 without reinstall; if remote unreadable → fail loud (not a silent “already ok”).  
 3. **Self-uninstall:** If no managed binary path resolved → return 0 (not installed).  
-4. **PATH ensure:** Grep/marker check before append; already present is success for the ensure intent.  
+4. **Path-ensure and profile-ensure:** Create a missing `.profile` with the source-bashrc sample and leave an existing body. Append the PATH line on `.bashrc`, `.zshenv`, and Fish only when the exact line is absent. Already present is success for the ensure intent.  
 5. **Atomic install temps:** Failed download paths **MUST** remove temp files; re-run starts clean.  
 6. **Partial install:** Re-run of install after partial failure **MUST** attempt to converge (re-prepare target, re-download, atomic replace) or fail loud — not leave a second half-broken binary without error.
 
@@ -187,11 +190,11 @@ A state-changing shell change for safe-rm is **not done** if any of the followin
 
 This product may run on Termux, Git Bash, Windows cmd, or the same class (this login only).
 
-**This requirement:** re-run safety stays **normal user privilege**. Already-installed / already-latest no-ops **MUST NOT** grow an elevation branch on that class. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
+**This requirement:** re-run safety for the place and for measure 1 stays **normal user privilege**. Already-installed / already-latest no-ops **MUST NOT** grow an elevation branch on Termux, Git Bash, Windows cmd, or macOS. A Linux re-run of measure 2 may call `sudo` again only to reach the root child; the child does not move `origin-rm` again. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
 
 | MUST | MUST NOT |
 |------|----------|
-| Second run still this-login ensure | Re-run that wraps `sudo` / `apt` “to make sure” |
+| Second run of measure 1 stays this login | Re-run that wraps `sudo` on Termux, Git Bash, Windows cmd, or macOS |
 
 ---
 
@@ -209,6 +212,6 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 
 ---
 
-**Last Updated**: 2026-09-17  
+**Last Updated**: 2026-09-29 (1.0.3 — profile-ensure creates a missing `.profile` once and keeps an existing body; path-ensure does not write `.profile`)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; related `requirement-shell-cli-interface.md`; CIAO Principles 1, 2, 3, 11, 12, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

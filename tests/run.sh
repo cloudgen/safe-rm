@@ -29,6 +29,12 @@ export SCRIPT
 if ! sh "${TESTS_ROOT}/run_dry_run.sh"; then
     exit 1
 fi
+if ! sh "${TESTS_ROOT}/test_place_setup.sh"; then
+    exit 1
+fi
+if ! sh "${TESTS_ROOT}/test_two_layer.sh"; then
+    exit 1
+fi
 
 # shellcheck source=helpers.sh
 . "${TESTS_ROOT}/helpers.sh"

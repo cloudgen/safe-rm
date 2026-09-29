@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-interface.md  
-**Status**: Active (Version 1.2.5)  
+**Status**: Active (Version 1.2.6)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -134,7 +134,7 @@ When specializing product **B** from this bootstrap (**A → B only**):
 | **Primary executable** | `src/safe-rm` (POSIX `/bin/sh`, single-file for `curl \| sh`) |
 | **Dispatcher** | `app_main` (always invoked at end of script: `app_main "$@"` — no `${0##*/}` / APP_NAME basename gate; required for `curl \| sh`) |
 | **Output SSOT** | `out_text` + wrappers (`out_info`, `out_success`, `out_warn`, `out_error`, `out_die`, `out_plain`, `out_json`, …) |
-| **Version SSOT** | `VERSION` default `1.0.9` (script header / config block: `VERSION="1.0.9"`) |
+| **Version SSOT** | `VERSION` default `1.0.11` (script header / config block: `VERSION="1.0.11"`) |
 | **Install paths** | Global: `GLOBAL_BIN` default `/usr/local/bin`; User: `USER_BIN` default `${HOME}/.local/bin` |
 | **Remote channel env (help surface)** | `REPO_USER` / `REPO_NAME` / `SCRIPT_RELPATH` (defaults `cloudgen` / `safe-rm` / `src/safe-rm`); `SCRIPT_URL` composed default `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/${SCRIPT_RELPATH}` (literal product default: `https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm`; override via env). **`help` MUST list `REPO_USER`, `REPO_NAME`, `SCRIPT_RELPATH`, and `SCRIPT_URL`, and MUST NOT list `CHECKSUM`. `about` MUST NOT list `CHECKSUM`** (install-path runtime pin only; see `requirement-shell-automatic-checksum.md`) |
 | **Type 1 / Type 2 commands** | **None** on current surface — this tool is CLI lifecycle only |
@@ -183,7 +183,7 @@ Every command is also a switch of the same name. `help` and `--help` are the sam
 
 - Type 1: `prerequisites`, `create-user`, Docker host install, etc.  
 - Type 2: app `start`/`stop`/`configure` under a system user  
-- The remove guard (`rm`, `--dry-run`, `setup`, `restore`, the protected-rm swap) is owned by `requirement-domain-safe-rm.md`. This file keeps the Type 0 menu and does not restate the refuse table. The swap is the one admin step on a Linux host. On Termux this login runs it against `$PREFIX/bin/rm` and does not call `sudo`. It is unused on Git Bash and Windows cmd. Tests use a `/tmp/safe-rm-swap.*` directory and do not remove a directory.  
+- The remove guard (`rm`, `--dry-run`, `setup`, `restore`, the protected-rm swap) is owned by `requirement-domain-safe-rm.md` §2.0.5. This file keeps the Type 0 menu and does not restate the refuse table. Setup writes the home guard as this login, then on Linux re-execs itself through `sudo` for the system swap. On Termux this login runs measure 2 against `$PREFIX/bin/rm` and does not call `sudo`. macOS, Git Bash, and Windows cmd stop after the home guard and do not call `sudo`. Tests use a `/tmp/safe-rm-swap.*` directory and do not remove a directory.  
 
 ### 2.7 Why This Requirement Exists (Direct CIAO Alignment)
 
@@ -245,12 +245,12 @@ This requirement is satisfied for the safe-rm shell CLI when all of the followin
 
 This product may run on Termux, Git Bash, Windows cmd, or the same class (this login only).
 
-**This requirement:** the command surface stays **normal user privilege**. Help and dispatch **MUST NOT** add admin-privilege or dedicated-account verbs on that class. **MUST NOT** recommend `sudo curl | sh` as the Termux / Git Bash / Windows-cmd install path (Linux root/global one-liner remains for machines that have root). Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
+**This requirement:** the command surface stays **normal user privilege** on Termux, Git Bash, Windows cmd, and macOS. Help and dispatch **MUST NOT** add admin-privilege or dedicated-account verbs on that class. **MUST NOT** recommend `sudo curl | sh`. The Linux `sudo` re-exec is setup measure 2 only (`requirement-domain-safe-rm.md` §2.0.5), not a verb of its own. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
 
 | MUST | MUST NOT |
 |------|----------|
 | Keep listed verbs as this-login self-care | Enable Type 1 host-prep or Type 2 app-ops on that class |
-| Document Type 1/2 as unused on current surface | Wrap `sudo` / `apt` / `dnf` because “install” was requested |
+| Document Type 1/2 as unused on current surface | Wrap `sudo` / `apt` / `dnf` because “install” was requested on Termux, Git Bash, Windows cmd, or macOS |
 
 ---
 
@@ -272,6 +272,6 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 
 ---
 
-**Last Updated**: 2026-09-27 (1.2.5 — on Termux this login runs setup against `$PREFIX/bin/rm` and does not call `sudo`; Git Bash and Windows cmd still do not run the swap)  
+**Last Updated**: 2026-09-29 (1.2.6 — setup is two layers; Linux measure 2 is the one internal `sudo`; macOS stops after the home guard)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 5, 6, 10, 16, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

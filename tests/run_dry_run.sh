@@ -1,7 +1,8 @@
 #!/bin/sh
 # Domain suite for safe-rm. Every remove check uses --dry-run.
-# This file does not assign HOME to a scratch directory and does not call
-# the product without --dry-run on a remove path.
+# The swap block points HOME at /tmp/safe-rm-place.* and restores the login
+# HOME before later checks. This file does not call the product without
+# --dry-run on a remove path.
 set -u
 
 TESTS_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -91,6 +92,7 @@ assert_contains "TP-SRM-02 version names safe-rm" "$out" "safe-rm version $(grep
 # TP-SRM-03 help
 out=$(sh "$SAFE_RM" help 2>/dev/null)
 assert_contains "TP-SRM-03 help lists self-install" "$out" "self-install"
+assert_contains "TP-SRM-32 help says place runs setup" "$out" "When this login may run setup, that setup runs"
 assert_contains "TP-SRM-28 help says local install does not download" "$out" "does not download"
 assert_contains "TP-SRM-28 help names the global bin" "$out" "/usr/local/bin/"
 assert_contains "TP-SRM-28 help names the local bin" "$out" "\${HOME}/.local/bin/"
@@ -835,13 +837,24 @@ unset _b_alpha _b_beta _b_leaf _b_custom
 # TP-SRM-SWAP-01 layout only. The fixture rm is never executed.
 # This block does not remove a directory. It moves one regular file inside
 # /tmp/safe-rm-swap.* and puts it back.
+# HOME and SRM_SUDO stay inside this block so measure 1 does not edit the
+# login rc and a failed measure 2 does not prompt for a password.
+_saved_home=${HOME-}
+LAYER_HOME=$(mktemp -d /tmp/safe-rm-place.XXXXXX) || exit 2
+export HOME="${LAYER_HOME}"
+export SRM_SUDO=false
 usr_before=$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)
 out=$(sh "$SAFE_RM" setup 2>"$err")
 ec=$?
 assert_eq "TP-SRM-SWAP-01 non-admin setup exit" 1 "$ec"
-assert_contains "TP-SRM-SWAP-01 non-admin moved nothing" "$(cat "$err")" "Nothing was moved"
+assert_contains "TP-SRM-SWAP-01 non-admin left the system rm" "$(cat "$err")" "/usr/bin/rm and /bin/rm were not moved."
 usr_after=$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)
 assert_eq "TP-SRM-SWAP-01 system rm unchanged" "$usr_before" "$usr_after"
+if [ -f "${LAYER_HOME}/.local/bin/safe-rm" ]; then
+    t_pass "TP-SRM-SWAP-01 measure 1 kept the home guard"
+else
+    t_fail "TP-SRM-SWAP-01 measure 1 missed the home guard"
+fi
 
 SWAP=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
 printf '#!/bin/sh\nexit 0\n' > "$SWAP/rm"
@@ -1027,8 +1040,8 @@ assert_contains "TP-SRM-30 help says no sudo" "$out" "No sudo"
 out=$(SRM_TERMUX_PREFIX=/tmp/not-a-swap sh "$SAFE_RM" setup 2>"$err")
 ec=$?
 assert_eq "TP-SRM-30 foreign prefix exit" 1 "$ec"
-assert_contains "TP-SRM-30 foreign prefix stays admin" "$(cat "$err")" "needs an admin login"
-assert_contains "TP-SRM-30 foreign prefix moved nothing" "$(cat "$err")" "Nothing was moved"
+assert_contains "TP-SRM-30 foreign prefix left the system rm" "$(cat "$err")" "/usr/bin/rm and /bin/rm were not moved."
+assert_not_contains "TP-SRM-30 foreign prefix is not an admin-login error" "$(cat "$err")" "needs an admin login"
 assert_eq "TP-SRM-30 foreign prefix left system rm" "$usr_before" "$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)"
 
 TX=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
@@ -1137,6 +1150,18 @@ case "$TX" in
         ;;
 esac
 unset _kind KD kd_before TX tx_before usr_before
+if [ -n "${_saved_home}" ]; then
+    export HOME="${_saved_home}"
+else
+    unset HOME
+fi
+unset SRM_SUDO _saved_home
+case "${LAYER_HOME}" in
+    /tmp/safe-rm-place.*)
+        scratch_rm -rf -- "${LAYER_HOME}"
+        ;;
+esac
+unset LAYER_HOME
 
 # TP-SRM-31 Termux blacklist. $PREFIX stands for /usr.
 # $PREFIX/var stands for /var. The fixture is only /tmp/safe-rm-swap.*.

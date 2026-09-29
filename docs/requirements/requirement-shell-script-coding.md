@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-script-coding.md
-**Status**: Active (Version 1.0.0)
+**Status**: Active (Version 1.0.1)
 **Area**: shell
 **Key**: `requirement-shell-script-coding`
 **Philosophy**: CIAO **v2.10.2** / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered / Over-protect)
@@ -8,7 +8,7 @@
 
 This requirement is the **specialize-in home** for POSIX `/bin/sh` coding lessons on this product. **Without this file, portable learned lessons arrive raw** (agents treat coding skills as product law).
 
-It owns **how** the single-file ship unit `./src/safe-rm` is written: shebang, quoting, function headers, prefix discipline (by pointer), and what this product must **not** add (in-tool `sudo`, admin-privilege ladders).
+It owns **how** the single-file ship unit `./src/safe-rm` is written: shebang, quoting, function headers, prefix discipline (by pointer), and what this product must **not** add (`util_sudo`, a password ladder, admin helpers on Termux). The one allowed `sudo` is the Linux measure-2 re-exec.
 
 **Scope:** POSIX `/bin/sh` coding contract for `./src/safe-rm`.  
 **Out of scope (own-or-point):** Command catalog (`requirement-shell-cli-interface.md`); `out_*` catalog (`requirement-shell-output-requirements.md`); prefix table body (`requirement-shell-modular-function-design.md`); TTY / prompt bodies (`requirement-shell-interactive-vs-noninteractive.md`); scratch roots (`requirement-shell-cli-storage.md`). This file **points**; it does **not** duplicate those tables.
@@ -26,7 +26,7 @@ It owns **how** the single-file ship unit `./src/safe-rm` is written: shebang, q
 | Includes | Excludes |
 |----------|----------|
 | Shebang `/bin/sh`, quoting, headers, “do not capture `read`” | A second copy of the `out_*` catalog or Case A/B/C matrix |
-| Honest “no in-tool sudo on this product” | Inventing `util_sudo` / `useradd` because a mold shows them |
+| The one Linux measure-2 `sudo` re-exec, specified in the domain requirement | Inventing `util_sudo` / `useradd` because a mold shows them |
 
 | Surface | What you open | What for |
 |---------|---------------|----------|
@@ -36,7 +36,7 @@ It owns **how** the single-file ship unit `./src/safe-rm` is written: shebang, q
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
 | Add a helper | Give it a prefix, a header, and safe defaults. Print through `out_*`. | Edit `./src/safe-rm`; run `./tests/run_dry_run.sh` |
-| Run on a phone userspace | Keep **normal user privilege** only. Do not add `sudo` wrappers. | `safe-rm about` |
+| Run on a phone userspace | Keep **normal user privilege**. Do not call `sudo` on Termux. | `safe-rm about` |
 
 ---
 
@@ -70,11 +70,11 @@ It owns **how** the single-file ship unit `./src/safe-rm` is written: shebang, q
 15. Scratch files **MUST** use the storage resolver / `TMPDIR` (`requirement-shell-cli-storage.md`). **MUST NOT** invent `$$` temp names.  
 16. **MUST NOT** capture `prompt_ask` / `prompt_yes_no` / any `read` helper with `$()` or backticks.
 
-### 2.5 In-tool sudo (this product: unused)
+### 2.5 In-tool sudo (one re-exec)
 
-17. This product **MUST NOT** add in-tool `sudo`, a `util_sudo` wrap, `useradd`, or a sudoers emitter. There is **no** `requirement-shell-sudo-command` because the ship unit does not invoke `sudo`.  
-18. **MUST NOT** copy a Type 1 password-sudo ladder from portable molds into `./src/safe-rm`.  
-19. If a future specializee adds in-tool `sudo`, that work **MUST** register `requirement-shell-sudo-command` with a **studied** allow table — not keep wrapper bodies only here.
+17. The only in-tool `sudo` is the Linux measure-2 re-exec in `requirement-domain-safe-rm.md` §2.0.5. This product **MUST NOT** add a `util_sudo` wrap, `useradd`, or a sudoers emitter. There is **no** separate `requirement-shell-sudo-command`; the allow table is that section.
+18. **MUST NOT** copy a Type 1 password-sudo ladder from portable molds into `./src/safe-rm`. The program **MUST NOT** read the password. `sudo` prompts on its own terminal.
+19. A further `sudo` outside that measure **MUST** be written into §2.0.5 first. It **MUST NOT** live only as a wrapper in the script. Termux, Git Bash, Windows cmd, and macOS **MUST NOT** call `sudo`.
 
 ### 2.6 Implementation Notes (this project)
 
@@ -85,7 +85,7 @@ It owns **how** the single-file ship unit `./src/safe-rm` is written: shebang, q
 | **Primary dialect** | POSIX `/bin/sh` (dash / bash-as-sh / BusyBox ash intended) |
 | **Inherited non-POSIX** | Existing `local` in some helpers is **bootstrap inheritance** — **MUST NOT** mass-rewrite; **SHOULD NOT** add new `local` when a POSIX assignment works |
 | **`set -u`** | Present at script top with documented defaults (`HOME`, privilege, storage) |
-| **In-tool sudo** | **None** — no wrap, no fragment, no Table A/C |
+| **In-tool sudo** | Ship unit `1.0.11` has one Linux measure-2 re-exec (`${SRM_SUDO:-sudo}` in §2.0.5 of the domain requirement). No `util_sudo`, no password reader, no sudoers file |
 | **Domain prefix** | `srm_` for the guard (`requirement-domain-safe-rm.md`). Specializee anchors `DOMAIN_*` stay for a later product |
 | **Coding-style owner** | **this file** |
 | **Peer pointers** | modular-function-design (prefixes); output-requirements (`out_*`); interactive (TTY / `prompt_*`); cli-storage (scratch root) |
@@ -96,15 +96,15 @@ It owns **how** the single-file ship unit `./src/safe-rm` is written: shebang, q
 
 This product may run on Termux, Git Bash, Windows cmd, or the same class (this login only).
 
-**This requirement:** helpers in `./src/safe-rm` stay **normal user privilege**. Do **not** add `util_sudo`, wrap `apt`/`dnf`, create a dedicated system user, or recommend `sudo curl | sh` on that class. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`. Termux named `pkg` as this login remains ordinary (not admin privilege) **if** a future Termux-ish REQ is added; this product does **not** wrap `pkg` today.
+**This requirement:** helpers in `./src/safe-rm` stay **normal user privilege** except the one Linux measure-2 re-exec in `requirement-domain-safe-rm.md` §2.0.5. Do **not** add `util_sudo`, wrap `apt`/`dnf`, create a dedicated system user, or recommend `sudo curl | sh`. Git Bash, Windows cmd, Termux, and macOS **MUST NOT** call `sudo`. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`. Termux named `pkg` as this login remains ordinary (not admin privilege) **if** a future Termux-ish REQ is added; this product does **not** wrap `pkg` today.
 
 On detect of that class:
 
 | MUST | MUST NOT |
 |------|----------|
-| Keep **normal user privilege** only | Enable **admin privilege** or **dedicated system user privilege** |
+| Keep helpers at this-login privilege | Enable a dedicated system user, or a password ladder inside this program |
 | Keep coding helpers Type-0 self-care | Implement the portable Type 1 password-sudo ladder |
-| Document Type 1/2 **unused** | Scatter `sudo` outside a wrap that this product does not have |
+| Document Type 1/2 **unused** | Scatter `sudo` outside the Linux measure-2 re-exec |
 
 ---
 
@@ -134,7 +134,7 @@ On detect of that class:
 1. Delete this file while the workspace remains software-development.  
 2. Treat coding skills or molds as product-source authority.  
 3. Change the shebang away from `#!/bin/sh` without an authorized redesign.  
-4. Add in-tool `sudo` / `util_sudo` / `useradd` to this bootstrap.  
+4. Add `util_sudo`, `useradd`, or a `sudo` call that is not the Linux measure-2 re-exec.  
 5. Duplicate full `out_*`, prefix, TTY, or storage tables here.  
 6. Capture `prompt_*` / `read` helpers with `$()`.  
 7. Strip Protection Zones or “simplify” defensive headers.  
@@ -151,7 +151,7 @@ On detect of that class:
 |----------------|-------|--------|
 | **TP-CLI-01** (syntax `sh -n`) | `tests/test_cli.sh` | have |
 | **TP-SETU-01** (`env -u HOME`) | `tests/test_cli.sh` | have |
-| Static: no `util_sudo` / in-tool `sudo` in ship unit | `tests/test_cli.sh` (**TP-CS-01**) | have |
+| Static: no `util_sudo`. The safe-rm re-exec is `${SRM_SUDO:-sudo}` and is not a bare `sudo` command. **TP-CS-01** still rejects `util_sudo` on the Type 0 snapshot | `tests/test_cli.sh` (**TP-CS-01**); `tests/test_two_layer.sh` | have |
 
 **Map:** `reviews/test-plan.md`
 
@@ -172,6 +172,6 @@ On detect of that class:
 
 ---
 
-**Last Updated**: 2026-09-06
+**Last Updated**: 2026-09-29 (1.0.1 — ship unit `1.0.11` has the one Linux measure-2 re-exec; other hosts do not call it)
 **Owner**: safe-rm project maintainers
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 4, 20, 21 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

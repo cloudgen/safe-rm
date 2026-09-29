@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-self-install.md  
-**Status**: Active (Version 1.0.0)  
+**Status**: Active (Version 1.2.0)  
 **Philosophy**: CIAO **v2.10.2** / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered / Over-protect)
 
 ## 1. Purpose
@@ -21,7 +21,7 @@ This requirement is the product law for **how safe-rm places itself**: the `self
 | Includes | Excludes |
 |----------|----------|
 | `self-install`; empty argv CLI place; copy when `$0` is the script; dest mode 0700 local / 0755 global | Payload `pkg` / host daemon start; dumping help as empty-argv default |
-| Already-installed success no-op | Treating `$0` = `/bin/bash` as “the script” |
+| Already-installed success, then setup when this login may | Treating `$0` = `/bin/bash` as “the script” |
 
 | Surface | What you open | What for |
 |---------|---------------|----------|
@@ -79,9 +79,10 @@ When `$0` is not a shell interpreter, the file is already on disk. **MUST NOT** 
 2. Root (the operator already ran `sudo` on this command): `cp` that file into `${GLOBAL_BIN}/` (default `/usr/local/bin/`). The process is root, so this `cp` is the global place. The program **MUST NOT** invoke `sudo` itself.  
 3. Not root: `cp` that file into `${USER_BIN}/` (default `${HOME}/.local/bin/`).  
 4. `chmod` the dest mode on the placed file (**0755** global / **0700** local). **MUST NOT** `chmod +x` alone (that mints **0711**).  
-5. **MAY** run PATH rc ensure (`path_add_shell`). **MUST NOT** require network.
+5. **MUST** run **path-ensure** and **profile-ensure** (`path_add_shell`, which calls `path_ensure_profile`) for a non-root place, per §2.7. **MUST NOT** require network.
+6. After the place finishes, including the already-installed success, run setup per `requirement-domain-safe-rm.md` §2.0.5. Measure 1 is this login. The place step itself **MUST NOT** invoke `sudo`. The only `sudo` is measure 2 on Linux, inside that setup, when this login is not root. A refused `sudo` leaves measure 1 in place and setup exits non-zero. The place has still succeeded.
 
-`sudo src/safe-rm install --force` is the global copy. `src/safe-rm install` is the local copy. `--force` replaces a file that is already there. Without `--force`, an existing install is a success and does not copy again.
+`sudo src/safe-rm install --force` is the global copy. `src/safe-rm install` is the local copy. `--force` replaces a file that is already there. Without `--force`, an existing install is a success and does not copy again. Both still run setup when this login may.
 
 ### 2.4 Dest mode
 
@@ -96,7 +97,7 @@ The same dest mode **MUST** apply after the download/atomic path (pipe / `self-u
 
 ### 2.5 Already installed
 
-Force off → `out_success` already installed; exit 0; no re-copy; no download. Force → replace via copy or download per `$0`.
+Force off → `out_success` already installed; exit 0; no re-copy; no download. Force → replace via copy or download per `$0`. Either way, run setup when this login may (`requirement-domain-safe-rm.md`).
 
 ### 2.6 Implementation Notes (this project)
 
@@ -107,7 +108,7 @@ Force off → `out_success` already installed; exit 0; no re-copy; no download. 
 | **Copy** | `inst_self_install_copy_from_script` |
 | **Dest mode helper** | `inst_cli_dest_mode` → **0755** root / **0700** non-root |
 | **Download peer** | `inst_perform_install_download_*` + `inst_perform_install_atomic_install` then dest-mode chmod |
-| **PATH** | `path_add_shell` on this path (CLI on PATH) |
+| **PATH** | `path_add_shell` on this path (CLI on PATH). §2.7: **path-ensure** writes the user-bin line; **profile-ensure** creates a missing `.profile` that sources `.bashrc` |
 | **Dispatcher** | `app_main` empty-argv NI / quiet / json → `inst_self_install`; interactive empty argv → `app_default`; command `self-install` same; `install` alias same |
 | **TTY first-shot** | Numbered menu (`app_default`). Place only when the person chooses **87** / `self-install` |
 | **Global bin** | `/usr/local/bin` |
@@ -146,9 +147,53 @@ fi
 - **CIAO Principle 16 – Interactive vs Non-Interactive** (https://github.com/cloudgen/ciao): TTY may confirm; a yes still copies the running file.  
 - **CIAO Principle 22 – File modes** (https://github.com/cloudgen/ciao): 0755 global / 0700 local.
 
+### 2.7 Path-ensure and profile-ensure
+
+Two named startup-file edits run together after a non-root place, and again from measure 1 of setup (`requirement-domain-safe-rm.md` §2.0.5). This login writes both. Neither calls `sudo`. The measure-2 child does not run them.
+
+**Path-ensure** prepends the user bin, default `${HOME}/.local/bin`:
+
+```sh
+export PATH="${HOME}/.local/bin:$PATH"
+```
+
+Fish uses `set -gx PATH ${HOME}/.local/bin $PATH`. Each written file gets `# Added by safe-rm installer (VERSION)` immediately above that line. A second run does not append a second copy of that exact line. A mention of the directory in some other line is not “already present.”
+
+| File | When it is missing | What is written |
+|------|--------------------|-----------------|
+| `${HOME}/.bashrc` | Create it, mode `0644`, owned by this login | The PATH block |
+| `${HOME}/.zshenv` | Create it, mode `0644`, only when this login’s shell is zsh, or `ZSHENV` is set, or the file already exists | The PATH block |
+| `${HOME}/.config/fish/config.fish` | Create the directory and the file | The Fish line |
+
+Path-ensure **MUST NOT** write that line into `${HOME}/.profile`, `${HOME}/.zshrc`, `${HOME}/.bash_profile`, or `${HOME}/.zprofile`. It **MUST NOT** create `.bash_profile` or `.zprofile`. It **MUST NOT** prepend `/usr/local/bin` ahead of `${HOME}/.local/bin`, and **MUST NOT** write a `PATH` line into the pyenv shims directory or `/opt/homebrew`.
+
+On the reported Mac, `PATH` already lists `${HOME}/.local/bin` ahead of `/bin`, and `/bin` ahead of `/usr/local/bin`. Path-ensure is what puts that user-bin line on `.bashrc` and, for zsh, on `.zshenv`, for a login that does not have it yet.
+
+**Profile-ensure** is the rule for keeping the login profile. A missing `.profile` means a login `sh`, and a login `bash` that has no `.bash_profile` and no `.bash_login`, never reads `.bashrc`. The feature checks `${HOME}/.profile` (tests may retarget `PROFILE`).
+
+| State | What this login does |
+|-------|----------------------|
+| Absent | Create it, mode `0644`, owned by this login, with the sample below. The sample sources `.bashrc`. It does **not** contain the PATH line |
+| Present | Do **not** replace the body. A marker the operator wrote stays |
+
+```sh
+# BEGIN safe-rm profile source-bashrc
+# Created so a bash login shell sources interactive rc.
+if [ -n "${BASH_VERSION:-}" ]; then
+    if [ -f "${HOME}/.bashrc" ]; then
+        . "${HOME}/.bashrc"
+    fi
+fi
+# END safe-rm profile source-bashrc
+```
+
+A second run creates the file once and does not append a second sample. Login bash reaches the path-ensure line because this sample sources `.bashrc`. Zsh reaches its line on `.zshenv`. This product does not add a `.zprofile` for that.
+
+Uninstall removes the path-ensure blocks from `.bashrc`, `.zshenv`, and the Fish file only when `${HOME}/.local/bin` is empty (`requirement-shell-self-management.md`). It **MUST NOT** delete `.profile`, and it **MUST NOT** strip the profile-ensure sample.
+
 ## Under command line for normal user only
 
-When Termux, Git Bash, Windows cmd, or the same class is detected: Type 1/2 unused; no in-tool sudo; no `sudo curl | sh`. **This requirement:** self-install stays this-login place (local **0700**). Git Bash and Windows cmd do not invoke Termux `pkg` on this path.
+When Termux, Git Bash, Windows cmd, or macOS is detected: Type 1/2 unused; the place step does not call `sudo`; no `sudo curl | sh`. **This requirement:** self-install stays this-login place (local **0700**) and runs §2.7 path-ensure and profile-ensure. Measure 2's `sudo` is Linux-only and lives in `requirement-domain-safe-rm.md` §2.0.5. Git Bash and Windows cmd do not invoke Termux `pkg` on this path.
 
 ## 3. Design Principles (CIAO / CIAO-Lite)
 
@@ -170,6 +215,8 @@ When Termux, Git Bash, Windows cmd, or the same class is detected: Type 1/2 unus
 7. Invent a payload `install` that empty argv also runs (this product has no payload).  
 8. Strip **Under command line for normal user only**.  
 9. Specialize B from this origin while restoring `chmod +x` or dropping `inst_cli_dest_mode` / **TP-SI-07** / **TP-SI-08**.
+10. Skip profile-ensure because `${HOME}/.profile` is missing, overwrite an existing `.profile` body, write the PATH line into `.profile` or `.zshrc`, or append a second copy of the exact user-bin line.
+11. Call `sudo` from the place step. The Linux `sudo` re-exec belongs to setup measure 2, after this place.
 
 ## 5. Definition of done
 
@@ -181,6 +228,7 @@ When Termux, Git Bash, Windows cmd, or the same class is detected: Type 1/2 unus
 6. Help lists `self-install`.  
 7. Tests **TP-SI-01** .. **TP-SI-08**.  
 8. Changes cite this file.
+9. A missing `${HOME}/.profile` is created once and sources `.bashrc`. It does not contain the PATH line. That line is in `.bashrc` once. A second run does not append it again and does not replace an existing `.profile` body.
 
 ### Design-time verification
 
@@ -209,6 +257,6 @@ When Termux, Git Bash, Windows cmd, or the same class is detected: Type 1/2 unus
 | `docs/requirements/requirement-shell-automatic-checksum.md` | Integrity on **download** path only |
 | `./src/safe-rm` | Implementation |
 
-**Last Updated**: 2026-09-27  
+**Last Updated**: 2026-09-29 (1.2.0 — §2.7 names **profile-ensure** and **path-ensure**. A missing `.profile` sources `.bashrc` and is not overwritten. The PATH line stays on `.bashrc`, `.zshenv`, and Fish)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; **CIAO** (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-interactive-vs-noninteractive.md  
-**Status**: Active (Version 1.1.0)  
+**Status**: Active (Version 1.1.1)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -287,7 +287,7 @@ Mode-related work for safe-rm is **not done** if any of the following fail:
 
 This product may run on Termux, Git Bash, Windows cmd, or the same class (this login only).
 
-**This requirement:** TTY confirm and pipe auto-install stay **this login**. Helpers consume `TTY`; they **MUST NOT** use TTY as a gate to start `sudo` on that class. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
+**This requirement:** TTY confirm and pipe auto-install stay **this login**. Helpers consume `TTY`; they **MUST NOT** use `TTY` as a gate to start `sudo`. Linux measure 2 calls `sudo` because the host is Linux and the invoker is not root (`requirement-domain-safe-rm.md` §2.0.5), including when stdin is a pipe. `sudo` reads its own password prompt from the terminal. A refused `sudo` leaves measure 1 in place. Termux, Git Bash, Windows cmd, and macOS **MUST NOT** start `sudo`. Git Bash and Windows cmd **MUST NOT** invoke Termux `pkg`.
 
 | MUST | MUST NOT |
 |------|----------|
@@ -310,6 +310,6 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 
 ---
 
-**Last Updated**: 2026-09-17  
+**Last Updated**: 2026-09-29 (1.1.1 — `TTY` is not the gate for the Linux measure-2 `sudo`)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 16, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

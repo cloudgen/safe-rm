@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.11] - 2026-09-29
+
+### Added
+
+- `safe-rm setup` keeps two layers. A finished `self-install` or `self-update` runs this setup. This login writes `${HOME}/.local/bin/safe-rm` (mode `0700`), a `rm` symlink, and `origin-rm`, with no `sudo`. On Linux, setup then re-execs this program through `sudo` and moves `/usr/bin/rm` and `/bin/rm` to `origin-rm`. macOS, Termux, Git Bash, and Windows cmd do not call `sudo`. macOS leaves `/bin/rm` in place. On macOS the home `origin-rm` execs `/bin/rm`. On Linux the home `origin-rm` is a copy of the original remover, taken before that move
+- Profile-ensure creates a missing `~/.profile` (mode `0644`) that sources `~/.bashrc`. An existing `.profile` stays as it is. Path-ensure writes `export PATH="${HOME}/.local/bin:$PATH"` once on `~/.bashrc`, on `~/.zshenv` when zsh applies, and on Fish. Uninstall leaves `.profile` in place and removes those PATH blocks only when `~/.local/bin` is empty
+
+## [1.0.10] - 2026-09-28
+
+### Fixed
+
+- `sudo safe-rm self-update` wrote the new program to `/usr/local/bin/safe-rm` and left `rm` on the older `/usr/bin/safe-rm`. A finished `self-install` or `self-update` now runs `setup` when this login may, so `rm` is the file just placed. That includes an already-current `self-update`. A non-root place does not run `setup` and does not stop with the admin-login error. On Termux, this login's place runs the `$PREFIX/bin` setup
+
 ## [1.0.9] - 2026-09-27
 
 ### Fixed

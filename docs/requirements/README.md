@@ -2,7 +2,7 @@
 
 Authoritative product and engineering requirements for this project live here.
 
-**Current state (2026-09-28 — safe-rm 1.0.9):** **One** Active class requirement (`requirement-class-software-dev`), **thirteen** Active shell requirements (actor-role-subject, automatic-checksum, CLI default-interaction, CLI interface, **cli-self-install**, **cli-storage**, CLI zero-arguments, idempotency, interactive vs noninteractive, modular design, output, **script-coding**, self-management), and **one** Active domain SSOT (`requirement-domain-safe-rm`). Registry: `index.md` (must stay in sync). Ship unit `src/safe-rm`. Product version SSOT: `VERSION="1.0.9"` in that file. Do **not** invent additional requirement paths without a real ownership gap — verify on disk and register new files in `index.md` in the same change.
+**Current state (2026-09-29 — safe-rm 1.0.11; domain law 1.2.11 is what the ship unit implements):** **One** Active class requirement (`requirement-class-software-dev`), **thirteen** Active shell requirements (actor-role-subject, automatic-checksum, CLI default-interaction, CLI interface, **cli-self-install**, **cli-storage**, CLI zero-arguments, idempotency, interactive vs noninteractive, modular design, output, **script-coding**, self-management), and **one** Active domain SSOT (`requirement-domain-safe-rm`). Registry: `index.md` (must stay in sync). Ship unit `src/safe-rm`. Product version SSOT: `VERSION="1.0.11"` in that file. Do **not** invent additional requirement paths without a real ownership gap — verify on disk and register new files in `index.md` in the same change.
 
 ## Purpose
 
