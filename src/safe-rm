@@ -50,8 +50,8 @@ APP_NAME="safe-rm"
 : "${SHORT_DESCRIPTION:=${APP_DESC}}"
 : "${DESCRIPTION:=POSIX /bin/sh program you install for yourself. It keeps self-install and self-update, and it refuses to remove the login home itself, every account home in /etc/passwd, /home, another login's folder under /home, /usr/bin, or other system directories. A named folder inside the login home, such as a cache directory, may be removed. --dry-run reports whether a path exists and whether removal is allowed, and removes nothing.}"
 # Product version SSOT (semver). Extractors use: grep '^VERSION="'
-VERSION="1.0.13"
-: "${VERSION:=1.0.13}"
+VERSION="1.0.15"
+: "${VERSION:=1.0.15}"
 
 # Runtime flags (safe defaults)
 : "${QUIET:=0}"
@@ -3196,6 +3196,7 @@ app_help() {
     out_plain "  help                 Show this help"
     out_plain "  setup                Home guard in \${HOME}/.local/bin. Then Linux moves /usr/bin/rm and /bin/rm through sudo. On Termux, which rm is \$PREFIX/bin/rm (/data/data/com.termux/files/usr/bin/rm). This login moves that file. No sudo. macOS leaves /bin/rm"
     out_plain "  restore              Put origin-rm back as rm. Same as -restore"
+    out_plain "  reset                When origin-rm exists, point rm at it. Linux uses root or sudo. Same as --reset"
     out_plain "  menu                 Numbered list on a terminal (1 remove-guard, 8 self-management, 9 Exit). Help off a terminal"
     out_plain "  main                 Same as menu"
     out_empty_line
@@ -3213,6 +3214,7 @@ app_help() {
     out_plain "  --main               main"
     out_plain "  --setup              setup"
     out_plain "  --restore            restore (-restore is the same command)"
+    out_plain "  --reset              reset"
     out_plain "  --rm                 rm"
     out_plain "  When this program is the rm people type, rm --version is this version. The bare word version is a path, so rm version removes a link named version. The same split applies to every other command word. origin-rm --version is the remover's own text."
     out_empty_line
@@ -3224,6 +3226,7 @@ app_help() {
     out_plain "  rm -- -file          A name that starts with - is a path after --. ./-file is that same path"
     out_plain "  rm -rf .             '.' and '..' are refused. Name the folder itself"
     out_plain "  rm --dry-run         Remove nothing. Say whether each path exists and whether it may be removed"
+    out_plain "                       A finished remove names the caller and each path. On a terminal those names are italic"
     out_plain "  --dry-run            Same switch, before or after rm"
     out_plain "                       A refused path stops the command. Do not retry with rm, /bin/rm, or /usr/bin/rm"
     out_plain "                       On Termux the same blacklist is \$PREFIX, \$PREFIX/bin and anything inside it, \$PREFIX/etc, \$PREFIX/var, \$PREFIX/lib, \$PREFIX/lib64, \$PREFIX/opt, \$PREFIX/sbin, and \$PREFIX/boot. A folder inside \$PREFIX/var may be removed, and so may \$PREFIX/share, \$PREFIX/include, \$PREFIX/tmp, and \$PREFIX/libexec"
@@ -3875,14 +3878,23 @@ srm_origin_rm() {
         unset _self _list _c _t _tprefix
         return 1
     fi
-    _list="/usr/bin/origin-rm /bin/origin-rm"
-    if [ -n "${SRM_SWAP_BIN-}" ]; then
-        _list="${SRM_SWAP_BIN}/origin-rm ${_list}"
+    # A fixture is the only remover. Do not fall through to the host origin-rm.
+    if [ -n "${SRM_SWAP_BIN-}" ] || [ -n "${SRM_SWAP_ROOT-}" ]; then
+        _list=
+        if [ -n "${SRM_SWAP_ROOT-}" ]; then
+            _list="${SRM_SWAP_ROOT}/origin-rm"
+        fi
+        if [ -n "${SRM_SWAP_BIN-}" ]; then
+            if [ -n "${_list}" ]; then
+                _list="${_list} ${SRM_SWAP_BIN}/origin-rm"
+            else
+                _list="${SRM_SWAP_BIN}/origin-rm"
+            fi
+        fi
+    else
+        _list="/usr/bin/origin-rm /bin/origin-rm"
+        _list="${_list} ${HOME:-}/.local/bin/origin-rm"
     fi
-    if [ -n "${SRM_SWAP_ROOT-}" ]; then
-        _list="${SRM_SWAP_ROOT}/origin-rm ${_list}"
-    fi
-    _list="${_list} ${HOME:-}/.local/bin/origin-rm"
     for _c in ${_list}; do
         [ -n "$_c" ] || continue
         [ -x "$_c" ] || continue
@@ -4318,6 +4330,65 @@ srm_restore_one() {
     return 0
 }
 
+# Point rm at origin-rm. Leave origin-rm and safe-rm. Do nothing when origin-rm is absent.
+srm_reset_one() {
+    _dir=${1-}
+    [ -d "$_dir" ] || out_die "Reset directory is missing. Nothing was changed."
+    _rm="${_dir}/rm"
+    _origin="${_dir}/origin-rm"
+    if [ ! -e "$_origin" ]; then
+        unset _dir _rm _origin
+        return 1
+    fi
+    if [ -d "$_origin" ]; then
+        out_die "Refusing to point rm at a directory at ${_origin}. Nothing was changed."
+    fi
+    if [ -d "$_rm" ]; then
+        out_die "Refusing to replace a directory at ${_rm}. Nothing was changed."
+    fi
+    if [ -L "$_rm" ]; then
+        _lt=$(readlink -- "$_rm" 2>/dev/null || readlink "$_rm" 2>/dev/null || true)
+        if [ "$_lt" = "origin-rm" ] || [ "$_lt" = "${_origin}" ]; then
+            out_info "Pointed ${_rm} at ${_origin}"
+            unset _dir _rm _origin _lt
+            return 0
+        fi
+        unset _lt
+    fi
+    _staged="${_dir}/.srm-reset-$$"
+    if [ -e "$_staged" ] || [ -L "$_staged" ]; then
+        unset _dir _rm _origin _staged
+        out_die "Could not stage a link in ${_dir}. Nothing was changed."
+    fi
+    if ! ln -s origin-rm "$_staged"; then
+        unset _dir _rm _origin _staged
+        out_die "Could not point ${_rm} at ${_origin}. Nothing was changed."
+    fi
+    if [ -L "$_rm" ]; then
+        if ! srm_drop_symlink "$_rm"; then
+            unlink -- "$_staged" 2>/dev/null || unlink "$_staged" 2>/dev/null || true
+            unset _dir _rm _origin _staged
+            out_die "Could not replace ${_rm}. Nothing else was changed."
+        fi
+    elif [ -e "$_rm" ]; then
+        if ! unlink -- "$_rm" 2>/dev/null; then
+            if ! unlink "$_rm" 2>/dev/null; then
+                unlink -- "$_staged" 2>/dev/null || unlink "$_staged" 2>/dev/null || true
+                unset _dir _rm _origin _staged
+                out_die "Could not replace ${_rm}. Nothing else was changed."
+            fi
+        fi
+    fi
+    if ! mv -- "$_staged" "$_rm"; then
+        unlink -- "$_staged" 2>/dev/null || unlink "$_staged" 2>/dev/null || true
+        unset _dir _rm _origin _staged
+        out_die "Could not point ${_rm} at ${_origin}."
+    fi
+    out_info "Pointed ${_rm} at ${_origin}"
+    unset _dir _rm _origin _staged
+    return 0
+}
+
 srm_swap_root_ok() {
     _r=${1-}
     case "$_r" in
@@ -4424,7 +4495,7 @@ srm_setup_source_path() {
     srm_script_source
 }
 
-# $1 is setup or restore. The child is measure 2 only. No password on the line.
+# $1 is setup, restore, or reset. The child is measure 2 only. No password on the line.
 srm_sudo_reexec() {
     _verb=${1:-setup}
     _sd=${SRM_SUDO:-sudo}
@@ -4788,6 +4859,94 @@ srm_restore_system() {
     return 0
 }
 
+srm_reset_system() {
+    if [ -n "${SRM_SWAP_ROOT-}" ] || [ -n "${SRM_SWAP_BIN-}" ]; then
+        _rdid=0
+        if [ -n "${SRM_SWAP_ROOT-}" ]; then
+            srm_swap_root_ok "${SRM_SWAP_ROOT}" || out_die "Refusing reset outside a /tmp/safe-rm-swap.* directory. Nothing was changed."
+            if srm_reset_one "${SRM_SWAP_ROOT}"; then
+                _rdid=1
+            fi
+        fi
+        if [ -n "${SRM_SWAP_BIN-}" ]; then
+            srm_swap_root_ok "${SRM_SWAP_BIN}" || out_die "Refusing reset outside a /tmp/safe-rm-swap.* directory. Nothing was changed."
+            if srm_reset_one "${SRM_SWAP_BIN}"; then
+                _rdid=1
+            fi
+        fi
+        if [ "${_rdid}" -eq 0 ]; then
+            unset _rdid
+            out_die "No origin-rm to reset. Nothing was changed."
+        fi
+        unset _rdid
+        return 0
+    fi
+    _tprefix=$(srm_termux_prefix 2>/dev/null || true)
+    if [ -n "${_tprefix}" ]; then
+        if ! srm_reset_one "${_tprefix}/bin"; then
+            out_die "No origin-rm at ${_tprefix}/bin/origin-rm. Nothing was changed."
+        fi
+        unset _tprefix
+        return 0
+    fi
+    unset _tprefix
+    if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
+        out_die "Reset points rm at origin-rm. The child is not root. Nothing was changed."
+    fi
+    _rdid=0
+    if [ -e /usr/bin/origin-rm ]; then
+        if srm_reset_one "/usr/bin"; then
+            _rdid=1
+        fi
+    fi
+    if [ -d /bin ] && ! srm_same_file /bin /usr/bin; then
+        if [ -e /bin/origin-rm ]; then
+            if srm_reset_one "/bin"; then
+                _rdid=1
+            fi
+        fi
+    fi
+    if [ "${_rdid}" -eq 0 ]; then
+        unset _rdid
+        out_die "No origin-rm at /usr/bin/origin-rm or /bin/origin-rm. Nothing was changed."
+    fi
+    unset _rdid
+    return 0
+}
+
+srm_reset_dispatch() {
+    if [ "${SRM_SETUP_MEASURE-}" = "2" ]; then
+        srm_reset_system
+        return $?
+    fi
+    _tp=$(srm_termux_prefix 2>/dev/null || true)
+    if [ -n "${_tp}" ]; then
+        srm_reset_system
+        _rc=$?
+        unset _tp
+        return ${_rc}
+    fi
+    unset _tp
+    if srm_measure2_skipped_host; then
+        out_die "This host does not replace /bin/rm. Nothing was changed."
+    fi
+    if [ -n "${SRM_SWAP_ROOT-}" ] || [ -n "${SRM_SWAP_BIN-}" ]; then
+        if [ "${SRM_DELEGATE_MEASURE2-}" != "1" ]; then
+            srm_reset_system
+            return $?
+        fi
+    fi
+    if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
+        srm_reset_system
+        return $?
+    fi
+    if srm_sudo_reexec reset; then
+        return 0
+    fi
+    out_error "/usr/bin/rm and /bin/rm were not reset."
+    return 1
+}
+
 srm_restore_dispatch() {
     if [ "${SRM_SETUP_MEASURE-}" = "2" ]; then
         srm_restore_system
@@ -4847,6 +5006,270 @@ srm_cmd_setup() {
 srm_cmd_restore() {
     srm_restore_dispatch
     return $?
+}
+
+srm_cmd_reset() {
+    srm_reset_dispatch
+    return $?
+}
+
+# Basename is a shell or a program that runs a script. Not the script itself.
+srm_is_interpreter() {
+    _ii=${1-}
+    _ii=${_ii##*/}
+    case "${_ii}" in
+        sh|bash|dash|ash|ksh|mksh|zsh|busybox|env|sudo|su|nice|nohup|time|timeout|stdbuf|python|python3|perl|ruby|node)
+            unset _ii
+            return 0
+            ;;
+        -sh|-bash|-dash|-ash|-ksh|-mksh|-zsh)
+            unset _ii
+            return 0
+            ;;
+    esac
+    unset _ii
+    return 1
+}
+
+# $1 is this running program (the guard), not the script that invoked it.
+srm_is_this_program() {
+    _ip=${1-}
+    [ -n "${_ip}" ] || return 1
+    if [ "${_ip}" = "$0" ]; then
+        unset _ip
+        return 0
+    fi
+    _ip_base=${_ip##*/}
+    case "${_ip_base}" in
+        safe-rm|origin-rm)
+            unset _ip _ip_base
+            return 0
+            ;;
+    esac
+    if [ -e "$0" ] && [ -e "${_ip}" ] && srm_same_file "$0" "${_ip}"; then
+        unset _ip _ip_base
+        return 0
+    fi
+    unset _ip _ip_base
+    return 1
+}
+
+# Write one command argument per line into the scratch directory. Class B has no stdout.
+# /proc keeps arguments that contain spaces. ps is the fallback and splits on spaces.
+srm_load_cmdline() {
+    _lc_pid=${1-}
+    : > "${SRM_WORK}/caller-args"
+    if [ -r "/proc/${_lc_pid}/cmdline" ]; then
+        tr '\0' '\n' < "/proc/${_lc_pid}/cmdline" > "${SRM_WORK}/caller-args" 2>/dev/null || :
+        unset _lc_pid
+        return 0
+    fi
+    _lc_args=$(ps -o args= -p "${_lc_pid}" 2>/dev/null || true)
+    if [ -z "${_lc_args}" ]; then
+        unset _lc_pid _lc_args
+        return 1
+    fi
+    _lc_ifs=${IFS}
+    IFS=$(printf ' \t\n')
+    set -f
+    for _lc_word in ${_lc_args}; do
+        printf '%s\n' "${_lc_word}" >> "${SRM_WORK}/caller-args"
+    done
+    set +f
+    IFS=${_lc_ifs}
+    unset _lc_pid _lc_args _lc_ifs _lc_word
+    return 0
+}
+
+# Script path from one process, or empty. The first file after the interpreter
+# is the script. Later arguments are that script's own operands, including the
+# path being removed, so they are not the caller. -c has no script file.
+# --rcfile names the startup file. Class B.
+srm_proc_script() {
+    _ps_pid=${1-}
+    _ps_found=
+    _ps_first=1
+    _ps_mode=seek
+    if ! srm_load_cmdline "${_ps_pid}"; then
+        unset _ps_pid _ps_found _ps_first _ps_mode _ps_arg
+        return 1
+    fi
+    while IFS= read -r _ps_arg || [ -n "${_ps_arg}" ]; do
+        [ -n "${_ps_arg}" ] || continue
+        if [ "${_ps_mode}" = skip_one ]; then
+            _ps_mode=seek
+            continue
+        fi
+        if [ "${_ps_mode}" = take_script ]; then
+            if [ -f "${_ps_arg}" ] && ! srm_is_this_program "${_ps_arg}"; then
+                _ps_found=${_ps_arg}
+            fi
+            break
+        fi
+        if [ "${_ps_first}" -eq 1 ]; then
+            _ps_first=0
+            if srm_is_interpreter "${_ps_arg}"; then
+                continue
+            fi
+            if [ -f "${_ps_arg}" ] && ! srm_is_this_program "${_ps_arg}"; then
+                _ps_found=${_ps_arg}
+            fi
+            break
+        fi
+        case "${_ps_arg}" in
+            --rcfile|--init-file)
+                _ps_mode=take_script
+                continue
+                ;;
+            -c|--command)
+                break
+                ;;
+            -u|--user|-g|--group)
+                _ps_mode=skip_one
+                continue
+                ;;
+            -*)
+                continue
+                ;;
+            *=*)
+                if [ ! -f "${_ps_arg}" ]; then
+                    continue
+                fi
+                ;;
+        esac
+        if srm_is_interpreter "${_ps_arg}"; then
+            continue
+        fi
+        if [ -f "${_ps_arg}" ] && ! srm_is_this_program "${_ps_arg}"; then
+            _ps_found=${_ps_arg}
+        fi
+        break
+    done < "${SRM_WORK}/caller-args"
+    if [ -n "${_ps_found}" ]; then
+        printf '%s\n' "${_ps_found}"
+        unset _ps_pid _ps_found _ps_first _ps_mode _ps_arg
+        return 0
+    fi
+    unset _ps_pid _ps_found _ps_first _ps_mode _ps_arg
+    return 1
+}
+
+# First command word of one process. Class B.
+srm_proc_argv0() {
+    _pa_pid=${1-}
+    _pa0=
+    if ! srm_load_cmdline "${_pa_pid}"; then
+        unset _pa_pid _pa0
+        return 1
+    fi
+    IFS= read -r _pa0 < "${SRM_WORK}/caller-args" || _pa0=
+    if [ -n "${_pa0}" ]; then
+        printf '%s\n' "${_pa0}"
+        unset _pa_pid _pa0
+        return 0
+    fi
+    unset _pa_pid _pa0
+    return 1
+}
+
+# Parent pid. Class B. Empty when the process cannot be read.
+srm_proc_ppid() {
+    _pp_pid=${1-}
+    _pp_out=
+    if [ -r "/proc/${_pp_pid}/status" ]; then
+        while IFS= read -r _pp_line || [ -n "${_pp_line}" ]; do
+            case "${_pp_line}" in
+                PPid:*)
+                    _pp_out=${_pp_line#PPid:}
+                    _pp_out=$(printf '%s' "${_pp_out}" | tr -d ' \t\r')
+                    ;;
+            esac
+        done < "/proc/${_pp_pid}/status"
+    fi
+    if [ -z "${_pp_out}" ]; then
+        _pp_out=$(ps -o ppid= -p "${_pp_pid}" 2>/dev/null || true)
+        _pp_out=$(printf '%s' "${_pp_out}" | tr -d ' \t\r')
+    fi
+    printf '%s\n' "${_pp_out}"
+    unset _pp_pid _pp_out _pp_line
+}
+
+# Who invoked this remove. A script path when the parent command names one.
+# A file sourced by the shell has no path in that command, so the label is the
+# shell itself, such as -bash. Class B.
+srm_caller_name() {
+    _cn_pid=${PPID-}
+    _cn_hops=0
+    _cn_fallback=
+    _cn_script=
+    _cn_try=
+    _cn_next=
+    while [ "${_cn_hops}" -lt 8 ]; do
+        case "${_cn_pid}" in
+            ''|*[!0-9]*) break ;;
+        esac
+        if [ "${_cn_pid}" -le 1 ]; then
+            break
+        fi
+        _cn_script=$(srm_proc_script "${_cn_pid}" 2>/dev/null || true)
+        if [ -n "${_cn_script}" ]; then
+            printf '%s\n' "${_cn_script}"
+            unset _cn_pid _cn_hops _cn_fallback _cn_script _cn_try _cn_next
+            return 0
+        fi
+        _cn_try=$(srm_proc_argv0 "${_cn_pid}" 2>/dev/null || true)
+        if [ -z "${_cn_fallback}" ]; then
+            if [ -n "${_cn_try}" ] && ! srm_is_this_program "${_cn_try}"; then
+                _cn_fallback=${_cn_try}
+            fi
+        fi
+        # Climb through a shell that named no script (sh -c, login bash).
+        # Stop at a program that is not a shell, so a session leader is not the caller.
+        if [ -n "${_cn_try}" ] && ! srm_is_interpreter "${_cn_try}"; then
+            break
+        fi
+        _cn_next=$(srm_proc_ppid "${_cn_pid}" 2>/dev/null || true)
+        case "${_cn_next}" in
+            ''|*[!0-9]*) break ;;
+        esac
+        if [ "${_cn_next}" = "${_cn_pid}" ]; then
+            break
+        fi
+        _cn_pid=${_cn_next}
+        _cn_hops=$((_cn_hops + 1))
+    done
+    if [ -z "${_cn_fallback}" ]; then
+        _cn_fallback=unknown
+    fi
+    printf '%s\n' "${_cn_fallback}"
+    unset _cn_pid _cn_hops _cn_fallback _cn_script _cn_try _cn_next
+}
+
+# Success sentence. $1 is plain or tty. tty wraps the caller and each path in
+# italic (SGR 3). Class B. JSON uses the plain sentence.
+srm_removed_sentence() {
+    _rs_mode=${1-}
+    _rs_caller=$(srm_caller_name)
+    [ -n "${_rs_caller}" ] || _rs_caller=unknown
+    _rs_it=
+    _rs_off=
+    if [ "${_rs_mode}" = tty ]; then
+        _rs_it=$(printf '\033[3m')
+        _rs_off=$(printf '\033[0m')
+    fi
+    _rs_who="${_rs_it}${_rs_caller}${_rs_off}"
+    _rs_list=
+    _rs_i=1
+    while [ "${_rs_i}" -le "${_n:-0}" ]; do
+        IFS= read -r _rs_path < "${SRM_WORK}/path.${_rs_i}" || _rs_path=
+        if [ -n "${_rs_list}" ]; then
+            _rs_list="${_rs_list}, "
+        fi
+        _rs_list="${_rs_list}${_rs_it}${_rs_path}${_rs_off}"
+        _rs_i=$((_rs_i + 1))
+    done
+    printf '%s\n' "Caller ${_rs_who} removed ${_rs_list}."
+    unset _rs_mode _rs_caller _rs_it _rs_off _rs_who _rs_list _rs_i _rs_path
 }
 
 # !!! DO NOT MODIFY OR SIMPLIFY THE DRY-RUN GUARD !!!
@@ -5067,8 +5490,11 @@ srm_cmd_rm() {
     srm_exec_forward "$_origin" 1
     _rc=$?
     if [ "$_rc" -eq 0 ]; then
-        _done="Removed every listed path."
+        _done=$(srm_removed_sentence plain)
         srm_emit_json "$_done" false true true "$_items"
+        if [ "${TTY:-0}" -eq 1 ]; then
+            _done=$(srm_removed_sentence tty)
+        fi
         out_success "$_done"
         return 0
     fi
@@ -5648,6 +6074,7 @@ app_token_command() {
         main|--main) printf '%s\n' main ;;
         setup|--setup) printf '%s\n' setup ;;
         restore|--restore|-restore) printf '%s\n' restore ;;
+        reset|--reset) printf '%s\n' reset ;;
         rm|--rm) printf '%s\n' rm ;;
         *) return 1 ;;
     esac
@@ -5691,6 +6118,9 @@ app_run_command() {
             ;;
         restore)
             srm_cmd_restore
+            ;;
+        reset)
+            srm_cmd_reset
             ;;
         # --- DOMAIN_DISPATCH_ROUTES (specializee injection) ---
         rm)

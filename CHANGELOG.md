@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.15] - 2026-09-30
+
+### Changed
+
+- A finished remove names the caller and each path. The line is `Caller <caller> removed <path>.` On a terminal the caller and each path are italic. Two removes are two lines, so a script started from the shell shows which script removed which path. A file that was only sourced, with no path left on the shell command, is reported as that shell (`-bash`), and the path is still named
+
+## [1.0.14] - 2026-09-30
+
+### Added
+
+- `safe-rm reset` (and `--reset`) is for root, or for the Linux `sudo` re-exec. When `origin-rm` already exists, it replaces the system `rm` with a symlink to `origin-rm`. `/bin/rm` then points at `/bin/origin-rm`, and the same for `/usr/bin`. `origin-rm` and `safe-rm` stay. A missing `origin-rm` changes nothing. On Termux this login does that for `$PREFIX/bin` and does not call `sudo`. macOS does not call `sudo`. The home `rm` link is left as it is. A later `setup` points the system `rm` back at `safe-rm`
+
 ## [1.0.13] - 2026-09-30
 
 ### Added

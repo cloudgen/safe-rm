@@ -3,7 +3,7 @@
 Maps **baseline coverage** and **finding lock-in (TP-*)** to `tests/`.  
 **Product suite:** `./tests/run_dry_run.sh` (`src/safe-rm`).  
 **Type 0 snapshot suite:** `./tests/run.sh` also runs that product suite, then the older snapshot suite.  
-**Last update:** 2026-09-30 (domain 1.2.14: a final `.` or `..` is refused when that directory would otherwise be allowed. `TP-SRM-37` is in `tests/run_dry_run.sh`. `TP-SRM-35` is still TODO. Ship unit 1.0.13)
+**Last update:** 2026-09-30 (domain 1.2.16: a finished remove names the caller and each path. `TP-SRM-39` is in `tests/run_dry_run.sh`. `TP-SRM-35` is still TODO. Ship unit 1.0.15)
 
 Status: **have** = automated today · **TODO** = needed · **n/a** = not applicable / product choice
 
@@ -98,6 +98,8 @@ These rows are what `tests/test_cli.sh` asserts against the older snapshot. Prod
 | TP-SRM-35 | self-install 1.2.1 §2.7 | When `PATH` has `/bin` before `/usr/local/bin`, the line `export PATH="${HOME}/.local/bin:/usr/local/bin:$PATH"` is written once on `.bashrc`, `.zshrc`, `.zshenv`, `.profile`, and Fish. `${HOME}/.local/bin` stays first and `/usr/local/bin` stays ahead of `/usr/bin`. An existing `.profile` body stays. A second run does not append again. Nothing is executed | **TODO** | not in the suite yet |
 | TP-SRM-36 | domain 1.2.13 | Remove-check scratch directory stays mode `0700` when `mktemp -d` returns `0600` and when umask is `0177`. Dry-run of an allowed directory still allows it. The scratch directory is not left behind. Nothing is executed | **have** | `tests/run_dry_run.sh` |
 | TP-SRM-37 | domain 1.2.14 | From an allowed temporary directory, `.`, `..`, and `./` are refused and the directory remains. `./file` and `leaf/../leaf` stay allowed. `leaf/..` is refused. JSON class is `DENY-DOT`. `rm -- -rf` is a path. `rm -rf` with no path is not. Nothing is executed | **have** | `tests/run_dry_run.sh` |
+| TP-SRM-38 | domain 1.2.15 | After setup, `reset` points the fixture `rm` at `origin-rm`. `origin-rm` and `safe-rm` stay. A missing `origin-rm` changes nothing. A non-admin `reset` leaves `/usr/bin/rm`. Nothing is executed | **have** | `tests/run_dry_run.sh` |
+| TP-SRM-39 | domain 1.2.16 | A finished remove names the caller and each path. On a terminal those names are italic. The fixture `origin-rm` exits 0 and does not unlink. The path remains. A refusal does not exec it | **have** | `tests/run_dry_run.sh` |
 | TP-SRM-34 | domain 1.2.11 §2.0.5 | Measure 2 under `/tmp/safe-rm-swap.*` with a sudo stand-in. Linux calls the stand-in for measure 2 only after measure 1. Darwin does not call it and leaves the fixture `/bin/rm`. A BusyBox symlink is not renamed. No real `sudo`. No host `/bin` write. Nothing is executed | **have** | `tests/test_two_layer.sh` (`SRM_SUDO` stand-in, `SRM_DELEGATE_MEASURE2=1`) |
 | TP-CACHE-01 | storage 1.1.0 | `about` prints Cache folder used, preferred, 1st fallback, 2nd fallback, and Persistence storage. JSON has `cache_used`, `cache_preferred`, `cache_fallback`, `cache_fallback_2`, `persistence_storage`. No Storage (effective) label | **have** | `tests/run_dry_run.sh` |
 | TP-CACHE-02 | storage 1.1.0 | Linux `/dev/shm/cache/cache-${APP_NAME}-${login}-$$`, then `/tmp/cache/...`, then `${HOME}/.cache/cache-${APP_NAME}-$$`. Git Bash and Mac chains. Silent skip. Leaf mode 0700. Persistence `${HOME}/.local/${APP_NAME}`. Suite does not assign HOME | **have** | `tests/run_dry_run.sh` |

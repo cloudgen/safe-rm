@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-interface.md  
-**Status**: Active (Version 1.2.6)  
+**Status**: Active (Version 1.2.7)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -160,6 +160,7 @@ Every command is also a switch of the same name. `help` and `--help` are the sam
 | `setup` | domain | `srm_cmd_setup` | Admin login checks the before/after table and swaps when needed. Sample: `safe-rm setup`. Law: `requirement-domain-safe-rm.md` |
 | `restore` | domain | `srm_cmd_restore` | Put `origin-rm` back as `rm` and remove the `safe-rm` link. Sample: `safe-rm restore`. Law: `requirement-domain-safe-rm.md` |
 | `-restore` | domain | `srm_cmd_restore` | 2023 token when this program is the `rm` people type |
+| `reset` | domain | `srm_cmd_reset` | When `origin-rm` exists, point `rm` at it. Linux uses root or `sudo`. Leave `origin-rm` and `safe-rm`. Sample: `safe-rm reset`. Law: `requirement-domain-safe-rm.md` |
 | *(command name is `rm`)* | domain | `srm_cmd_rm` | Basename of `$0` is `rm`. A lifecycle `--` switch is that command. A bare lifecycle word is a path (`rm version` removes a link named `version`). Other arguments are the remover's arguments (`rm -rf test`), not a second `rm` verb. Law: `requirement-domain-safe-rm.md` |
 
 #### Global flags (normative wiring for this project)
@@ -272,6 +273,6 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 
 ---
 
-**Last Updated**: 2026-09-29 (1.2.6 — setup is two layers; Linux measure 2 is the one internal `sudo`; macOS stops after the home guard)  
+**Last Updated**: 2026-09-30 (1.2.7 — `reset` points the system `rm` at an existing `origin-rm`; Linux uses root or `sudo`)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 5, 6, 10, 16, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

@@ -1,6 +1,6 @@
 **file**: docs/requirements/requirement-domain-safe-rm.md
 **id**: RQ-DOMAIN-SAFE-RM
-**Status**: Active (Version 1.2.14)
+**Status**: Active (Version 1.2.16)
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -9,8 +9,8 @@ This requirement is the **current domain SSOT** for **safe-rm**. The 2023 progra
 
 It also exists because an agent once ran a recursive remove of the login home after a command-scoped `HOME=` prefix. The prefix did not apply to the later remove, and the login home was the target.
 
-**Scope:** the protected-`rm` setup (`origin-rm`, the `rm` link, `restore`), the command named `rm` (the same switches as `origin-rm`, including `-rf`), the `safe-rm rm` verb, `--dry-run`, refuse classes, messages that tell the operator to stop, and the help/about rows for that guard.
-**Out of scope:** Checksum and storage (peer shell requirements). Any remove that the tests perform without `--dry-run`. Dropping the 2023 swap. The one `sudo` this product runs is the measure-2 re-exec in §2.0.5, not a general admin shell.
+**Scope:** the protected-`rm` setup (`origin-rm`, the `rm` link, `restore`, `reset`), the command named `rm` (the same switches as `origin-rm`, including `-rf`), the `safe-rm rm` verb, `--dry-run`, refuse classes, messages that tell the operator to stop, and the help/about rows for that guard.
+**Out of scope:** Checksum and storage (peer shell requirements). Any remove that the tests perform with the host remover. `TP-SRM-39` may exec a fixture `origin-rm` under `/tmp/safe-rm-swap.*` that exits 0 and does not unlink; the listed path remains. Dropping the 2023 swap. The one `sudo` this product runs is the measure-2 re-exec in §2.0.5, and the same re-exec for `restore` and `reset`, not a general admin shell.
 
 ### 1.1 Human-facing
 
@@ -24,7 +24,7 @@ It also exists because an agent once ran a recursive remove of the login home af
 
 | Includes | Excludes |
 |----------|----------|
-| Swap of system `rm` to this guard, `restore`, refuse rules, dry-run report | Leaving the raw `rm` binary as the command people type |
+| Swap of system `rm` to this guard, `restore`, `reset`, refuse rules, dry-run report | Leaving the raw `rm` binary as the command people type after setup |
 | One JSON object for `rm` when `--json` is set | A second printer beside `out_*` |
 
 | Surface | What you open | What for |
@@ -38,6 +38,8 @@ It also exists because an agent once ran a recursive remove of the login home af
 | Ask before deleting | The program reports existence and the verdict and deletes nothing | `safe-rm rm --dry-run <path>` |
 | Hit a home directory | The program exits non-zero and removes nothing. A folder inside that home is a different path | `safe-rm rm --dry-run` on the home, then on a folder inside it |
 | Put the original binary back | `origin-rm` becomes `rm` again and the guard link is removed | `safe-rm restore` |
+| Point `rm` at the saved remover | `origin-rm` stays. `rm` becomes a symlink to it. `safe-rm` stays | `safe-rm reset` |
+| See which script removed a path | The success line names the caller and each path. On a terminal those names are italic | after a real remove |
 | Install or update this program | The place finishes, then setup runs measure 1 in the home bin and measure 2 through `sudo` when this host is Linux and this login is not root | `safe-rm self-install` |
 
 ---
@@ -197,6 +199,17 @@ Pass every forwarded switch, in order, then `--`, then every allowed path. One c
 - macOS, Git Bash, and Windows cmd have no system paths to put back.
 - Measure 1 restore, as this login and with no `sudo`, removes `${HOME}/.local/bin/rm` and `${HOME}/.local/bin/origin-rm`. It leaves `${HOME}/.local/bin/safe-rm`. `self-uninstall` owns that file.
 
+#### `reset`
+
+`reset` is not `restore`. The saved file stays named `origin-rm`. There is no file named `original-rm`.
+
+`reset` checks that `origin-rm` already exists in the system directory. When it does, `reset` replaces `rm` with a symlink whose target is `origin-rm` (`/bin/rm` points at `/bin/origin-rm`, and the same for `/usr/bin` and, on Termux, `$PREFIX/bin`). It does not move `origin-rm`, and it does not remove `safe-rm`. When `origin-rm` is absent, `reset` does not create a link and does not change `rm`.
+
+- Linux uses the same actor and the same `sudo` re-exec as measure 2. The child is root. When `sudo` fails, `/usr/bin/rm` and `/bin/rm` stay, and `reset` exits non-zero.
+- Termux reset is this login, `$PREFIX/bin` only, with no `sudo`.
+- macOS, Git Bash, and Windows cmd do not replace `/bin/rm`. `reset` changes nothing there and does not call `sudo`.
+- `reset` does not change `${HOME}/.local/bin/rm`. A later `setup` points the system `rm` back at `safe-rm` when `origin-rm` is still there.
+
 Shell startup lines stay until uninstall. Uninstall removes them only when `${HOME}/.local/bin` is empty.
 
 #### Proof
@@ -215,11 +228,13 @@ Ship unit `1.0.11` implements the two-layer swap in this section. Ship unit `1.0
 |------|-----------|---------|
 | `rm` | The person who typed `rm`. The check itself does not switch account | Check every operand path. Remove only when every path is allowed and `--dry-run` is off, by exec of the remover in §2.0.5 |
 | `restore` | This login for the home layer. For the system layer: the same `sudo` re-exec as measure 2 on Linux; this login on Termux for `$PREFIX/bin` only. No system restore on macOS, Git Bash, or Windows cmd | Undo measure 2, then remove `${HOME}/.local/bin/rm` and `${HOME}/.local/bin/origin-rm`. The 2023 token `-restore` is the same verb when this program is the `rm` people type |
+| `reset` | The same `sudo` re-exec as measure 2 on Linux. This login on Termux for `$PREFIX/bin` only. No system reset on macOS, Git Bash, or Windows cmd | When `origin-rm` exists, point `rm` at it and leave `origin-rm` and `safe-rm`. When it is absent, change nothing |
 | protected-rm setup | This login for measure 1. Measure 2 per §2.0.5 and `requirement-actor-role-subject.md` | Home guard first. Then the system swap on Linux and Termux. macOS stops after the home guard |
 
 Interactive empty argv opens the numbered menu. It is not `rm`. A pipe, quiet, or json run with no arguments stays install-ensure of this CLI, then runs §2.0.5. Measure 1 runs as this login. On Linux, measure 2 uses the internal `sudo` re-exec when this login is not root. The system guard's bytes are the home file from measure 1 when that file exists. When `origin-rm` is absent, measure 2 performs the first move. When it is already present, measure 2 does not move it again. It is not a raw `rm`.
 
 Sample: `safe-rm restore`  
+Sample: `safe-rm reset`  
 Sample: `safe-rm rm --dry-run <path>`  
 Sample, when this program is the `rm` people type:
 
@@ -324,15 +339,21 @@ The lasting result on Linux is: `/usr/bin/rm` and `/bin/rm` are this guard, and 
 
 `restore` and `-restore` follow §2.0.5. On the system layer, when `origin-rm` exists, remove the `rm` symlink, move `origin-rm` back to `rm`, and remove `safe-rm`. Say that the original binary is restored, through `out_*`.
 
+`reset` and `--reset` follow §2.0.5. On the system layer, when `origin-rm` exists, replace `rm` with a symlink to `origin-rm`. Leave `origin-rm` and `safe-rm`. When `origin-rm` is absent, change nothing. Setup still must not point `rm` at `origin-rm`. A later setup points that symlink back at `safe-rm`.
+
 On Termux, measure 2 runs as this login against `$PREFIX/bin/rm` and does not call `sudo`. On macOS, Git Bash, and Windows cmd, measure 2 does not run and does not call `sudo`. Measure 1 still runs. The guard still refuses a home directory when the program is invoked by name.
 
 #### Real remove
 
 When `--dry-run` is off and every path is allowed, exec the remover from §2.0.5 once. Pass every forwarded switch, in order, then `--`, then every allowed path. One command is one exec, so a switch whose meaning depends on the whole operand list (such as `-I`) matches the remover. **MUST NOT** exec the remover for a refused path. **MUST NOT** exec it once per path.
 
+When that exec exits 0, the success line names the caller and each path that was forwarded. The sentence is `Caller <caller> removed <path>.` More than one path is comma-separated in that same sentence. On a terminal the caller and each path are italic (SGR 3). Off a terminal the same words are plain. `--json` puts that plain sentence in `message`. `--quiet` still hides the human line.
+
+The caller is the nearest script path in the parent command. That is the file named by `sh script`, by `bash script`, or by `--rcfile`. Arguments after that script, including the path being removed, are not the caller. `sh -c` names no script file, so the walk continues to the next shell. A file that was sourced, with no path left in the shell's command, is not invented: the label is that shell, such as `-bash`. The walk stops at a program that is not a shell, so a session leader is not reported as the script. Proof: `TP-SRM-39`.
+
 #### Non-goals
 
-- Tests for this verb do not run real mode. They use `--dry-run` so a system directory cannot be removed by the suite.
+- Tests for this verb use `--dry-run`, except `TP-SRM-39`. That proof execs a fixture `origin-rm` under `/tmp/safe-rm-swap.*` that exits 0 and does not unlink. The listed path remains. The host remover is not exec'd. A system directory cannot be removed by the suite.
 - The guard does not keep a database of paths.
 - Product sentences do not use the 2023 `printf` lines. They use `out_*`.
 
@@ -347,8 +368,10 @@ When `--dry-run` is off and every path is allowed, exec the remover from §2.0.5
 | `rm -- -file` | A name that starts with `-` is a path after `--`. `./-file` is that same path |
 | `rm -rf .` | `'.' and '..' are refused. Name the folder itself` |
 | `rm --dry-run` | Remove nothing. Say whether each path exists and whether it may be removed |
+| finished remove | A finished remove names the caller and each path. On a terminal those names are italic |
 | `--dry-run` | The same switch may appear before or after `rm` |
 | `restore` | Put `origin-rm` back as `rm` |
+| `reset` | When `origin-rm` exists, point `rm` at it. Linux uses root or sudo |
 | Stop line | The home directory was refused. Do not retry that path with the raw binary |
 
 ### 2.4 Specialized project about items
@@ -398,6 +421,8 @@ JSON `about` includes `"remove_guard":"on"` and `"dry_run_switch":"--dry-run"`.
 | `TP-SRM-35` | §2.7 PATH block (self-install `1.2.1`). When `PATH` has `/bin` before `/usr/local/bin`, `export PATH="${HOME}/.local/bin:/usr/local/bin:$PATH"` is written once on `.bashrc`, `.zshrc`, `.zshenv`, and `.profile`. Fish gets `set -gx PATH ${HOME}/.local/bin /usr/local/bin $PATH` once. `${HOME}/.local/bin` stays first. `/usr/local/bin` stays ahead of `/usr/bin`. An existing `.profile` body stays. A second run does not append again. Nothing is executed. **TODO** in ship unit `1.0.12` |
 | `TP-SRM-36` | Remove-check scratch directory. A `mktemp -d` that returns mode `0600`, and a process umask `0177`, still let a dry-run allow an existing temporary directory. The directory remains. The scratch directory is not left behind. Nothing is executed |
 | `TP-SRM-37` | From an allowed temporary directory, dry-run of `.`, `..`, and `./` is refused and the directory remains. `./file` and `leaf/../leaf` stay allowed and remain. `leaf/..` is refused. One `.` beside an allowed path removes nothing. JSON `class` is `DENY-DOT`. `rm --dry-run -- -rf` treats `-rf` as a path. `rm --dry-run -rf` with no `--` gives no path. Nothing is executed |
+| `TP-SRM-38` | Layout only, under `/tmp/safe-rm-swap.*`. After setup, `reset` points the fixture `rm` at `origin-rm`. `origin-rm` and `safe-rm` stay. A second `reset` leaves that link. A directory with no `origin-rm` is not changed. A non-admin `reset` without that fixture does not change `/usr/bin/rm`. A BusyBox fixture points `rm` at `origin-rm` and leaves the applet. Nothing is executed |
+| `TP-SRM-39` | A finished remove names the caller and each path. On a terminal those names are italic. `--json` uses the same sentence with no italic. `--quiet` hides the human line. A refused path does not exec the remover. The fixture `origin-rm` under `/tmp/safe-rm-swap.*` exits 0 and does not unlink. The listed path remains. `/usr/bin/rm` stays |
 | `TP-SRM-34` | §2.0.5 measure 2 under `/tmp/safe-rm-swap.*` with a sudo stand-in. The real `sudo` is not run and the host `/bin` and `/usr/bin` are not written. Linux: measure 1 finishes, then the stand-in runs measure 2 only. Darwin: the stand-in is not called and the fixture `/bin/rm` stays. A BusyBox symlink is not renamed. Nothing is executed |
 | `TP-SRM-28` | `help` says a local `install` copies this file into `/usr/local/bin/` or `${HOME}/.local/bin/` and does not download |
 | `TP-SRM-18` | `about` includes `Remove guard:` |
@@ -412,12 +437,12 @@ Runner: `tests/run_dry_run.sh`. Its swap block points `HOME` at `/tmp/safe-rm-pl
 | Product | `safe-rm` |
 | Ship unit | `src/safe-rm` |
 | Companion | `src/safe-rm.sha256` |
-| Version | `1.0.13` |
+| Version | `1.0.15` |
 | Prefix | `srm_` |
-| Type 0 lifecycle | Kept in full (self-install, self-update, self-uninstall, version, about, help, numbered menu, `out_*`). The 2023 setup is kept as well: `origin-rm`, `rm` → this program, `restore` |
+| Type 0 lifecycle | Kept in full (self-install, self-update, self-uninstall, version, about, help, numbered menu, `out_*`). The 2023 setup is kept as well: `origin-rm`, `rm` → this program, `restore`, `reset` |
 | Channel default | `REPO_USER=cloudgen`, `REPO_NAME=safe-rm`, `SCRIPT_RELPATH=src/safe-rm` |
 | Dispatcher anchors | Basename `rm` routes to `srm_cmd_rm` before the menu. `safe-rm rm` is the same remove. `--dry-run` is not forwarded |
-| Honesty | The two-layer setup is **implemented** in ship unit `1.0.11`. Measure 1 writes `${HOME}/.local/bin` as this login, then measure 2. Linux measure 2 re-execs this program through `sudo` when the invoker is not root (`SRM_SUDO` in tests; the default is `sudo`). macOS, Termux, Git Bash, and Windows cmd do not call `sudo`. macOS does not move `/bin/rm`. The saved original is named `origin-rm`. Profile-ensure creates a missing `.profile` that sources `.bashrc`. Ship unit `1.0.12` writes the one-directory user-bin line on `.bashrc`, `.zshenv`, and Fish. The §2.7 block that puts `/usr/local/bin` next, on `.zshrc` and `.profile` as well, is **not implemented** yet (`TP-SRM-35` TODO). Termux `$PREFIX/bin` still has no `sudo`. Tests pass `SRM_SWAP_ROOT=/tmp/safe-rm-swap.*` or `SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*` so they never touch the host `/usr/bin` or `/bin`. Dry-run never execs the remover. `TP-SRM-33` and `TP-SRM-34` are in `tests/test_two_layer.sh`. Ship unit `1.0.12` sets the remove-check scratch directory to mode `0700` after `mktemp -d` (`TP-SRM-36`). Ship unit `1.0.13` refuses an operand whose final component is `.` or `..` when that resolved directory would otherwise be allowed (`TP-SRM-37`). Account-home lookup uses `grep -Fxq` and falls back to a read loop when `grep` fails |
+| Honesty | The two-layer setup is **implemented** in ship unit `1.0.11`. Measure 1 writes `${HOME}/.local/bin` as this login, then measure 2. Linux measure 2 re-execs this program through `sudo` when the invoker is not root (`SRM_SUDO` in tests; the default is `sudo`). macOS, Termux, Git Bash, and Windows cmd do not call `sudo`. macOS does not move `/bin/rm`. The saved original is named `origin-rm`. Profile-ensure creates a missing `.profile` that sources `.bashrc`. Ship unit `1.0.12` writes the one-directory user-bin line on `.bashrc`, `.zshenv`, and Fish. The §2.7 block that puts `/usr/local/bin` next, on `.zshrc` and `.profile` as well, is **not implemented** yet (`TP-SRM-35` TODO). Termux `$PREFIX/bin` still has no `sudo`. Tests pass `SRM_SWAP_ROOT=/tmp/safe-rm-swap.*` or `SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*` so they never touch the host `/usr/bin` or `/bin`. Dry-run never execs the remover. `TP-SRM-33` and `TP-SRM-34` are in `tests/test_two_layer.sh`. Ship unit `1.0.12` sets the remove-check scratch directory to mode `0700` after `mktemp -d` (`TP-SRM-36`). Ship unit `1.0.13` refuses an operand whose final component is `.` or `..` when that resolved directory would otherwise be allowed (`TP-SRM-37`). Account-home lookup uses `grep -Fxq` and falls back to a read loop when `grep` fails. Ship unit `1.0.14` adds `reset`: when `origin-rm` exists, root or the Linux `sudo` re-exec points the system `rm` at it and leaves `origin-rm` and `safe-rm` (`TP-SRM-38`). Ship unit `1.0.15` names the caller and each path on a finished remove. On a terminal those names are italic. A sourced file with no path in the shell command is reported as that shell. `TP-SRM-39` execs a fixture `origin-rm` under `/tmp/safe-rm-swap.*` that exits 0 and does not unlink |
 
 ---
 
@@ -436,7 +461,7 @@ Runner: `tests/run_dry_run.sh`. Its swap block points `HOME` at `/tmp/safe-rm-pl
 
 1. Call the system `rm` from the `--dry-run` path.
 2. Remove any path after one path in the same command was refused.
-3. Leave the raw system `rm` as the command people type after setup, or point `rm` back at `origin-rm` and stop there.
+3. During setup, leave the raw system `rm` as the command people type, or point `rm` back at `origin-rm` and stop there. `reset` is the only verb that points the system `rm` at `origin-rm`, and only when that file already exists.
 4. Point `HOME` at a scratch directory in order to test this command.
 5. Add a test that invokes `rm` without `--dry-run`.
 6. Print the refusal with `echo` or `printf` instead of `out_*`.
@@ -455,6 +480,7 @@ Runner: `tests/run_dry_run.sh`. Its swap block points `HOME` at `/tmp/safe-rm-pl
 19. Call `sudo` for measure 1, or call `sudo` on macOS, Termux, Git Bash, or Windows cmd. Let the measure-2 child call `sudo` again.
 20. Save the original under a second name `rm-original`, or make the Linux home `origin-rm` a script that execs `/bin/rm` or `/usr/bin/rm` after those paths are the guard.
 21. Allow an operand whose final component is `.` or `..` when the resolved directory would otherwise be allowed. The operator names the directory.
+22. On `reset`, create an `rm` link when `origin-rm` is absent, move or remove `origin-rm`, or remove `safe-rm`. A login that is not root does not rewrite `/usr/bin/rm` or `/bin/rm`.
 
 **Violating this rule is a critical remove-guard regression.**
 
@@ -510,6 +536,8 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | 2026-09-29 | 1.2.12: When `/bin` is ahead of `/usr/local/bin`, path-ensure writes `${HOME}/.local/bin` then `/usr/local/bin` on `.bashrc`, `.zshrc`, `.zshenv`, `.profile`, and Fish. `/usr/local/bin` is then ahead of `/usr/bin`. Ship unit `1.0.11` does not implement this block yet. `TP-SRM-35` is TODO. |
 | 2026-09-30 | 1.2.13: The remove-check scratch directory is mode `0700` after `mktemp -d`. A umask that strips the owner execute bit, or a `mktemp` that returns `0600`, must not leave `safe-rm-work.*` unsearchable. Cleanup sets `0700` before it removes that directory. `TP-SRM-36`. Ship unit `1.0.12`. |
 | 2026-09-30 | 1.2.14: `DENY-DOT`. An operand whose final component is `.` or `..` is refused when the resolved directory would otherwise be allowed. A stronger class stays. A `..` in the middle is not this class. `TP-SRM-37`. Ship unit `1.0.13`. |
+| 2026-09-30 | 1.2.15: `reset`. When `origin-rm` exists, root or the Linux `sudo` re-exec replaces the system `rm` with a symlink to `origin-rm`. `origin-rm` and `safe-rm` stay. A missing `origin-rm` changes nothing. Termux does this as this login on `$PREFIX/bin`. macOS does not call `sudo`. `TP-SRM-38`. Ship unit `1.0.14`. |
+| 2026-09-30 | 1.2.16: A finished remove names the caller and each path. On a terminal those names are italic. A sourced file with no path in the shell command is the shell, such as `-bash`. `TP-SRM-39`. Ship unit `1.0.15`. |
 
 **Last Updated**: 2026-09-30
 **Owner**: safe-rm project maintainers

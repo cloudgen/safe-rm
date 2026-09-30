@@ -26,6 +26,7 @@ export SCRIPT
 
 # Domain proof for safe-rm runs first, while HOME is still the login home.
 # tests/run_dry_run.sh never removes for real.
+# TP-SRM-39 execs a fixture origin-rm that does not unlink.
 if ! sh "${TESTS_ROOT}/run_dry_run.sh"; then
     exit 1
 fi

@@ -4,7 +4,9 @@
 
 | Version | Supported |
 |---------|-----------|
-| **1.0.13** (current) | Yes — `.` and `..` are refused when the directory would otherwise be allowed. Name the directory to remove it |
+| **1.0.15** (current) | Yes — a finished remove names the caller and each path. On a terminal those names are italic |
+| **1.0.14** | Yes — `reset` points the system `rm` at an existing `origin-rm`. Root or the Linux `sudo` re-exec does that. `origin-rm` stays |
+| **1.0.13** | Yes — `.` and `..` are refused when the directory would otherwise be allowed. Name the directory to remove it |
 | **1.0.12** | Yes — the remove check's scratch directory is mode `0700`, including when umask would leave `mktemp -d` at `0600` |
 | **1.0.11** | Yes — setup writes `~/.local/bin` first (home `rm` → `safe-rm`, original saved as `origin-rm`). On Linux it then uses `sudo` to move `/usr/bin/rm` and `/bin/rm`. macOS leaves `/bin/rm`. A missing `~/.profile` is created so login bash sources `~/.bashrc` |
 | **1.0.10** | Yes — a root `self-install` or `self-update` runs `setup`, so `rm` is the file just placed. On Termux, this login's place runs that setup |

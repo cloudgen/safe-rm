@@ -1,6 +1,6 @@
 # safe-rm - Guarded replacement for the system rm
 
-![Version](https://img.shields.io/badge/Version-1.0.13-blue?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.0.15-blue?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 [![CIAO](https://img.shields.io/badge/Philosophy-CIAO%20v2.10.*-purple.svg)](https://github.com/cloudgen/ciao)
 [![Stars](https://img.shields.io/github/stars/cloudgen/safe-rm?style=flat-square)](https://github.com/cloudgen/safe-rm)
@@ -61,7 +61,7 @@ The program file people install is `src/safe-rm`. It is one POSIX `/bin/sh` scri
 
 ### Use caution
 
-**A daily Linux workstation or a production host.** Setup renames the distribution's `/bin/rm` to `origin-rm` and puts a symlink in its place. apt, dnf, apk, and pacman check the hashes of packaged files and own `/bin/rm`. An upgrade of coreutils or base-files can replace that symlink, or report that `/bin/rm` no longer matches the package.
+**A daily Linux workstation or a production host.** Setup renames the distribution's `/bin/rm` to `origin-rm` and puts a symlink in its place. apt, dnf, apk, and pacman check the hashes of packaged files and own `/bin/rm`. An upgrade of coreutils or base-files can replace that symlink, or report that `/bin/rm` no longer matches the package. Root can run `safe-rm reset` to point `/bin/rm` and `/usr/bin/rm` back at `origin-rm` without deleting `origin-rm`. A later `setup` points them at the guard again. The packaged file is still not restored; `safe-rm restore` is the command that moves `origin-rm` back to the `rm` name.
 
 **A build that calls `rm` thousands of times.** `make clean`, `cargo clean`, and a test run start this shell for every `rm`. Each call resolves the paths and reads the password database. A compiled `rm` does not pay that cost.
 
@@ -81,7 +81,7 @@ macOS leaves Apple's `/bin/rm` in place, so the first row is the Linux setup. De
 
 ## Quick Installation
 
-Runtime version: `VERSION="1.0.13"` in `src/safe-rm`.
+Runtime version: `VERSION="1.0.15"` in `src/safe-rm`.
 
 Channel default:
 
@@ -141,7 +141,7 @@ After install, on a terminal:
 
 ```text
 $ safe-rm
-[INFO] **safe-rm**(*1.0.13*) — Guarded rm that refuses login homes and system directories
+[INFO] **safe-rm**(*1.0.15*) — Guarded rm that refuses login homes and system directories
 1. **remove-guard**: *check a path and remove it only when it is allowed*
 8. **self-management**: *this CLI install, version, update, uninstall*
 9. Exit
@@ -151,7 +151,7 @@ Choice:
 **1** opens the remove-guard board:
 
 ```text
-[INFO] **safe-rm**(*1.0.13*) — remove-guard
+[INFO] **safe-rm**(*1.0.15*) — remove-guard
 11. **rm**: *check each path and remove only when every path is allowed*
 0. Back
 ```
@@ -159,7 +159,7 @@ Choice:
 **11** lists each immediate subfolder of the current directory, then one number to type a path. The sample below was a temporary directory that held `cache` and `notes`. Your numbers are the folders where you are. That path runs the same guard as `safe-rm rm`.
 
 ```text
-[INFO] **safe-rm**(*1.0.13*) — remove-guard
+[INFO] **safe-rm**(*1.0.15*) — remove-guard
 [INFO] Current path: /tmp/safe-rm-menu-demo
 1. **cache**: */tmp/safe-rm-menu-demo/cache*
 2. **notes**: */tmp/safe-rm-menu-demo/notes*
@@ -170,7 +170,7 @@ Choice:
 **8** opens self-management. **81** is not listed.
 
 ```text
-[INFO] **safe-rm**(*1.0.13*) — self-management
+[INFO] **safe-rm**(*1.0.15*) — self-management
 82. **version**: *show current version*
 83. **about**: *show detailed diagnostics*
 84. **version-check**: *compare local vs remote version*
@@ -199,6 +199,7 @@ rm version                 # when rm is this program: a path named version
 safe-rm version-check
 safe-rm self-update
 safe-rm self-uninstall
+safe-rm reset             # root or sudo: point system rm at origin-rm when that file exists
 safe-rm rm --dry-run <path>
 safe-rm rm -r <path>     # real remove only when every path is allowed
 ```
@@ -239,7 +240,7 @@ safe-rm rm --dry-run .                # refused: '.' would remove the current di
 safe-rm rm -- -file                   # a file whose name starts with -
 ```
 
-A real delete uses the same paths without `--dry-run`, and only when every path is allowed:
+A real delete uses the same paths without `--dry-run`, and only when every path is allowed. The success line names the caller and each path. On a terminal those names are italic. A script that was executed is named. A file that was only sourced is the shell, such as `-bash`, and the path is still named:
 
 ```sh
 safe-rm rm -r /tmp/my-folder
@@ -269,7 +270,7 @@ The defensive style is [CIAO](https://github.com/cloudgen/ciao) (Caution, Intent
 
 Issues and changes go to [cloudgen/safe-rm](https://github.com/cloudgen/safe-rm).
 
-The remove suite is dry-run only:
+The remove suite is dry-run, except one check that execs a fixture remover under `/tmp/safe-rm-swap.*` and leaves the path in place:
 
 ```sh
 sh tests/run_dry_run.sh
@@ -283,4 +284,4 @@ MIT. The full text is [LICENSE.md](LICENSE.md).
 
 ## Last Update
 
-2026-09-30 — purpose, where-to-use guidance, and a comparison with other removers, for version 1.0.13.
+2026-09-30 — a finished remove names the caller and each path, for version 1.0.15.

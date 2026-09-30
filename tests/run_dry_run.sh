@@ -1,8 +1,9 @@
 #!/bin/sh
-# Domain suite for safe-rm. Every remove check uses --dry-run.
+# Domain suite for safe-rm. Remove checks use --dry-run, except TP-SRM-39.
+# That check points SRM_SWAP_ROOT at /tmp/safe-rm-swap.* whose origin-rm
+# exits 0 and does not unlink. The listed path remains.
 # The swap block points HOME at /tmp/safe-rm-place.* and restores the login
-# HOME before later checks. This file does not call the product without
-# --dry-run on a remove path.
+# HOME before later checks.
 set -u
 
 TESTS_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -32,6 +33,14 @@ cleanup() {
                 return 0
             fi
             scratch_rm -rf -- "$SCRATCH"
+            ;;
+    esac
+    case "${REPORT_SWAP-}" in
+        /tmp/safe-rm-swap.*)
+            if [ -n "${HOME-}" ] && [ "$REPORT_SWAP" = "$HOME" ]; then
+                return 0
+            fi
+            scratch_rm -rf -- "$REPORT_SWAP"
             ;;
     esac
 }
@@ -558,6 +567,7 @@ assert_contains "TP-SRM-27 --help lists --menu" "$out" "--menu"
 assert_contains "TP-SRM-27 --help lists --main" "$out" "--main"
 assert_contains "TP-SRM-27 --help lists --setup" "$out" "--setup"
 assert_contains "TP-SRM-27 --help lists --restore" "$out" "--restore"
+assert_contains "TP-SRM-27 --help lists --reset" "$out" "--reset"
 assert_contains "TP-SRM-27 --help lists --rm" "$out" "--rm"
 
 out=$(sh "$SAFE_RM" --about 2>/dev/null)
@@ -588,7 +598,7 @@ assert_contains "TP-SRM-27 rm --about remove guard" "$out" "Remove guard:"
 # stays in place under --dry-run. --version above is still this program.
 # -restore stays a command and is not invoked here.
 printf 'keep\n' > "$SCRATCH/link-target"
-for name in help version about version-check self-update self-uninstall self-install install menu main setup restore; do
+for name in help version about version-check self-update self-uninstall self-install install menu main setup restore reset; do
     ln -s link-target "$SCRATCH/$name"
     out=$(cd "$SCRATCH" && "$SCRATCH/rm" --dry-run "$name" 2>"$err")
     ec=$?
@@ -1001,6 +1011,12 @@ assert_eq "TP-SRM-SWAP-01 non-admin setup exit" 1 "$ec"
 assert_contains "TP-SRM-SWAP-01 non-admin left the system rm" "$(cat "$err")" "/usr/bin/rm and /bin/rm were not moved."
 usr_after=$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)
 assert_eq "TP-SRM-SWAP-01 system rm unchanged" "$usr_before" "$usr_after"
+out=$(sh "$SAFE_RM" reset 2>"$err")
+ec=$?
+assert_eq "TP-SRM-38 non-admin reset exit" 1 "$ec"
+assert_contains "TP-SRM-38 non-admin left the system rm" "$(cat "$err")" "/usr/bin/rm and /bin/rm were not reset."
+usr_after=$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)
+assert_eq "TP-SRM-38 system rm unchanged" "$usr_before" "$usr_after"
 if [ -f "${LAYER_HOME}/.local/bin/safe-rm" ]; then
     t_pass "TP-SRM-SWAP-01 measure 1 kept the home guard"
 else
@@ -1065,6 +1081,42 @@ else
     t_fail "TP-SRM-26 file was removed"
 fi
 
+origin_reset=$(stat -c '%d:%i' "$SWAP/origin-rm" 2>/dev/null || true)
+out=$(SRM_SWAP_ROOT="$SWAP" sh "$SAFE_RM" reset 2>"$err")
+ec=$?
+assert_eq "TP-SRM-38 reset exit" 0 "$ec"
+assert_contains "TP-SRM-38 pointed rm" "$out" "Pointed ${SWAP}/rm at ${SWAP}/origin-rm"
+assert_eq "TP-SRM-38 link target" "origin-rm" "$(readlink "$SWAP/rm" 2>/dev/null || true)"
+assert_eq "TP-SRM-38 origin-rm stayed" "$origin_reset" "$(stat -c '%d:%i' "$SWAP/origin-rm" 2>/dev/null || true)"
+if [ -f "$SWAP/safe-rm" ]; then
+    t_pass "TP-SRM-38 safe-rm stayed"
+else
+    t_fail "TP-SRM-38 safe-rm was removed"
+fi
+if [ -e "${LAYER_HOME}/.local/bin/rm" ]; then
+    t_pass "TP-SRM-38 home rm stayed"
+else
+    t_fail "TP-SRM-38 home rm was removed"
+fi
+out=$(SRM_SWAP_ROOT="$SWAP" sh "$SAFE_RM" reset 2>"$err")
+ec=$?
+assert_eq "TP-SRM-38 second reset exit" 0 "$ec"
+assert_eq "TP-SRM-38 second link target" "origin-rm" "$(readlink "$SWAP/rm" 2>/dev/null || true)"
+RESET_MISS=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
+printf '#!/bin/sh\nexit 0\n' > "$RESET_MISS/rm"
+chmod 0755 "$RESET_MISS/rm"
+miss_before=$(stat -c '%d:%i' "$RESET_MISS/rm")
+out=$(SRM_SWAP_ROOT="$RESET_MISS" sh "$SAFE_RM" reset 2>"$err")
+ec=$?
+assert_eq "TP-SRM-38 missing origin exit" 1 "$ec"
+assert_contains "TP-SRM-38 missing origin changed nothing" "$(cat "$err")" "Nothing was changed."
+assert_eq "TP-SRM-38 missing origin left rm" "$miss_before" "$(stat -c '%d:%i' "$RESET_MISS/rm" 2>/dev/null || true)"
+if [ -L "$RESET_MISS/rm" ]; then
+    t_fail "TP-SRM-38 missing origin replaced rm"
+else
+    t_pass "TP-SRM-38 missing origin left a regular rm"
+fi
+
 out=$(SRM_SWAP_ROOT="$SWAP" sh "$SAFE_RM" restore 2>"$err")
 ec=$?
 assert_eq "TP-SRM-SWAP-01 restore exit" 0 "$ec"
@@ -1091,6 +1143,12 @@ case "$SWAP" in
         scratch_rm -rf -- "$SWAP"
         ;;
 esac
+case "$RESET_MISS" in
+    /tmp/safe-rm-swap.*)
+        scratch_rm -rf -- "$RESET_MISS"
+        ;;
+esac
+unset RESET_MISS
 
 # TP-SRM-29: /usr/bin/rm may be absent. /bin/rm may be the rm people type.
 # Two fixture directories. Neither is executed. BusyBox stays a symlink
@@ -1142,6 +1200,16 @@ assert_contains "TP-SRM-29 busybox link target" "$(readlink "$BB_B/rm")" "${BB_B
 assert_contains "TP-SRM-29 origin names busybox" "$(cat "$BB_B/origin-rm")" "safe-rm busybox-origin"
 assert_contains "TP-SRM-29 origin runs busybox rm" "$(cat "$BB_B/origin-rm")" "${BB_B}/busybox"
 assert_eq "TP-SRM-29 busybox inode unchanged" "$bb_before" "$(stat -c '%d:%i' "$BB_B/busybox" 2>/dev/null || true)"
+out=$(SRM_SWAP_ROOT="$BB_U" SRM_SWAP_BIN="$BB_B" sh "$SAFE_RM" reset 2>"$err")
+ec=$?
+assert_eq "TP-SRM-38 busybox reset exit" 0 "$ec"
+assert_eq "TP-SRM-38 busybox link target" "origin-rm" "$(readlink "$BB_B/rm" 2>/dev/null || true)"
+assert_contains "TP-SRM-38 busybox origin stayed" "$(cat "$BB_B/origin-rm")" "safe-rm busybox-origin"
+if [ -e "$BB_U/rm" ] || [ -e "$BB_U/origin-rm" ]; then
+    t_fail "TP-SRM-38 busybox reset wrote the empty directory"
+else
+    t_pass "TP-SRM-38 busybox reset left the empty directory alone"
+fi
 out=$(SRM_SWAP_ROOT="$BB_U" SRM_SWAP_BIN="$BB_B" sh "$SAFE_RM" restore 2>"$err")
 ec=$?
 assert_eq "TP-SRM-29 busybox restore exit" 0 "$ec"
@@ -1454,6 +1522,126 @@ case "$BL" in
         ;;
 esac
 unset _label _path _expect BL
+
+# TP-SRM-39. The success line names the caller and each path.
+# origin-rm here exits 0 and does not unlink. The host remover is not used.
+REPORT_SWAP=$(mktemp -d /tmp/safe-rm-swap.XXXXXX) || exit 2
+cat > "$REPORT_SWAP/origin-rm" << EOF
+#!/bin/sh
+printf '%s\n' "\$@" >> "${REPORT_SWAP}/stub.log"
+exit 0
+EOF
+chmod 0755 "$REPORT_SWAP/origin-rm"
+printf 'keep\n' > "$REPORT_SWAP/leaf"
+printf 'keep\n' > "$REPORT_SWAP/leaf-b"
+cat > "$REPORT_SWAP/caller.sh" << EOF
+#!/bin/sh
+sh "$SAFE_RM" "\$@"
+EOF
+chmod 0755 "$REPORT_SWAP/caller.sh"
+cat > "$REPORT_SWAP/rc.sh" << EOF
+sh "$SAFE_RM" rm -- "$REPORT_SWAP/leaf"
+EOF
+usr_before=$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)
+
+out=$(SRM_SWAP_ROOT="$REPORT_SWAP" sh "$REPORT_SWAP/caller.sh" rm -- "$REPORT_SWAP/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-39 caller exit" 0 "$ec"
+assert_contains "TP-SRM-39 names the caller and the path" "$out" "Caller ${REPORT_SWAP}/caller.sh removed ${REPORT_SWAP}/leaf."
+assert_contains "TP-SRM-39 keeps the OK mark" "$out" "[OK]"
+assert_not_contains "TP-SRM-39 plain line has no italic" "$out" "$(printf '\033[3m')"
+if [ -f "$REPORT_SWAP/leaf" ]; then
+    t_pass "TP-SRM-39 leaf still exists"
+else
+    t_fail "TP-SRM-39 leaf was removed"
+fi
+assert_contains "TP-SRM-39 fixture received the path" "$(cat "$REPORT_SWAP/stub.log" 2>/dev/null || true)" "$REPORT_SWAP/leaf"
+assert_eq "TP-SRM-39 system rm unchanged" "$usr_before" "$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)"
+
+out=$(TTY=1 SRM_SWAP_ROOT="$REPORT_SWAP" sh "$REPORT_SWAP/caller.sh" rm -- "$REPORT_SWAP/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-39 italic exit" 0 "$ec"
+assert_contains "TP-SRM-39 italic caller" "$out" "$(printf '\033[3m')${REPORT_SWAP}/caller.sh$(printf '\033[0m')"
+assert_contains "TP-SRM-39 italic path" "$out" "$(printf '\033[3m')${REPORT_SWAP}/leaf$(printf '\033[0m')"
+if [ -f "$REPORT_SWAP/leaf" ]; then
+    t_pass "TP-SRM-39 italic leaf still exists"
+else
+    t_fail "TP-SRM-39 italic leaf was removed"
+fi
+
+out=$(SRM_SWAP_ROOT="$REPORT_SWAP" sh "$REPORT_SWAP/caller.sh" rm -- "$REPORT_SWAP/leaf" "$REPORT_SWAP/leaf-b" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-39 two paths exit" 0 "$ec"
+assert_contains "TP-SRM-39 two paths" "$out" "Caller ${REPORT_SWAP}/caller.sh removed ${REPORT_SWAP}/leaf, ${REPORT_SWAP}/leaf-b."
+if [ -f "$REPORT_SWAP/leaf-b" ]; then
+    t_pass "TP-SRM-39 second leaf still exists"
+else
+    t_fail "TP-SRM-39 second leaf was removed"
+fi
+
+out=$(SRM_SWAP_ROOT="$REPORT_SWAP" sh -c 'sh "$1" rm -- "$2"' sh "$SAFE_RM" "$REPORT_SWAP/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-39 sh -c exit" 0 "$ec"
+assert_contains "TP-SRM-39 sh -c names a script ancestor" "$out" "run_dry_run.sh"
+assert_contains "TP-SRM-39 sh -c names the path" "$out" "removed ${REPORT_SWAP}/leaf."
+assert_not_contains "TP-SRM-39 sh -c does not call the path the caller" "$out" "Caller ${REPORT_SWAP}/leaf removed"
+
+out=$(SRM_SWAP_ROOT="$REPORT_SWAP" bash --noprofile --rcfile "$REPORT_SWAP/rc.sh" -ic true </dev/null 2>"$err")
+ec=$?
+assert_eq "TP-SRM-39 rcfile exit" 0 "$ec"
+assert_contains "TP-SRM-39 rcfile names the startup script" "$out" "Caller ${REPORT_SWAP}/rc.sh removed ${REPORT_SWAP}/leaf."
+
+out=$(SRM_SWAP_ROOT="$REPORT_SWAP" sh "$REPORT_SWAP/caller.sh" rm --json -- "$REPORT_SWAP/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-39 json exit" 0 "$ec"
+assert_contains "TP-SRM-39 json removed" "$out" '"removed":"true"'
+assert_contains "TP-SRM-39 json names the caller" "$out" "Caller ${REPORT_SWAP}/caller.sh removed ${REPORT_SWAP}/leaf."
+assert_not_contains "TP-SRM-39 json has no italic" "$out" "$(printf '\033[3m')"
+if [ -f "$REPORT_SWAP/leaf" ]; then
+    t_pass "TP-SRM-39 json leaf still exists"
+else
+    t_fail "TP-SRM-39 json leaf was removed"
+fi
+
+: > "$REPORT_SWAP/stub.log"
+out=$(SRM_SWAP_ROOT="$REPORT_SWAP" sh "$REPORT_SWAP/caller.sh" rm --quiet -- "$REPORT_SWAP/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-39 quiet exit" 0 "$ec"
+assert_not_contains "TP-SRM-39 quiet hides the caller line" "$out" "Caller"
+if [ -f "$REPORT_SWAP/leaf" ]; then
+    t_pass "TP-SRM-39 quiet leaf still exists"
+else
+    t_fail "TP-SRM-39 quiet leaf was removed"
+fi
+
+: > "$REPORT_SWAP/stub.log"
+out=$(SRM_SWAP_ROOT="$REPORT_SWAP" sh "$REPORT_SWAP/caller.sh" rm -- / 2>"$err")
+ec=$?
+assert_eq "TP-SRM-39 refuse exit" 1 "$ec"
+assert_contains "TP-SRM-39 refuse stops" "$(cat "$err")" "Nothing was removed"
+assert_not_contains "TP-SRM-39 refuse has no caller line" "$out" "Caller"
+if [ -s "$REPORT_SWAP/stub.log" ]; then
+    t_fail "TP-SRM-39 refuse exec'd the fixture"
+else
+    t_pass "TP-SRM-39 refuse did not exec the fixture"
+fi
+if [ -d / ]; then
+    t_pass "TP-SRM-39 root remains"
+else
+    t_fail "TP-SRM-39 root missing"
+fi
+
+out=$(sh "$SAFE_RM" help 2>/dev/null)
+assert_contains "TP-SRM-39 help names the caller line" "$out" "names the caller and each path"
+
+assert_eq "TP-SRM-39 system rm still unchanged" "$usr_before" "$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)"
+
+case "$REPORT_SWAP" in
+    /tmp/safe-rm-swap.*)
+        scratch_rm -rf -- "$REPORT_SWAP"
+        ;;
+esac
+unset REPORT_SWAP usr_before
 
 printf '\n== summary ==\n'
 printf 'PASS=%s FAIL=%s\n' "$PASS" "$FAIL"
