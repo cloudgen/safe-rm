@@ -256,6 +256,148 @@ else
 fi
 unset _srm40_before _srm40_after _srm40_stub _srm40_mark
 
+# TP-SRM-42 a stop signal leaves the process. An empty scratch directory is
+# not an empty operand. This process's cache leaf is removed on exit.
+# Nothing is executed. The allowed path remains.
+srm42_login=$(id -un 2>/dev/null || echo "unknown")
+case "$srm42_login" in
+    *[!A-Za-z0-9._-]*)
+        srm42_login=$(printf '%s' "$srm42_login" | tr -c 'A-Za-z0-9._-' '_')
+        ;;
+esac
+[ -n "$srm42_login" ] || srm42_login="unknown"
+srm42_find_leaf() {
+    _srm42_p=$1
+    for _srm42_c in \
+        "/dev/shm/cache/cache-safe-rm-${srm42_login}-${_srm42_p}" \
+        "/tmp/cache/cache-safe-rm-${srm42_login}-${_srm42_p}" \
+        "${HOME}/.cache/cache-safe-rm-${_srm42_p}"
+    do
+        if [ -d "$_srm42_c" ]; then
+            printf '%s\n' "$_srm42_c"
+            return 0
+        fi
+    done
+    return 1
+}
+srm42_wait_hold() {
+    _srm42_p=$1
+    _srm42_i=0
+    while [ "$_srm42_i" -lt 40 ]; do
+        _srm42_leaf=$(srm42_find_leaf "$_srm42_p" 2>/dev/null || true)
+        if [ -n "$_srm42_leaf" ] && find "$_srm42_leaf" -maxdepth 2 -type f -name hold 2>/dev/null | grep -q .; then
+            printf '%s\n' "$_srm42_leaf"
+            return 0
+        fi
+        _srm42_i=$((_srm42_i + 1))
+        sleep 0.2
+    done
+    return 1
+}
+srm42_stop() {
+    _srm42_stop=$1
+    if [ -n "$_srm42_stop" ]; then
+        kill -TERM "$_srm42_stop" 2>/dev/null || true
+        wait "$_srm42_stop" 2>/dev/null || true
+    fi
+}
+
+sh "$SAFE_RM" --dry-run rm --dry-run "$SCRATCH/leaf" >"$SCRATCH/srm42-plain.out" 2>"$SCRATCH/srm42-plain.err" &
+srm42_pid=$!
+wait "$srm42_pid"
+srm42_ec=$?
+assert_eq "TP-SRM-42 dry-run exit" 0 "$srm42_ec"
+if srm42_find_leaf "$srm42_pid" >/dev/null 2>&1; then
+    t_fail "TP-SRM-42 dry-run left the cache leaf"
+else
+    t_pass "TP-SRM-42 dry-run cache leaf was removed"
+fi
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-42 dry-run file still exists"
+else
+    t_fail "TP-SRM-42 dry-run file was removed"
+fi
+
+srm42_fifo="$SCRATCH/srm42-signal.fifo"
+rm -f "$srm42_fifo"
+mkfifo "$srm42_fifo" || t_fail "TP-SRM-42 signal fifo"
+SRM_SIGNAL_HOLD="$srm42_fifo" sh "$SAFE_RM" --dry-run rm --dry-run "$SCRATCH/leaf" >"$SCRATCH/srm42-signal.out" 2>"$SCRATCH/srm42-signal.err" &
+srm42_pid=$!
+srm42_leaf=$(srm42_wait_hold "$srm42_pid" || true)
+if [ -z "$srm42_leaf" ]; then
+    srm42_stop "$srm42_pid"
+    t_fail "TP-SRM-42 signal did not reach the hold"
+else
+    srm42_mode=$(stat -c %a "$srm42_leaf" 2>/dev/null || echo "")
+    assert_eq "TP-SRM-42 cache leaf mode 0700" "700" "$srm42_mode"
+    kill -TERM "$srm42_pid"
+    wait "$srm42_pid"
+    srm42_ec=$?
+    assert_eq "TP-SRM-42 signal exit" 1 "$srm42_ec"
+    srm42_err=$(cat "$SCRATCH/srm42-signal.err")
+    assert_contains "TP-SRM-42 signal says it stopped" "$srm42_err" "A signal interrupted the remove check"
+    assert_not_contains "TP-SRM-42 signal is not an empty path" "$srm42_err" "empty path"
+    assert_not_contains "TP-SRM-42 signal does not write /flags" "$srm42_err" "/flags"
+    assert_not_contains "TP-SRM-42 signal does not write /path" "$srm42_err" "/path."
+    assert_not_contains "TP-SRM-42 signal does not report a missing directory" "$srm42_err" "Directory nonexistent"
+    if srm42_find_leaf "$srm42_pid" >/dev/null 2>&1; then
+        t_fail "TP-SRM-42 signal left the cache leaf"
+    else
+        t_pass "TP-SRM-42 signal cache leaf was removed"
+    fi
+fi
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-42 signal file still exists"
+else
+    t_fail "TP-SRM-42 signal file was removed"
+fi
+
+srm42_fifo="$SCRATCH/srm42-gone.fifo"
+rm -f "$srm42_fifo"
+mkfifo "$srm42_fifo" || t_fail "TP-SRM-42 scratch fifo"
+SRM_SIGNAL_HOLD="$srm42_fifo" sh "$SAFE_RM" --dry-run rm --dry-run "$SCRATCH/leaf" >"$SCRATCH/srm42-gone.out" 2>"$SCRATCH/srm42-gone.err" &
+srm42_pid=$!
+srm42_leaf=$(srm42_wait_hold "$srm42_pid" || true)
+if [ -z "$srm42_leaf" ]; then
+    srm42_stop "$srm42_pid"
+    t_fail "TP-SRM-42 scratch removal did not reach the hold"
+else
+    srm42_work=$(find "$srm42_leaf" -maxdepth 1 -type d -name 'safe-rm-work.*' 2>/dev/null | head -n 1)
+    case "$srm42_work" in
+        "$srm42_leaf"/safe-rm-work.*)
+            scratch_rm -rf -- "$srm42_work"
+            ;;
+        *)
+            t_fail "TP-SRM-42 scratch directory was not under the cache leaf"
+            srm42_work=
+            ;;
+    esac
+    printf '\n' > "$srm42_fifo" &
+    srm42_writer=$!
+    wait "$srm42_pid"
+    srm42_ec=$?
+    kill "$srm42_writer" 2>/dev/null || true
+    wait "$srm42_writer" 2>/dev/null || true
+    assert_eq "TP-SRM-42 missing scratch exit" 1 "$srm42_ec"
+    srm42_err=$(cat "$SCRATCH/srm42-gone.err")
+    assert_contains "TP-SRM-42 missing scratch says it is gone" "$srm42_err" "scratch directory for the remove check is gone"
+    assert_not_contains "TP-SRM-42 missing scratch is not an empty path" "$srm42_err" "empty path"
+    assert_not_contains "TP-SRM-42 missing scratch does not write /flags" "$srm42_err" "/flags"
+    assert_not_contains "TP-SRM-42 missing scratch does not write /path" "$srm42_err" "/path."
+    if srm42_find_leaf "$srm42_pid" >/dev/null 2>&1; then
+        t_fail "TP-SRM-42 missing scratch left the cache leaf"
+    else
+        t_pass "TP-SRM-42 missing scratch cache leaf was removed"
+    fi
+fi
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-42 missing scratch file still exists"
+else
+    t_fail "TP-SRM-42 missing scratch file was removed"
+fi
+unset srm42_login srm42_pid srm42_ec srm42_leaf srm42_mode srm42_err srm42_work srm42_writer srm42_fifo
+unset -f srm42_find_leaf srm42_wait_hold srm42_stop
+
 # TP-SRM-06 missing path outside home: allowed verdict, still absent
 missing="/tmp/safe-rm-no-such-file-dry"
 if [ -e "$missing" ]; then
@@ -313,6 +455,7 @@ out=$(srm "$fake" 2>"$err")
 ec=$?
 assert_eq "TP-SRM-09 fake user home exit" 1 "$ec"
 assert_contains "TP-SRM-09 fake user home refused" "$(cat "$err")" "Refusing to remove"
+assert_not_contains "TP-SRM-09 fake user home is not a passwd search" "$(cat "$err")" "/etc/passwd"
 if [ "$existed" -eq 0 ] && [ -e "$fake" ]; then
     t_fail "TP-SRM-09 created $fake"
 else
@@ -471,17 +614,33 @@ help=$(sh "$SAFE_RM" help 2>/dev/null)
 assert_contains "TP-SRM-37 help names --" "$help" "A name that starts with - is a path after --"
 assert_contains "TP-SRM-37 help names dot" "$help" "'.' and '..' are refused"
 
-# TP-SRM-20 another account home from /etc/passwd is refused
-other=$(awk -F: -v h="$HOME" '$1 !~ /^#/ && $6 ~ /^\// && $6 != "/" && $6 != h { print $6; exit }' /etc/passwd)
+# TP-SRM-20 an account home outside the remaining list is not refused
+# because it appears in /etc/passwd. Dry-run only. The path is not created
+# or removed. Homes under /home, the login home, and system directories
+# stay on the list for those other reasons.
+other=$(awk -F: -v h="$HOME" '
+    $1 ~ /^#/ { next }
+    $6 !~ /^\// { next }
+    $6 == "/" || $6 == "/home" || $6 == h { next }
+    index($6, "/home/") == 1 { next }
+    index(h "/", $6 "/") == 1 { next }
+    $6 == "/usr" || $6 == "/bin" || $6 == "/sbin" || $6 == "/etc" || $6 == "/var" || $6 == "/boot" || $6 == "/root" || $6 == "/lib" || $6 == "/lib64" || $6 == "/opt" || $6 == "/dev" || $6 == "/proc" || $6 == "/sys" { next }
+    $6 == "/usr/bin" || index($6, "/usr/bin/") == 1 { next }
+    { print $6; exit }
+' /etc/passwd)
 if [ -z "$other" ]; then
-    t_fail "TP-SRM-20 no other account home in /etc/passwd"
+    t_fail "TP-SRM-20 no account home outside the remaining list"
 else
     other_existed=0
     [ -e "$other" ] && other_existed=1
     out=$(srm "$other" 2>"$err")
     ec=$?
-    assert_eq "TP-SRM-20 other home exit" 1 "$ec"
-    assert_contains "TP-SRM-20 other home names passwd" "$(cat "$err")" "/etc/passwd"
+    assert_eq "TP-SRM-20 other home exit" 0 "$ec"
+    assert_contains "TP-SRM-20 other home allowed" "$out" "allowed"
+    assert_not_contains "TP-SRM-20 other home does not name passwd" "$(cat "$err")" "/etc/passwd"
+    json=$(srm_json "$other" 2>"$err")
+    assert_contains "TP-SRM-20 json class" "$json" '"class":"ALLOW"'
+    assert_not_contains "TP-SRM-20 json is not an account-home class" "$json" "DENY-ACCOUNT-HOME"
     if [ "$other_existed" -eq 1 ]; then
         if [ -e "$other" ]; then
             t_pass "TP-SRM-20 other home still exists"
@@ -770,10 +929,10 @@ eff=$(printf '%s' "$json" | sed -n 's/.*"effective_storage":"\([^"]*\)".*/\1/p' 
 sdir=$(printf '%s' "$json" | sed -n 's/.*"storage_dir":"\([^"]*\)".*/\1/p' | head -n1)
 assert_eq "TP-CACHE-02 cache_used matches effective" "$eff" "$used"
 assert_eq "TP-CACHE-02 storage_dir is 1st fallback" "$fb" "$sdir"
-if [ -n "$eff" ] && [ -d "$eff" ]; then
-    t_pass "TP-CACHE-02 effective cache directory exists"
+if [ -n "$eff" ] && [ ! -d "$eff" ]; then
+    t_pass "TP-CACHE-02 effective cache directory was removed on exit"
 else
-    t_fail "TP-CACHE-02 effective cache missing: ${eff:-empty}"
+    t_fail "TP-CACHE-02 effective cache still present: ${eff:-empty}"
 fi
 case "$eff" in
     /dev/shm/${app}|/dev/shm/${app}-*)
@@ -783,8 +942,6 @@ case "$eff" in
         t_pass "TP-CACHE-02 effective cache is not a ram-drive project shape"
         ;;
 esac
-mode=$(stat -c %a "$eff" 2>/dev/null || echo "")
-assert_eq "TP-CACHE-02 effective cache mode 0700" "700" "$mode"
 errc=$(SRM_CACHE_SKIP=preferred sh "$SAFE_RM" about 2>&1 >/dev/null)
 assert_not_contains "TP-CACHE-02 silent cache fallback" "$errc" "fallback"
 assert_not_contains "TP-CACHE-02 silent cache fallback error" "$errc" "Cannot create cache"
@@ -796,6 +953,11 @@ skip_eff=$(printf '%s' "$skip" | sed -n 's/.*"effective_storage":"\([^"]*\)".*/\
 skip_fb=$(printf '%s' "$skip" | sed -n 's/.*"cache_fallback":"\([^"]*\)".*/\1/p' | head -n1)
 skip_pref=$(printf '%s' "$skip" | sed -n 's/.*"cache_preferred":"\([^"]*\)".*/\1/p' | head -n1)
 assert_eq "TP-CACHE-02 skipped preferred uses 1st fallback" "$skip_fb" "$skip_eff"
+if [ -n "$skip_eff" ] && [ ! -d "$skip_eff" ]; then
+    t_pass "TP-CACHE-02 skipped preferred cache leaf was removed on exit"
+else
+    t_fail "TP-CACHE-02 skipped preferred cache leaf still present: ${skip_eff:-empty}"
+fi
 if [ -n "$skip_pref" ] && [ "$skip_pref" != "$skip_eff" ]; then
     t_pass "TP-CACHE-02 skipped preferred still names the preferred path"
 else
@@ -810,6 +972,12 @@ assert_eq "TP-CACHE-02 gitbash 1st fallback" "${HOME}/AppData/Local/Temp/cache-$
 assert_contains "TP-CACHE-02 gitbash json has empty cache_fallback_2" "$gb" '"cache_fallback_2":""'
 gb_fb2=$(printf '%s' "$gb" | sed -n 's/.*"cache_fallback_2":"\([^"]*\)".*/\1/p' | head -n1)
 assert_eq "TP-CACHE-02 gitbash no 2nd fallback" "" "$gb_fb2"
+gb_eff=$(printf '%s' "$gb" | sed -n 's/.*"effective_storage":"\([^"]*\)".*/\1/p' | head -n1)
+if [ -n "$gb_eff" ] && [ ! -d "$gb_eff" ]; then
+    t_pass "TP-CACHE-02 gitbash cache leaf was removed on exit"
+else
+    t_fail "TP-CACHE-02 gitbash cache leaf still present: ${gb_eff:-empty}"
+fi
 mac=$(SRM_CACHE_HOST=mac sh "$SAFE_RM" --json about 2>/dev/null)
 mac_pref=$(printf '%s' "$mac" | sed -n 's/.*"cache_preferred":"\([^"]*\)".*/\1/p' | head -n1)
 mac_pid="${mac_pref##*-}"
@@ -818,6 +986,12 @@ mac_fb=$(printf '%s' "$mac" | sed -n 's/.*"cache_fallback":"\([^"]*\)".*/\1/p' |
 assert_eq "TP-CACHE-02 mac 1st fallback" "${HOME}/Library/Caches/cache-${app}-${mac_pid}" "$mac_fb"
 mac_fb2=$(printf '%s' "$mac" | sed -n 's/.*"cache_fallback_2":"\([^"]*\)".*/\1/p' | head -n1)
 assert_eq "TP-CACHE-02 mac 2nd fallback" "${HOME}/cache/cache-${app}-${mac_pid}" "$mac_fb2"
+mac_eff=$(printf '%s' "$mac" | sed -n 's/.*"effective_storage":"\([^"]*\)".*/\1/p' | head -n1)
+if [ -n "$mac_eff" ] && [ ! -d "$mac_eff" ]; then
+    t_pass "TP-CACHE-02 mac cache leaf was removed on exit"
+else
+    t_fail "TP-CACHE-02 mac cache leaf still present: ${mac_eff:-empty}"
+fi
 hum_l=$(sh "$SAFE_RM" about 2>/dev/null)
 used_line=$(printf '%s\n' "$hum_l" | sed -n 's/.*Cache folder used: //p' | head -n1)
 pref_line=$(printf '%s\n' "$hum_l" | sed -n 's/.*Cache folder (preferred): //p' | head -n1)

@@ -1,6 +1,6 @@
 # safe-rm - Guarded replacement for the system rm
 
-![Version](https://img.shields.io/badge/Version-1.0.17-blue?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.0.19-blue?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 [![CIAO](https://img.shields.io/badge/Philosophy-CIAO%20v2.10.*-purple.svg)](https://github.com/cloudgen/ciao)
 [![Stars](https://img.shields.io/github/stars/cloudgen/safe-rm?style=flat-square)](https://github.com/cloudgen/safe-rm)
@@ -16,13 +16,13 @@ safe-rm is a guarded replacement for the system `rm` command, so a person, a scr
 **It stops these deletes**
 
 - The system directories themselves: `/`, `/usr`, `/bin`, `/sbin`, `/etc`, `/var`, `/boot`, `/root`, `/lib`, `/lib64`, `/opt`, `/dev`, `/proc`, and `/sys`. `/usr/bin` and anything inside it are refused, including a symlink that lands there.
-- The login home, any directory that contains that home, `/home`, and every account home recorded in the password database (`/etc/passwd`, and the same homes from `getent passwd`).
+- The login home, any directory that contains that home, `/home`, and a folder under `/home` that is outside this login home.
 - The text `$HOME`, `${HOME}`, or `~` when the shell did not expand it. Those still mean the login home.
 - `.` and `..` when that directory would otherwise be allowed (`rm -rf .`, `rm -rf ..`). Name the folder itself. `$HOME/.` is still the login home.
 
 **It still allows these deletes**
 
-- A named folder inside an account home, such as a cache directory. The home directory itself stays refused.
+- A named folder inside the login home, such as a cache directory. The home directory itself stays refused.
 - A folder outside the refused trees, such as a directory under `/tmp`.
 - A file inside `/etc`, such as `/etc/hostname`. That file is not the `/etc` directory. A folder inside `/var`, such as `/var/log`, is not the `/var` directory.
 - A name that starts with `-`, once it is a path: `rm -- -file` or `./-file`. Before `--`, that token is a switch.
@@ -42,7 +42,7 @@ The program file people install is `src/safe-rm`. It is one POSIX `/bin/sh` scri
 
 ## Features
 
-- **System directories and account homes stay.** The guard refuses the directories listed above, the login home, any ancestor that contains that home, and every account home in the password database.
+- **System directories and the login home stay.** The guard refuses the directories listed above, the login home, any ancestor that contains that home, `/home`, and a folder under `/home` outside this login home.
 - **A named folder inside the home may go.** A cache directory, or another folder you name inside the login home, may be removed. The home directory itself may not.
 - **Setup replaces the system `rm`.** On Linux, `safe-rm setup` moves `/usr/bin/rm` and `/bin/rm` aside to `origin-rm` and points `rm` at this program, so a non-interactive `sh -c "rm …"` hits the guard. This login also gets `~/.local/bin/rm`. macOS, Alpine, and Termux are described under Platform Compatibility, because their system `rm` cannot be renamed the same way.
 - **One refusal cancels the whole command.** Every path is resolved and classified before `origin-rm` runs. One disallowed path removes nothing.
@@ -63,7 +63,7 @@ The program file people install is `src/safe-rm`. It is one POSIX `/bin/sh` scri
 
 **A daily Linux workstation or a production host.** Setup renames the distribution's `/bin/rm` to `origin-rm` and puts a symlink in its place. apt, dnf, apk, and pacman check the hashes of packaged files and own `/bin/rm`. An upgrade of coreutils or base-files can replace that symlink, or report that `/bin/rm` no longer matches the package. Root can run `safe-rm reset` to point `/bin/rm` and `/usr/bin/rm` back at `origin-rm` without deleting `origin-rm`. A later `setup` points them at the guard again. The packaged file is still not restored; `safe-rm restore` is the command that moves `origin-rm` back to the `rm` name.
 
-**A build that calls `rm` thousands of times.** `make clean`, `cargo clean`, and a test run start this shell for every `rm`. Each call resolves the paths and reads the password database. A compiled `rm` does not pay that cost.
+**A build that calls `rm` thousands of times.** `make clean`, `cargo clean`, and a test run start this shell for every `rm`. Each call resolves the paths. A compiled `rm` does not pay that cost.
 
 **A trash bin with undo.** This program is a check that runs before deletion. An allowed path is handed to `origin-rm` and unlinked. There is no recycle bin and no undo. trash-cli and rip are the tools that keep a trash bin you can restore.
 
@@ -81,7 +81,7 @@ macOS leaves Apple's `/bin/rm` in place, so the first row is the Linux setup. De
 
 ## Quick Installation
 
-Runtime version: `VERSION="1.0.17"` in `src/safe-rm`.
+Runtime version: `VERSION="1.0.19"` in `src/safe-rm`.
 
 Channel default:
 
@@ -141,7 +141,7 @@ After install, on a terminal:
 
 ```text
 $ safe-rm
-[INFO] **safe-rm**(*1.0.17*) — Guarded rm that refuses login homes and system directories
+[INFO] **safe-rm**(*1.0.19*) — Guarded rm that refuses login homes and system directories
 1. **remove-guard**: *check a path and remove it only when it is allowed*
 8. **self-management**: *this CLI install, version, update, uninstall*
 9. Exit
@@ -151,7 +151,7 @@ Choice:
 **1** opens the remove-guard board:
 
 ```text
-[INFO] **safe-rm**(*1.0.17*) — remove-guard
+[INFO] **safe-rm**(*1.0.19*) — remove-guard
 11. **rm**: *check each path and remove only when every path is allowed*
 0. Back
 ```
@@ -159,7 +159,7 @@ Choice:
 **11** lists each immediate subfolder of the current directory, then one number to type a path. The sample below was a temporary directory that held `cache` and `notes`. Your numbers are the folders where you are. That path runs the same guard as `safe-rm rm`.
 
 ```text
-[INFO] **safe-rm**(*1.0.17*) — remove-guard
+[INFO] **safe-rm**(*1.0.19*) — remove-guard
 [INFO] Current path: /tmp/safe-rm-menu-demo
 1. **cache**: */tmp/safe-rm-menu-demo/cache*
 2. **notes**: */tmp/safe-rm-menu-demo/notes*
@@ -170,7 +170,7 @@ Choice:
 **8** opens self-management. **81** is not listed.
 
 ```text
-[INFO] **safe-rm**(*1.0.17*) — self-management
+[INFO] **safe-rm**(*1.0.19*) — self-management
 82. **version**: *show current version*
 83. **about**: *show detailed diagnostics*
 84. **version-check**: *compare local vs remote version*
@@ -212,9 +212,9 @@ Scratch for one run lives in a cache folder named for this login and this proces
 
 | Path | Verdict |
 |------|---------|
-| Any account home (`rm -rf` of that directory) | Refused. Removing the home directory deletes everything in it |
-| A named folder inside any account home, such as a cache directory | Allowed. That folder is not the home directory |
-| `/home` | Refused. It is the parent of the homes |
+| The login home (`rm -rf` of that directory) | Refused. Removing the home directory deletes everything in it |
+| A named folder inside the login home, such as a cache directory | Allowed. That folder is not the home directory |
+| `/home`, and a folder under `/home` outside this login home | Refused. That tree holds other logins' files |
 | The text `$HOME`, `${HOME}`, or `~` | Refused. Those stand for the login home even when the shell did not expand them |
 | The text `$HOME/...`, `${HOME}/...`, or `~/...` | Allowed. Those stand for a folder inside the login home |
 | `/usr/bin` and anything inside it | Refused. Removing it breaks programs. A symlink that lands on `/usr/bin` is the same refusal |
@@ -285,4 +285,4 @@ MIT. The full text is [LICENSE.md](LICENSE.md).
 
 ## Last Update
 
-2026-09-30 — a finished remove stays quiet unless `--verbal` is set, for version 1.0.17. The line is `Caller <caller> removed <path>.` `--quiet` still hides it.
+2026-09-30 — version 1.0.19 does not read the password database to build the refusal list. The login home, `/home`, and a folder under `/home` outside this login stay refused. A named folder inside the login home stays allowed. Version 1.0.18 stops a remove on `INT`, `HUP`, or `TERM` instead of continuing after the scratch directory is gone, and it removes this process's cache leaf on exit. A finished remove stays quiet unless `--verbal` is set. The line is `Caller <caller> removed <path>.` `--quiet` still hides it.

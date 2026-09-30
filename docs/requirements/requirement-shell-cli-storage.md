@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-storage.md  
-**Status**: Active (Version 1.1.1)  
+**Status**: Active (Version 1.1.2)  
 **Area**: shell  
 **Key**: `requirement-shell-cli-storage`  
 **Philosophy**: CIAO **v2.10.2** / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered / Over-protect)
@@ -120,6 +120,7 @@ Walk this host’s chain in order. First directory that can be created **and** i
 5. New scratch files **MUST** go through **`util_mktemp`**. That helper **MUST** check that `mktemp` exists and is executable before it calls it. `mktemp` is not installed on every OS until `apk`, `apt`, or a peer package install.  
 6. When the temp maker is absent, or every `mktemp` attempt fails, the scratch **file** **MUST** be created under the resolved cache folder as `${APP_NAME}.${suffix}.${token}`, then mode `0600`. The token **MUST NOT** be a `$$` name. A scratch **directory** uses the same check: `mktemp -d` only when it can create a directory; otherwise `mkdir` a unique subdirectory of that cache folder. `mkdir` applies umask. Mode **MUST** be `0700`, and the directory **MUST** be searchable and writable, before any file is written in it. A directory at `0600` (`drw-------`) exists and cannot be searched.  
 7. The **cache directory** name includes `$$` (this process). Scratch **files** inside it **MUST NOT** use a predictable `$$` file name (forbidden: `/tmp/${APP_NAME}.$$`, `${EFFECTIVE_STORAGE_DIR}/${APP_NAME}.$$`). A missing temp maker **MUST NOT** fall back to a bare `/tmp` dump.
+8. When the process exits, it **MUST** remove the cache leaf this process created. A stop signal during a remove does that removal and then exits `1`. The removal **MUST** be only that leaf: the basename is `cache-${APP_NAME}-${login}-$$` or `cache-${APP_NAME}-$$`, and the parent is one of this host's cache parents. **MUST NOT** remove `$HOME`, `/dev/shm/cache`, `/tmp/cache`, persistence storage, or a path that contains `..`. The leaf is mode `0700` while the process is alive. Proof: `TP-SRM-42`. After `about`, `TP-CACHE-02` shows the leaf is gone.
 
 **`util_mktemp` shape** (the ship unit is the body; this is the contract):
 
@@ -271,6 +272,7 @@ Detect: Termux — `uname` contains Android, or `PREFIX` / `TERMUX_VERSION` is s
 11. Drop `${login}` or `$$` from a volatile cache leaf, or put the login back on `/dev/shm/${APP_NAME}-${login}` outside `cache/`. Put `${login}` or `$$` on a home leaf or on persistence.  
 12. Exec a binary from the cache folder, `/tmp`, or `/dev/shm` on Termux.  
 13. Hardcode an app name, a login name, or a process id into a cache path.
+14. Leave this process's cache leaf behind after the process exits. Remove `$HOME`, `/dev/shm/cache`, `/tmp/cache`, persistence storage, or a path that contains `..` as that cleanup.
 
 **Violating this rule is a critical cache isolation / honesty regression.**
 
@@ -288,6 +290,7 @@ Detect: Termux — `uname` contains Android, or `PREFIX` / `TERMUX_VERSION` is s
 | AC-6 | Live cache path is not `/dev/shm/${APP_NAME}` or `/dev/shm/${APP_NAME}-${USERNAME}` |
 | AC-7 | Persistence path is `${HOME}/.local/${APP_NAME}` and the directory exists after resolve |
 | AC-8 | Skipping a cache tier prints no warning and no error. Git Bash has no 2nd fallback. Mac 2nd fallback is `${HOME}/cache/cache-${APP_NAME}-$$`. Home leaves omit `${login}` |
+| AC-9 | The cache leaf is mode `0700` while this process is alive. After the process exits, that leaf is gone. `$HOME` and the cache parents stay |
 
 ---
 
@@ -308,7 +311,7 @@ Detect: Termux — `uname` contains Android, or `PREFIX` / `TERMUX_VERSION` is s
 | TP family / ID | Suite | Status |
 |----------------|-------|--------|
 | **TP-CACHE-01** | `tests/run_dry_run.sh` | **have** — about JSON cache + persistence fields + human labels; no Storage (effective) / Storage (fallback) |
-| **TP-CACHE-02** | same | **have** — Linux preferred `/dev/shm/cache/cache-${APP_NAME}-${login}-$$`; 1st `/tmp/cache/...`; 2nd `${HOME}/.cache/cache-${APP_NAME}-$$`; Git Bash and Mac chains; silent skip of preferred; leaf mode 0700; persistence `${HOME}/.local/${APP_NAME}`; live dir exists; not `/dev/shm/${APP_NAME}-${login}` |
+| **TP-CACHE-02** | same | **have** — Linux preferred `/dev/shm/cache/cache-${APP_NAME}-${login}-$$`; 1st `/tmp/cache/...`; 2nd `${HOME}/.cache/cache-${APP_NAME}-$$`; Git Bash and Mac chains; silent skip of preferred; the leaf is removed when the process exits; persistence `${HOME}/.local/${APP_NAME}` remains; not `/dev/shm/${APP_NAME}-${login}` |
 | **TP-CACHE-03** | same | **have** — `util_mktemp` writes `mktemp` names under the cache leaf, refuses a `$$` file-name template, and when the temp maker is absent writes a mode-`0600` file under that leaf that is not a `$$` name |
 
 The suite does not assign `HOME` to a scratch directory. `about` is not a remove path.
@@ -322,9 +325,10 @@ The suite does not assign `HOME` to a scratch directory. `about` is not a remove
 | 2026-09-06 | Active 1.0.1 | Bootstrap wire: `/dev/shm/${APP_NAME}-${USERNAME}` then `/tmp` then `XDG_CACHE_HOME`. About said Storage (effective) |
 | 2026-09-27 | Active 1.1.0 | Per-login per-process cache leaves. Linux shm → tmp → `${HOME}/.cache`. Git Bash tmp → AppData Local Temp. Mac tmp → Library/Caches → `${HOME}/cache`. Silent tier miss. Persistence `${HOME}/.local/${APP_NAME}`. `about` prints used / preferred / 1st / 2nd. Ship unit `src/safe-rm` |
 | 2026-09-30 | Active 1.1.1 | `mktemp` is not on every OS. `util_mktemp` checks the maker first. A missing or failing maker writes a mode-`0600` file under the cache folder, not a `$$` name and not a bare `/tmp` dump. A scratch directory is mode `0700` before use. |
+| 2026-09-30 | Active 1.1.2 | The process removes its cache leaf on exit. The leaf stays mode `0700` while the process is alive. Cleanup does not remove `$HOME`, a cache parent, or persistence storage. |
 
 ---
 
-**Last Updated**: 2026-09-30  
+**Last Updated**: 2026-09-30 (1.1.2 — the process removes its cache leaf on exit)  
 **Owner**: project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; **CIAO** (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

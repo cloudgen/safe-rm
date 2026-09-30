@@ -30,6 +30,6 @@
 
 ## Notes
 
-- Product: **safe-rm**. Ship unit `src/safe-rm`. Version SSOT `VERSION="1.0.17"`.  
+- Product: **safe-rm**. Ship unit `src/safe-rm`. Version SSOT `VERSION="1.0.19"`.  
 - Domain proof: `tests/run_dry_run.sh`.  
 - One Active domain SSOT: `requirement-domain-safe-rm`.  

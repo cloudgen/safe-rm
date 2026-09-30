@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.19] - 2026-09-30
+
+### Changed
+
+- The remove check no longer reads `/etc/passwd` or `getent passwd` to collect account homes. Those directories are not on the refusal list. The login home, a directory that contains that home, `/home`, and a folder under `/home` outside this login stay refused. A named folder inside the login home stays allowed
+
+## [1.0.18] - 2026-09-30
+
+### Fixed
+
+- `INT`, `HUP`, and `TERM` during a remove delete the scratch directory and leave the process with status 1. The remove does not continue. An empty scratch directory is not reported as an empty path, and the guard does not try to create `/flags` or `/path.1`. On exit, this process's cache leaf `cache-safe-rm-<login>-$$` is removed with `safe-rm-work.*`
+
 ## [1.0.17] - 2026-09-30
 
 ### Changed

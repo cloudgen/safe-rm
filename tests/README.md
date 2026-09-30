@@ -31,7 +31,7 @@ Requires: `sh`, `curl`, `python3` (local HTTP channel), `sha256sum`, `grep`.
 | `TP-SRM-05` .. `TP-SRM-06` | Allowed temporary paths stay unremoved |
 | `TP-SRM-07` .. `TP-SRM-11`, `TP-SRM-13` | Login home, `/home`, `/usr/bin`, `/`, and a mixed command are refused and still present |
 | `TP-SRM-12` | A folder inside the login home is allowed and still present |
-| `TP-SRM-20` | Another account home from `/etc/passwd` is refused and still present |
+| `TP-SRM-20` | An account home from `/etc/passwd` outside the login home, `/home`, and the system directories is allowed and is not created or removed |
 | `TP-SRM-14` .. `TP-SRM-19` | JSON, missing operand, unknown command, about, quiet |
 | `TP-SRM-21` .. `TP-SRM-26` | The command named `rm` accepts origin-rm switches, including `-rf`. A later setup replaces a stale guard and does not move `origin-rm` again |
 | `TP-SRM-27` | Each lifecycle verb is also `--` plus that name. On the command named `rm`, `rm --version` prints this program's version. A bare word such as `version` is a path, so a link with that name is a dry-run remove and stays in place |
@@ -39,6 +39,7 @@ Requires: `sh`, `curl`, `python3` (local HTTP channel), `sha256sum`, `grep`.
 | `TP-SRM-38` | `reset` points a fixture `rm` at `origin-rm` and leaves `origin-rm` and `safe-rm`. A missing `origin-rm` changes nothing. A non-admin `reset` leaves `/usr/bin/rm`. Nothing is executed |
 | `TP-SRM-39` | With `--verbal`, a finished remove names the caller and each path. On a terminal those names are italic. The fixture `origin-rm` does not unlink. The path remains |
 | `TP-SRM-41` | Without `--verbal`, that line and its `[OK]` mark stay hidden. The fixture still receives the path and does not receive `--verbal`. `--verbal` with `--quiet` still hides the line. The path remains |
+| `TP-SRM-42` | `INT`, `HUP`, or `TERM` during a remove leaves the process. A missing scratch directory is not an empty path. The cache leaf is removed on exit. The path remains. Nothing is executed |
 | `TP-SRM-40` | When `mktemp` is absent, or a maker on `PATH` exits without creating a directory, a dry-run of an allowed path is still allowed. The scratch directory is a mode-`0700` subdirectory of the cache folder, including under umask `0177`. It is not left behind. The file remains. Nothing is executed |
 | `TP-CLI-EMPTY-01`, `TP-CLI-17`, `TP-CLI-19`, `TP-CLI-21`, `TP-CLI-22`, `TP-CLI-SRM-01`, `TP-CLI-SRM-02` | Main menu, including `safe-rm --debug` and the folder list under **11**. No install. No real remove |
 | `TP-SRM-SWAP-01` | Before/after swap inside `/tmp/safe-rm-swap.*` only. The fixture `rm` is never executed. Non-admin setup leaves `/usr/bin/rm` unchanged |

@@ -1,6 +1,6 @@
 **file**: docs/requirements/requirement-domain-safe-rm.md
 **id**: RQ-DOMAIN-SAFE-RM
-**Status**: Active (Version 1.2.18)
+**Status**: Active (Version 1.2.20)
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -14,7 +14,7 @@ It also exists because an agent once ran a recursive remove of the login home af
 
 ### 1.1 Human-facing
 
-**In one sentence:** Setup puts two guards in front of the original remover, which is saved as `origin-rm`: first `${HOME}/.local/bin/rm` for this login, then, except on macOS, the system `rm` (`/usr/bin/rm` and `/bin/rm`, or on Termux `$PREFIX/bin/rm`); `rm -rf` of any account home is refused, a folder inside any account home may be removed, and `--dry-run` does not call the remover.
+**In one sentence:** Setup puts two guards in front of the original remover, which is saved as `origin-rm`: first `${HOME}/.local/bin/rm` for this login, then, except on macOS, the system `rm` (`/usr/bin/rm` and `/bin/rm`, or on Termux `$PREFIX/bin/rm`); `rm -rf` of the login home is refused, a folder inside the login home may be removed, `/home` and a folder under `/home` outside this login stay refused, and `--dry-run` does not call the remover.
 
 | Box | Meaning | Example |
 |-----|---------|---------|
@@ -286,9 +286,8 @@ Resolve the path first (physical directory, symlink target when the path exists;
 | `DENY-EMPTY` | Empty operand | Refuse |
 | `DENY-STDIN` | Operand is exactly `-` | Refuse |
 | `DENY-LOGIN-HOME` | Operand text is exactly `$HOME`, `${HOME}`, or `~`; or the resolved path is the login home directory itself | Refuse |
-| `DENY-ACCOUNT-HOME` | Resolved path is an account home recorded in `/etc/passwd` (sixth field; also `getent passwd` when that list is present), the directory itself | Refuse |
-| `DENY-HOME-USER` | Resolved path is exactly `/home` | Refuse |
-| `DENY-HOME-ANCESTOR` | Resolved path is a strict ancestor of an account home | Refuse |
+| `DENY-HOME-USER` | Resolved path is `/home`, or a path under `/home` that is not strictly inside this login home | Refuse |
+| `DENY-HOME-ANCESTOR` | Resolved path is a strict ancestor of the login home | Refuse |
 | `DENY-USR-BIN` | Resolved path is `/usr/bin` or anything inside `/usr/bin` (a symlink such as `/bin` that lands on `/usr/bin` uses this class). On Termux, also `$PREFIX/bin` or anything inside `$PREFIX/bin` | Refuse |
 | `DENY-ROOT` | Resolved path is `/` | Refuse |
 | `DENY-HOST` | Resolved path is exactly `/usr`, `/bin`, `/sbin`, `/etc`, `/var`, `/boot`, `/root`, `/lib`, `/lib64`, `/opt`, `/dev`, `/proc`, or `/sys`. On Termux, also exactly `$PREFIX`, `$PREFIX/etc`, `$PREFIX/var`, `$PREFIX/lib`, `$PREFIX/lib64`, `$PREFIX/opt`, `$PREFIX/sbin`, or `$PREFIX/boot` | Refuse |
@@ -297,7 +296,7 @@ Resolve the path first (physical directory, symlink target when the path exists;
 
 An operand whose final component is `.` or `..` is refused when the resolved directory would otherwise be allowed. Trailing slashes do not change that component, so `./` and `../` are the same refusal. A `..` earlier in the path is not this class: `leaf/../leaf` is the resolved directory `leaf`. When `.` or `..` resolves to a stronger class, that class stays. `$HOME/.` stays the login home. `/etc/..` stays `/`. Naming the directory, as in `rm -rf /tmp/my-folder`, is how that directory is removed. Proof: `TP-SRM-37`.
 
-`rm -rf` of any account home directory is refused, because that path is the whole home. A named folder strictly inside any account home is allowed, including a cache directory. That folder does not, by itself, mean the home is being wiped. The text `$HOME/...`, `${HOME}/...`, and `~/...` is expanded and then classified, so a suffix is a folder inside that home. `/etc/passwd` stores every account's home in the sixth field. Each of those directories, and only the directory itself, is refused. `/home` itself stays refused because it is the parent of the homes. A path strictly inside another account's home is allowed. The reviewed blacklist still refuses `/`, `/usr/bin` and anything inside it, and the named system directories below. On Termux that same blacklist is the §2.0.4 table. `$PREFIX/var` is refused. A folder inside `$PREFIX/var` is allowed. `$PREFIX/share` is allowed.
+`rm -rf` of the login home is refused, because that path is the whole home. A named folder strictly inside the login home is allowed, including a cache directory. That folder does not, by itself, mean the home is being wiped. The text `$HOME/...`, `${HOME}/...`, and `~/...` is expanded and then classified, so a suffix is a folder inside that home. `/home` itself stays refused. A path under `/home` that is not strictly inside this login home stays refused. The program does not read `/etc/passwd` or `getent passwd` to build that list. An account home that is not the login home, not under `/home`, and not a system directory is not refused for appearing in the password database. The reviewed blacklist still refuses `/`, `/usr/bin` and anything inside it, and the named system directories below. On Termux that same blacklist is the §2.0.4 table. `$PREFIX/var` is refused. A folder inside `$PREFIX/var` is allowed. `$PREFIX/share` is allowed.
 
 #### Dry-run report
 
@@ -312,6 +311,12 @@ For each path, human mode says:
 The remove check writes its switch list and path list in a directory named `safe-rm-work.` plus a unique suffix, under the cache root (`TMPDIR`, the resolved cache folder). `mktemp` is not installed on every OS. A minimal image may lack it until `apk`, `apt`, or a peer package install. The program **MUST** check that the temp maker exists and can create a directory before it uses `mktemp -d`. When the maker is absent, or `mktemp -d` fails, the scratch directory is a subdirectory of that cache folder. The suffix is an unpredictable token, not a `$$` name.
 
 `mktemp -d` and `mkdir` apply the process umask. A umask that strips the owner execute bit, such as `0177`, leaves mode `0600` (`drw-------`). That directory exists and cannot be searched, so creating a file inside it fails, and removing the directory can fail, which leaves it behind. `chmod` does not apply umask. After the directory is created, the program **MUST** set mode `0700` and confirm the directory is searchable and writable before it writes any file in it. Cleanup **MUST** set mode `0700` again before it removes the directory. On Termux the cache root is often `${HOME}/.cache/cache-${APP_NAME}-$$`, because `/dev/shm` and `/tmp` are not usable. Proof: `TP-SRM-36` (mode `0700` when `mktemp -d` returns `0600`, and under umask `0177`) and `TP-SRM-40` (absent or failing temp maker; the scratch directory is that cache subdirectory and is not left behind).
+
+`INT`, `HUP`, or `TERM` during the remove **MUST** remove the scratch directory and then leave the process with status `1`. The handler **MUST NOT** return into the remove. The same shell **MUST NOT** keep writing after that cleanup. An empty `SRM_WORK` would turn `${SRM_WORK}/flags` and `${SRM_WORK}/path.N` into `/flags` and `/path.1`.
+
+Before a redirection to `${SRM_WORK}/flags` or `${SRM_WORK}/path.N`, the program **MUST** stop when `SRM_WORK` is empty or that directory is gone. The sentence **MUST** say the scratch directory is gone. That stop is not class `DENY-EMPTY`.
+
+When this process exits, it **MUST** remove the cache leaf it created as well as `safe-rm-work.*`. The leaf removal **MUST** refuse `$HOME`, `/`, `/tmp`, `/dev/shm`, `/dev/shm/cache`, `/tmp/cache`, and any path that contains `..`. Proof: `TP-SRM-42`.
 
 #### Machine contract
 
@@ -395,12 +400,12 @@ JSON `about` includes `"remove_guard":"on"` and `"dry_run_switch":"--dry-run"`.
 | `TP-SRM-06` | Dry-run of a missing temporary path is allowed and the path stays absent |
 | `TP-SRM-07` | Dry-run of the login home is refused and the home remains |
 | `TP-SRM-08` | Dry-run of the text `$HOME`, `${HOME}`, and `~` is refused |
-| `TP-SRM-09` | Dry-run of `/home` is refused. A first-level name under `/home` that is not an account home stays refused. A folder strictly inside another account home is allowed |
+| `TP-SRM-09` | Dry-run of `/home` is refused. A first-level name under `/home` that is not this login home stays refused and is not created. The sentence does not name `/etc/passwd` |
 | `TP-SRM-SWAP-01` | Layout only, under `/tmp/safe-rm-swap.*`. Setup moves that fixture's regular `rm` to `origin-rm` and points `rm` at `safe-rm`. A second setup does not move it again. `restore` puts the file back. The test does not execute `rm` and does not remove a directory. A non-admin `setup` without that fixture moves nothing |
 | `TP-SRM-10` | Dry-run of `/usr/bin` and `/usr/bin/sh` is refused and both remain |
 | `TP-SRM-11` | Dry-run of `/` is refused and `/` remains |
 | `TP-SRM-12` | Dry-run of a folder inside the login home (this project directory and `${HOME}/.cache`) is allowed and the folder remains |
-| `TP-SRM-20` | Dry-run of another account home from `/etc/passwd` is refused and that path is not created or removed |
+| `TP-SRM-20` | Dry-run of an account home from `/etc/passwd` that is not the login home, not under `/home`, and not a system directory is allowed. That path is not created or removed. The sentence does not name `/etc/passwd` |
 | `TP-SRM-13` | One allowed path plus `/usr/bin` refuses the whole command and the allowed path remains |
 | `TP-SRM-14` | `--json` dry-run allow: `dry_run` true, `removed` false, `verdict` allow, `exists` true |
 | `TP-SRM-15` | `--json` dry-run refuse: `verdict` refuse, `removed` false, stderr says `STOP` |
@@ -425,6 +430,7 @@ JSON `about` includes `"remove_guard":"on"` and `"dry_run_switch":"--dry-run"`.
 | `TP-SRM-38` | Layout only, under `/tmp/safe-rm-swap.*`. After setup, `reset` points the fixture `rm` at `origin-rm`. `origin-rm` and `safe-rm` stay. A second `reset` leaves that link. A directory with no `origin-rm` is not changed. A non-admin `reset` without that fixture does not change `/usr/bin/rm`. A BusyBox fixture points `rm` at `origin-rm` and leaves the applet. Nothing is executed |
 | `TP-SRM-39` | With `--verbal`, a finished remove names the caller and each path. On a terminal those names are italic. `--json` uses the same sentence with no italic and without `--verbal`. `--quiet` hides the human line. A refused path does not exec the remover. The fixture `origin-rm` under `/tmp/safe-rm-swap.*` exits 0 and does not unlink. The listed path remains. `/usr/bin/rm` stays |
 | `TP-SRM-41` | Without `--verbal`, a finished remove prints no human success line and no `[OK]`. The fixture still receives the path and does not receive `--verbal`. `--verbal` before `rm` shows the line and is not forwarded. `--verbal` with `--quiet` still hides the line. `--json` without `--verbal` keeps the sentence and has no `[OK]`. The listed path remains |
+| `TP-SRM-42` | `INT`, `HUP`, or `TERM` during the remove leaves the process with status `1` and says a signal interrupted the remove check. The sentence is not an empty path. Stderr does not name `/flags` or `/path.N`. A scratch directory removed while the check is in progress says the scratch directory is gone, and that is not class `DENY-EMPTY`. The cache leaf is mode `0700` while the process is alive and is gone after exit. The listed path remains. Nothing is executed |
 | `TP-SRM-34` | §2.0.5 measure 2 under `/tmp/safe-rm-swap.*` with a sudo stand-in. The real `sudo` is not run and the host `/bin` and `/usr/bin` are not written. Linux: measure 1 finishes, then the stand-in runs measure 2 only. Darwin: the stand-in is not called and the fixture `/bin/rm` stays. A BusyBox symlink is not renamed. Nothing is executed |
 | `TP-SRM-28` | `help` says a local `install` copies this file into `/usr/local/bin/` or `${HOME}/.local/bin/` and does not download |
 | `TP-SRM-18` | `about` includes `Remove guard:` |
@@ -439,12 +445,12 @@ Runner: `tests/run_dry_run.sh`. Its swap block points `HOME` at `/tmp/safe-rm-pl
 | Product | `safe-rm` |
 | Ship unit | `src/safe-rm` |
 | Companion | `src/safe-rm.sha256` |
-| Version | `1.0.17` |
+| Version | `1.0.19` |
 | Prefix | `srm_` |
 | Type 0 lifecycle | Kept in full (self-install, self-update, self-uninstall, version, about, help, numbered menu, `out_*`). The 2023 setup is kept as well: `origin-rm`, `rm` → this program, `restore`, `reset` |
 | Channel default | `REPO_USER=cloudgen`, `REPO_NAME=safe-rm`, `SCRIPT_RELPATH=src/safe-rm` |
 | Dispatcher anchors | Basename `rm` routes to `srm_cmd_rm` before the menu. `safe-rm rm` is the same remove. `--dry-run` is not forwarded |
-| Honesty | The two-layer setup is **implemented** in ship unit `1.0.11`. Measure 1 writes `${HOME}/.local/bin` as this login, then measure 2. Linux measure 2 re-execs this program through `sudo` when the invoker is not root (`SRM_SUDO` in tests; the default is `sudo`). macOS, Termux, Git Bash, and Windows cmd do not call `sudo`. macOS does not move `/bin/rm`. The saved original is named `origin-rm`. Profile-ensure creates a missing `.profile` that sources `.bashrc`. Ship unit `1.0.12` writes the one-directory user-bin line on `.bashrc`, `.zshenv`, and Fish. The §2.7 block that puts `/usr/local/bin` next, on `.zshrc` and `.profile` as well, is **not implemented** yet (`TP-SRM-35` TODO). Termux `$PREFIX/bin` still has no `sudo`. Tests pass `SRM_SWAP_ROOT=/tmp/safe-rm-swap.*` or `SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*` so they never touch the host `/usr/bin` or `/bin`. Dry-run never execs the remover. `TP-SRM-33` and `TP-SRM-34` are in `tests/test_two_layer.sh`. Ship unit `1.0.12` sets the remove-check scratch directory to mode `0700` after `mktemp -d` (`TP-SRM-36`). Ship unit `1.0.13` refuses an operand whose final component is `.` or `..` when that resolved directory would otherwise be allowed (`TP-SRM-37`). Account-home lookup uses `grep -Fxq` and falls back to a read loop when `grep` fails. Ship unit `1.0.14` adds `reset`: when `origin-rm` exists, root or the Linux `sudo` re-exec points the system `rm` at it and leaves `origin-rm` and `safe-rm` (`TP-SRM-38`). Ship unit `1.0.15` names the caller and each path on a finished remove. On a terminal those names are italic. A sourced file with no path in the shell command is reported as that shell. `TP-SRM-39` execs a fixture `origin-rm` under `/tmp/safe-rm-swap.*` that exits 0 and does not unlink. Ship unit `1.0.16` checks the temp maker before `mktemp -d`. When that program is absent or cannot create the directory, the scratch directory is a mode-`0700` subdirectory of the cache folder (`TP-SRM-40`). Ship unit `1.0.17` hides the finished-remove success line unless `--verbal`. `--quiet` still hides it. `--json` still carries the plain sentence (`TP-SRM-41`) |
+| Honesty | The two-layer setup is **implemented** in ship unit `1.0.11`. Measure 1 writes `${HOME}/.local/bin` as this login, then measure 2. Linux measure 2 re-execs this program through `sudo` when the invoker is not root (`SRM_SUDO` in tests; the default is `sudo`). macOS, Termux, Git Bash, and Windows cmd do not call `sudo`. macOS does not move `/bin/rm`. The saved original is named `origin-rm`. Profile-ensure creates a missing `.profile` that sources `.bashrc`. Ship unit `1.0.12` writes the one-directory user-bin line on `.bashrc`, `.zshenv`, and Fish. The §2.7 block that puts `/usr/local/bin` next, on `.zshrc` and `.profile` as well, is **not implemented** yet (`TP-SRM-35` TODO). Termux `$PREFIX/bin` still has no `sudo`. Tests pass `SRM_SWAP_ROOT=/tmp/safe-rm-swap.*` or `SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*` so they never touch the host `/usr/bin` or `/bin`. Dry-run never execs the remover. `TP-SRM-33` and `TP-SRM-34` are in `tests/test_two_layer.sh`. Ship unit `1.0.12` sets the remove-check scratch directory to mode `0700` after `mktemp -d` (`TP-SRM-36`). Ship unit `1.0.13` refuses an operand whose final component is `.` or `..` when that resolved directory would otherwise be allowed (`TP-SRM-37`). Account-home lookup uses `grep -Fxq` and falls back to a read loop when `grep` fails. Ship unit `1.0.14` adds `reset`: when `origin-rm` exists, root or the Linux `sudo` re-exec points the system `rm` at it and leaves `origin-rm` and `safe-rm` (`TP-SRM-38`). Ship unit `1.0.15` names the caller and each path on a finished remove. On a terminal those names are italic. A sourced file with no path in the shell command is reported as that shell. `TP-SRM-39` execs a fixture `origin-rm` under `/tmp/safe-rm-swap.*` that exits 0 and does not unlink. Ship unit `1.0.16` checks the temp maker before `mktemp -d`. When that program is absent or cannot create the directory, the scratch directory is a mode-`0700` subdirectory of the cache folder (`TP-SRM-40`). Ship unit `1.0.17` hides the finished-remove success line unless `--verbal`. `--quiet` still hides it. `--json` still carries the plain sentence (`TP-SRM-41`). Ship unit `1.0.18` leaves the process on `INT`, `HUP`, or `TERM` during a remove. A missing scratch directory is not class `DENY-EMPTY`. The process removes its cache leaf on exit (`TP-SRM-42`). Ship unit `1.0.19` does not read `/etc/passwd` or `getent passwd` to build the refusal list. The login home, `/home`, and a folder under `/home` outside this login stay refused (`TP-SRM-09`, `TP-SRM-20`) |
 
 ---
 
@@ -467,8 +473,8 @@ Runner: `tests/run_dry_run.sh`. Its swap block points `HOME` at `/tmp/safe-rm-pl
 4. Point `HOME` at a scratch directory in order to test this command.
 5. Add a test that invokes `rm` without `--dry-run`.
 6. Print the refusal with `echo` or `printf` instead of `out_*`.
-7. Allow an account home directory itself, including the login home.
-8. Refuse a named folder strictly inside an account home, such as a cache directory, unless that folder is itself an account home. An operand whose final component is `.` or `..` is not that named folder.
+7. Allow the login home, a directory that contains the login home, `/home`, or a path under `/home` that is outside this login home.
+8. Refuse a named folder strictly inside the login home, such as a cache directory. An operand whose final component is `.` or `..` is not that named folder.
 9. Exec `/usr/bin/rm`, `/bin/rm`, `$PREFIX/bin/rm`, or `${HOME}/.local/bin/rm` for the real delete. The real delete execs the remover in §2.0.5. On macOS the guard itself execs `/bin/rm`.
 10. Reject a remover switch, including a clustered short switch such as `-rf`, with `safe-rm help` or `Unknown command`.
 11. Require a second `rm` verb when the command name is already `rm`.
@@ -476,13 +482,14 @@ Runner: `tests/run_dry_run.sh`. Its swap block points `HOME` at `/tmp/safe-rm-pl
 13. Treat the command named `rm` with no arguments, or `rm --debug` alone, as the numbered menu or as install-ensure.
 14. Leave a stale `safe-rm` in place after a root place or a later setup when `origin-rm` already exists, so the command people type is an older program that rejects `-rf`.
 15. Forward `--help` or `--version` to the remover. On the command named `rm`, route a bare lifecycle word (`version`, `help`, and the other words with no dashes) as this program's command, or route a `--` lifecycle switch as a path.
-16. On Termux, allow `$PREFIX`, `$PREFIX/bin` or anything inside it, or the exact directories `$PREFIX/etc`, `$PREFIX/var`, `$PREFIX/lib`, `$PREFIX/lib64`, `$PREFIX/opt`, `$PREFIX/sbin`, and `$PREFIX/boot`. Refuse a folder strictly inside `$PREFIX/var`, or refuse `$PREFIX/share`, `$PREFIX/include`, `$PREFIX/tmp`, or `$PREFIX/libexec`, unless that folder is itself an account home.
+16. On Termux, allow `$PREFIX`, `$PREFIX/bin` or anything inside it, or the exact directories `$PREFIX/etc`, `$PREFIX/var`, `$PREFIX/lib`, `$PREFIX/lib64`, `$PREFIX/opt`, `$PREFIX/sbin`, and `$PREFIX/boot`. Refuse a folder strictly inside `$PREFIX/var`, or refuse `$PREFIX/share`, `$PREFIX/include`, `$PREFIX/tmp`, or `$PREFIX/libexec`.
 17. Finish a `self-install` or `self-update` without measure 1, so the command people type stays the original remover.
 18. Skip measure 1 and swap only the system `rm`, or run measure 2 on macOS.
 19. Call `sudo` for measure 1, or call `sudo` on macOS, Termux, Git Bash, or Windows cmd. Let the measure-2 child call `sudo` again.
 20. Save the original under a second name `rm-original`, or make the Linux home `origin-rm` a script that execs `/bin/rm` or `/usr/bin/rm` after those paths are the guard.
 21. Allow an operand whose final component is `.` or `..` when the resolved directory would otherwise be allowed. The operator names the directory.
 22. On `reset`, create an `rm` link when `origin-rm` is absent, move or remove `origin-rm`, or remove `safe-rm`. A login that is not root does not rewrite `/usr/bin/rm` or `/bin/rm`.
+23. Return from an `INT`, `HUP`, or `TERM` handler into the remove. Redirect to `${SRM_WORK}/flags` or `${SRM_WORK}/path.N` when `SRM_WORK` is empty. Call that failure `DENY-EMPTY`. Leave this process's cache leaf in place after exit, or remove `$HOME`, a cache parent, or a path that contains `..` while cleaning up.
 
 **Violating this rule is a critical remove-guard regression.**
 
@@ -542,6 +549,8 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | 2026-09-30 | 1.2.16: A finished remove names the caller and each path. On a terminal those names are italic. A sourced file with no path in the shell command is the shell, such as `-bash`. `TP-SRM-39`. Ship unit `1.0.15`. |
 | 2026-09-30 | 1.2.17: The temp maker is not on every OS. The remove check uses `mktemp -d` only when that program exists and can create a directory. Otherwise the scratch directory is a subdirectory of the cache folder. A directory at `0600` cannot be searched. Mode `0700` is set before any file, and again before cleanup. `TP-SRM-40`. Ship unit `1.0.16`. |
 | 2026-09-30 | 1.2.18: The finished-remove success line is hidden unless `--verbal`. `--quiet` still hides it, including together with `--verbal`. `--json` still puts the plain sentence in `message`. A refusal, an error, and a dry-run report stay visible. `--verbal` is not forwarded to the remover. `TP-SRM-41`. Ship unit `1.0.17`. |
+| 2026-09-30 | 1.2.19: `INT`, `HUP`, and `TERM` during a remove remove the scratch directory and leave the process with status `1`. A missing scratch directory is not class `DENY-EMPTY`. The process removes its cache leaf on exit. `TP-SRM-42`. Ship unit `1.0.18`. |
+| 2026-09-30 | 1.2.20: The remove check does not read `/etc/passwd` or `getent passwd` to build a refusal list. An account home is not refused for appearing in the password database. The login home, a directory that contains that home, `/home`, and a path under `/home` outside this login stay refused. A named folder inside the login home stays allowed. `TP-SRM-09`. `TP-SRM-20`. Ship unit `1.0.19`. |
 
 **Last Updated**: 2026-09-30
 **Owner**: safe-rm project maintainers
