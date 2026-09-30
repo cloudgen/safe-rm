@@ -1,6 +1,6 @@
 # safe-rm - Guarded replacement for the system rm
 
-![Version](https://img.shields.io/badge/Version-1.0.16-blue?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.0.17-blue?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 [![CIAO](https://img.shields.io/badge/Philosophy-CIAO%20v2.10.*-purple.svg)](https://github.com/cloudgen/ciao)
 [![Stars](https://img.shields.io/github/stars/cloudgen/safe-rm?style=flat-square)](https://github.com/cloudgen/safe-rm)
@@ -81,7 +81,7 @@ macOS leaves Apple's `/bin/rm` in place, so the first row is the Linux setup. De
 
 ## Quick Installation
 
-Runtime version: `VERSION="1.0.16"` in `src/safe-rm`.
+Runtime version: `VERSION="1.0.17"` in `src/safe-rm`.
 
 Channel default:
 
@@ -141,7 +141,7 @@ After install, on a terminal:
 
 ```text
 $ safe-rm
-[INFO] **safe-rm**(*1.0.16*) — Guarded rm that refuses login homes and system directories
+[INFO] **safe-rm**(*1.0.17*) — Guarded rm that refuses login homes and system directories
 1. **remove-guard**: *check a path and remove it only when it is allowed*
 8. **self-management**: *this CLI install, version, update, uninstall*
 9. Exit
@@ -151,7 +151,7 @@ Choice:
 **1** opens the remove-guard board:
 
 ```text
-[INFO] **safe-rm**(*1.0.16*) — remove-guard
+[INFO] **safe-rm**(*1.0.17*) — remove-guard
 11. **rm**: *check each path and remove only when every path is allowed*
 0. Back
 ```
@@ -159,7 +159,7 @@ Choice:
 **11** lists each immediate subfolder of the current directory, then one number to type a path. The sample below was a temporary directory that held `cache` and `notes`. Your numbers are the folders where you are. That path runs the same guard as `safe-rm rm`.
 
 ```text
-[INFO] **safe-rm**(*1.0.16*) — remove-guard
+[INFO] **safe-rm**(*1.0.17*) — remove-guard
 [INFO] Current path: /tmp/safe-rm-menu-demo
 1. **cache**: */tmp/safe-rm-menu-demo/cache*
 2. **notes**: */tmp/safe-rm-menu-demo/notes*
@@ -170,7 +170,7 @@ Choice:
 **8** opens self-management. **81** is not listed.
 
 ```text
-[INFO] **safe-rm**(*1.0.16*) — self-management
+[INFO] **safe-rm**(*1.0.17*) — self-management
 82. **version**: *show current version*
 83. **about**: *show detailed diagnostics*
 84. **version-check**: *compare local vs remote version*
@@ -240,10 +240,11 @@ safe-rm rm --dry-run .                # refused: '.' would remove the current di
 safe-rm rm -- -file                   # a file whose name starts with -
 ```
 
-A real delete uses the same paths without `--dry-run`, and only when every path is allowed. The success line names the caller and each path. On a terminal those names are italic. A script that was executed is named. A file that was only sourced is the shell, such as `-bash`, and the path is still named:
+A real delete uses the same paths without `--dry-run`, and only when every path is allowed. That delete stays quiet. `--verbal` prints the success line, which names the caller and each path. On a terminal those names are italic. A script that was executed is named. A file that was only sourced is the shell, such as `-bash`, and the path is still named. `--quiet` hides the line even with `--verbal`.
 
 ```sh
 safe-rm rm -r /tmp/my-folder
+safe-rm rm --verbal -r /tmp/my-folder
 ```
 
 ## Platform Compatibility
@@ -284,4 +285,4 @@ MIT. The full text is [LICENSE.md](LICENSE.md).
 
 ## Last Update
 
-2026-09-30 — the remove check works when `mktemp` is not installed. The scratch directory is then a mode-`0700` subdirectory of the cache folder, for version 1.0.16.
+2026-09-30 — a finished remove stays quiet unless `--verbal` is set, for version 1.0.17. The line is `Caller <caller> removed <path>.` `--quiet` still hides it.

@@ -1,6 +1,6 @@
 **file**: docs/requirements/requirement-domain-safe-rm.md
 **id**: RQ-DOMAIN-SAFE-RM
-**Status**: Active (Version 1.2.17)
+**Status**: Active (Version 1.2.18)
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -9,8 +9,8 @@ This requirement is the **current domain SSOT** for **safe-rm**. The 2023 progra
 
 It also exists because an agent once ran a recursive remove of the login home after a command-scoped `HOME=` prefix. The prefix did not apply to the later remove, and the login home was the target.
 
-**Scope:** the protected-`rm` setup (`origin-rm`, the `rm` link, `restore`, `reset`), the command named `rm` (the same switches as `origin-rm`, including `-rf`), the `safe-rm rm` verb, `--dry-run`, refuse classes, messages that tell the operator to stop, and the help/about rows for that guard.
-**Out of scope:** Checksum and storage (peer shell requirements). Any remove that the tests perform with the host remover. `TP-SRM-39` may exec a fixture `origin-rm` under `/tmp/safe-rm-swap.*` that exits 0 and does not unlink; the listed path remains. Dropping the 2023 swap. The one `sudo` this product runs is the measure-2 re-exec in §2.0.5, and the same re-exec for `restore` and `reset`, not a general admin shell.
+**Scope:** the protected-`rm` setup (`origin-rm`, the `rm` link, `restore`, `reset`), the command named `rm` (the same switches as `origin-rm`, including `-rf`), the `safe-rm rm` verb, `--dry-run`, `--verbal`, refuse classes, messages that tell the operator to stop, and the help/about rows for that guard.
+**Out of scope:** Checksum and storage (peer shell requirements). Any remove that the tests perform with the host remover. `TP-SRM-39` and `TP-SRM-41` may exec a fixture `origin-rm` under `/tmp/safe-rm-swap.*` that exits 0 and does not unlink; the listed path remains. Dropping the 2023 swap. The one `sudo` this product runs is the measure-2 re-exec in §2.0.5, and the same re-exec for `restore` and `reset`, not a general admin shell.
 
 ### 1.1 Human-facing
 
@@ -39,7 +39,7 @@ It also exists because an agent once ran a recursive remove of the login home af
 | Hit a home directory | The program exits non-zero and removes nothing. A folder inside that home is a different path | `safe-rm rm --dry-run` on the home, then on a folder inside it |
 | Put the original binary back | `origin-rm` becomes `rm` again and the guard link is removed | `safe-rm restore` |
 | Point `rm` at the saved remover | `origin-rm` stays. `rm` becomes a symlink to it. `safe-rm` stays | `safe-rm reset` |
-| See which script removed a path | The success line names the caller and each path. On a terminal those names are italic | after a real remove |
+| See which script removed a path | The success line is hidden unless `--verbal`. With `--verbal` it names the caller and each path. On a terminal those names are italic | `safe-rm rm --verbal <path>` |
 | Install or update this program | The place finishes, then setup runs measure 1 in the home bin and measure 2 through `sudo` when this host is Linux and this login is not root | `safe-rm self-install` |
 
 ---
@@ -347,13 +347,13 @@ On Termux, measure 2 runs as this login against `$PREFIX/bin/rm` and does not ca
 
 When `--dry-run` is off and every path is allowed, exec the remover from §2.0.5 once. Pass every forwarded switch, in order, then `--`, then every allowed path. One command is one exec, so a switch whose meaning depends on the whole operand list (such as `-I`) matches the remover. **MUST NOT** exec the remover for a refused path. **MUST NOT** exec it once per path.
 
-When that exec exits 0, the success line names the caller and each path that was forwarded. The sentence is `Caller <caller> removed <path>.` More than one path is comma-separated in that same sentence. On a terminal the caller and each path are italic (SGR 3). Off a terminal the same words are plain. `--json` puts that plain sentence in `message`. `--quiet` still hides the human line.
+When that exec exits 0, the human success line is hidden. `--verbal` shows it. The sentence is `Caller <caller> removed <path>.` More than one path is comma-separated in that same sentence. On a terminal the caller and each path are italic (SGR 3). Off a terminal the same words are plain. The line is printed with `out_success`, so the human text starts with `[OK]`. `--quiet` still hides that human line, including when `--verbal` is also set. `--json` puts that plain sentence in `message` and still hides the human line, with or without `--verbal`. When neither `--json` nor `--verbal` is set, the program does not build the sentence. A refusal, an error, and a dry-run report stay visible. `--verbal` is not forwarded to the remover. It is accepted before or after `rm`, on `safe-rm` and on the command named `rm`. After `--` the same word is a path.
 
-The caller is the nearest script path in the parent command. That is the file named by `sh script`, by `bash script`, or by `--rcfile`. Arguments after that script, including the path being removed, are not the caller. `sh -c` names no script file, so the walk continues to the next shell. A file that was sourced, with no path left in the shell's command, is not invented: the label is that shell, such as `-bash`. The walk stops at a program that is not a shell, so a session leader is not reported as the script. Proof: `TP-SRM-39`.
+The caller is the nearest script path in the parent command. That is the file named by `sh script`, by `bash script`, or by `--rcfile`. Arguments after that script, including the path being removed, are not the caller. `sh -c` names no script file, so the walk continues to the next shell. A file that was sourced, with no path left in the shell's command, is not invented: the label is that shell, such as `-bash`. The walk stops at a program that is not a shell, so a session leader is not reported as the script. Proof: `TP-SRM-39` (the line when `--verbal` is set) and `TP-SRM-41` (hidden by default, and still hidden when `--verbal` and `--quiet` are both set).
 
 #### Non-goals
 
-- Tests for this verb use `--dry-run`, except `TP-SRM-39`. That proof execs a fixture `origin-rm` under `/tmp/safe-rm-swap.*` that exits 0 and does not unlink. The listed path remains. The host remover is not exec'd. A system directory cannot be removed by the suite.
+- Tests for this verb use `--dry-run`, except `TP-SRM-39` and `TP-SRM-41`. Those proofs exec a fixture `origin-rm` under `/tmp/safe-rm-swap.*` that exits 0 and does not unlink. The listed path remains. The host remover is not exec'd. A system directory cannot be removed by the suite.
 - The guard does not keep a database of paths.
 - Product sentences do not use the 2023 `printf` lines. They use `out_*`.
 
@@ -368,7 +368,7 @@ The caller is the nearest script path in the parent command. That is the file na
 | `rm -- -file` | A name that starts with `-` is a path after `--`. `./-file` is that same path |
 | `rm -rf .` | `'.' and '..' are refused. Name the folder itself` |
 | `rm --dry-run` | Remove nothing. Say whether each path exists and whether it may be removed |
-| finished remove | A finished remove names the caller and each path. On a terminal those names are italic |
+| finished remove | A finished remove names the caller and each path when `--verbal` is set. That line is hidden by default. On a terminal those names are italic |
 | `--dry-run` | The same switch may appear before or after `rm` |
 | `restore` | Put `origin-rm` back as `rm` |
 | `reset` | When `origin-rm` exists, point `rm` at it. Linux uses root or sudo |
@@ -423,7 +423,8 @@ JSON `about` includes `"remove_guard":"on"` and `"dry_run_switch":"--dry-run"`.
 | `TP-SRM-40` | Remove-check scratch directory when the temp maker is absent, and when a maker on `PATH` exits without creating a directory. Dry-run of an allowed path is still allowed. The path remains. Stderr does not say the scratch directory could not be created. The scratch directory is not left behind. Nothing is executed |
 | `TP-SRM-37` | From an allowed temporary directory, dry-run of `.`, `..`, and `./` is refused and the directory remains. `./file` and `leaf/../leaf` stay allowed and remain. `leaf/..` is refused. One `.` beside an allowed path removes nothing. JSON `class` is `DENY-DOT`. `rm --dry-run -- -rf` treats `-rf` as a path. `rm --dry-run -rf` with no `--` gives no path. Nothing is executed |
 | `TP-SRM-38` | Layout only, under `/tmp/safe-rm-swap.*`. After setup, `reset` points the fixture `rm` at `origin-rm`. `origin-rm` and `safe-rm` stay. A second `reset` leaves that link. A directory with no `origin-rm` is not changed. A non-admin `reset` without that fixture does not change `/usr/bin/rm`. A BusyBox fixture points `rm` at `origin-rm` and leaves the applet. Nothing is executed |
-| `TP-SRM-39` | A finished remove names the caller and each path. On a terminal those names are italic. `--json` uses the same sentence with no italic. `--quiet` hides the human line. A refused path does not exec the remover. The fixture `origin-rm` under `/tmp/safe-rm-swap.*` exits 0 and does not unlink. The listed path remains. `/usr/bin/rm` stays |
+| `TP-SRM-39` | With `--verbal`, a finished remove names the caller and each path. On a terminal those names are italic. `--json` uses the same sentence with no italic and without `--verbal`. `--quiet` hides the human line. A refused path does not exec the remover. The fixture `origin-rm` under `/tmp/safe-rm-swap.*` exits 0 and does not unlink. The listed path remains. `/usr/bin/rm` stays |
+| `TP-SRM-41` | Without `--verbal`, a finished remove prints no human success line and no `[OK]`. The fixture still receives the path and does not receive `--verbal`. `--verbal` before `rm` shows the line and is not forwarded. `--verbal` with `--quiet` still hides the line. `--json` without `--verbal` keeps the sentence and has no `[OK]`. The listed path remains |
 | `TP-SRM-34` | §2.0.5 measure 2 under `/tmp/safe-rm-swap.*` with a sudo stand-in. The real `sudo` is not run and the host `/bin` and `/usr/bin` are not written. Linux: measure 1 finishes, then the stand-in runs measure 2 only. Darwin: the stand-in is not called and the fixture `/bin/rm` stays. A BusyBox symlink is not renamed. Nothing is executed |
 | `TP-SRM-28` | `help` says a local `install` copies this file into `/usr/local/bin/` or `${HOME}/.local/bin/` and does not download |
 | `TP-SRM-18` | `about` includes `Remove guard:` |
@@ -438,12 +439,12 @@ Runner: `tests/run_dry_run.sh`. Its swap block points `HOME` at `/tmp/safe-rm-pl
 | Product | `safe-rm` |
 | Ship unit | `src/safe-rm` |
 | Companion | `src/safe-rm.sha256` |
-| Version | `1.0.16` |
+| Version | `1.0.17` |
 | Prefix | `srm_` |
 | Type 0 lifecycle | Kept in full (self-install, self-update, self-uninstall, version, about, help, numbered menu, `out_*`). The 2023 setup is kept as well: `origin-rm`, `rm` → this program, `restore`, `reset` |
 | Channel default | `REPO_USER=cloudgen`, `REPO_NAME=safe-rm`, `SCRIPT_RELPATH=src/safe-rm` |
 | Dispatcher anchors | Basename `rm` routes to `srm_cmd_rm` before the menu. `safe-rm rm` is the same remove. `--dry-run` is not forwarded |
-| Honesty | The two-layer setup is **implemented** in ship unit `1.0.11`. Measure 1 writes `${HOME}/.local/bin` as this login, then measure 2. Linux measure 2 re-execs this program through `sudo` when the invoker is not root (`SRM_SUDO` in tests; the default is `sudo`). macOS, Termux, Git Bash, and Windows cmd do not call `sudo`. macOS does not move `/bin/rm`. The saved original is named `origin-rm`. Profile-ensure creates a missing `.profile` that sources `.bashrc`. Ship unit `1.0.12` writes the one-directory user-bin line on `.bashrc`, `.zshenv`, and Fish. The §2.7 block that puts `/usr/local/bin` next, on `.zshrc` and `.profile` as well, is **not implemented** yet (`TP-SRM-35` TODO). Termux `$PREFIX/bin` still has no `sudo`. Tests pass `SRM_SWAP_ROOT=/tmp/safe-rm-swap.*` or `SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*` so they never touch the host `/usr/bin` or `/bin`. Dry-run never execs the remover. `TP-SRM-33` and `TP-SRM-34` are in `tests/test_two_layer.sh`. Ship unit `1.0.12` sets the remove-check scratch directory to mode `0700` after `mktemp -d` (`TP-SRM-36`). Ship unit `1.0.13` refuses an operand whose final component is `.` or `..` when that resolved directory would otherwise be allowed (`TP-SRM-37`). Account-home lookup uses `grep -Fxq` and falls back to a read loop when `grep` fails. Ship unit `1.0.14` adds `reset`: when `origin-rm` exists, root or the Linux `sudo` re-exec points the system `rm` at it and leaves `origin-rm` and `safe-rm` (`TP-SRM-38`). Ship unit `1.0.15` names the caller and each path on a finished remove. On a terminal those names are italic. A sourced file with no path in the shell command is reported as that shell. `TP-SRM-39` execs a fixture `origin-rm` under `/tmp/safe-rm-swap.*` that exits 0 and does not unlink. Ship unit `1.0.16` checks the temp maker before `mktemp -d`. When that program is absent or cannot create the directory, the scratch directory is a mode-`0700` subdirectory of the cache folder (`TP-SRM-40`) |
+| Honesty | The two-layer setup is **implemented** in ship unit `1.0.11`. Measure 1 writes `${HOME}/.local/bin` as this login, then measure 2. Linux measure 2 re-execs this program through `sudo` when the invoker is not root (`SRM_SUDO` in tests; the default is `sudo`). macOS, Termux, Git Bash, and Windows cmd do not call `sudo`. macOS does not move `/bin/rm`. The saved original is named `origin-rm`. Profile-ensure creates a missing `.profile` that sources `.bashrc`. Ship unit `1.0.12` writes the one-directory user-bin line on `.bashrc`, `.zshenv`, and Fish. The §2.7 block that puts `/usr/local/bin` next, on `.zshrc` and `.profile` as well, is **not implemented** yet (`TP-SRM-35` TODO). Termux `$PREFIX/bin` still has no `sudo`. Tests pass `SRM_SWAP_ROOT=/tmp/safe-rm-swap.*` or `SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*` so they never touch the host `/usr/bin` or `/bin`. Dry-run never execs the remover. `TP-SRM-33` and `TP-SRM-34` are in `tests/test_two_layer.sh`. Ship unit `1.0.12` sets the remove-check scratch directory to mode `0700` after `mktemp -d` (`TP-SRM-36`). Ship unit `1.0.13` refuses an operand whose final component is `.` or `..` when that resolved directory would otherwise be allowed (`TP-SRM-37`). Account-home lookup uses `grep -Fxq` and falls back to a read loop when `grep` fails. Ship unit `1.0.14` adds `reset`: when `origin-rm` exists, root or the Linux `sudo` re-exec points the system `rm` at it and leaves `origin-rm` and `safe-rm` (`TP-SRM-38`). Ship unit `1.0.15` names the caller and each path on a finished remove. On a terminal those names are italic. A sourced file with no path in the shell command is reported as that shell. `TP-SRM-39` execs a fixture `origin-rm` under `/tmp/safe-rm-swap.*` that exits 0 and does not unlink. Ship unit `1.0.16` checks the temp maker before `mktemp -d`. When that program is absent or cannot create the directory, the scratch directory is a mode-`0700` subdirectory of the cache folder (`TP-SRM-40`). Ship unit `1.0.17` hides the finished-remove success line unless `--verbal`. `--quiet` still hides it. `--json` still carries the plain sentence (`TP-SRM-41`) |
 
 ---
 
@@ -540,6 +541,7 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | 2026-09-30 | 1.2.15: `reset`. When `origin-rm` exists, root or the Linux `sudo` re-exec replaces the system `rm` with a symlink to `origin-rm`. `origin-rm` and `safe-rm` stay. A missing `origin-rm` changes nothing. Termux does this as this login on `$PREFIX/bin`. macOS does not call `sudo`. `TP-SRM-38`. Ship unit `1.0.14`. |
 | 2026-09-30 | 1.2.16: A finished remove names the caller and each path. On a terminal those names are italic. A sourced file with no path in the shell command is the shell, such as `-bash`. `TP-SRM-39`. Ship unit `1.0.15`. |
 | 2026-09-30 | 1.2.17: The temp maker is not on every OS. The remove check uses `mktemp -d` only when that program exists and can create a directory. Otherwise the scratch directory is a subdirectory of the cache folder. A directory at `0600` cannot be searched. Mode `0700` is set before any file, and again before cleanup. `TP-SRM-40`. Ship unit `1.0.16`. |
+| 2026-09-30 | 1.2.18: The finished-remove success line is hidden unless `--verbal`. `--quiet` still hides it, including together with `--verbal`. `--json` still puts the plain sentence in `message`. A refusal, an error, and a dry-run report stay visible. `--verbal` is not forwarded to the remover. `TP-SRM-41`. Ship unit `1.0.17`. |
 
 **Last Updated**: 2026-09-30
 **Owner**: safe-rm project maintainers

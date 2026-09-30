@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| **1.0.16** (current) | Yes — the remove check does not require `mktemp`. A missing or failing temp maker uses a mode-`0700` subdirectory of the cache folder. A directory left at `0600` cannot be searched |
+| **1.0.17** (current) | Yes — a finished remove stays quiet. `--verbal` shows `Caller <caller> removed <path>.` `--quiet` still hides that line |
+| **1.0.16** | Yes — the remove check does not require `mktemp`. A missing or failing temp maker uses a mode-`0700` subdirectory of the cache folder. A directory left at `0600` cannot be searched |
 | **1.0.15** | Yes — a finished remove names the caller and each path. On a terminal those names are italic |
 | **1.0.14** | Yes — `reset` points the system `rm` at an existing `origin-rm`. Root or the Linux `sudo` re-exec does that. `origin-rm` stays |
 | **1.0.13** | Yes — `.` and `..` are refused when the directory would otherwise be allowed. Name the directory to remove it |

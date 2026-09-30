@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-interface.md  
-**Status**: Active (Version 1.2.7)  
+**Status**: Active (Version 1.2.8)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -64,6 +64,7 @@ Every CIAO-Lite shell CLI **MUST** expose a documented command set. Commands **M
 |------|-------------|----------|
 | `--quiet`, `-q` | `QUIET=1` | Suppress non-error human output; errors and fatal paths still visible |
 | `--json` | `JSON=1` (implies quiet) | Machine-readable structured output; no human banner text |
+| `--verbal` | `VERBAL=1` | Show a finished-remove success line that is hidden by default. `--quiet` still hides that line. Does not change other success lines |
 | `--debug` | `DEBUG=1` | Extra diagnostics when designed (must not break JSON purity on stdout) |
 | `--force` | Force/reinstall policy vars | Skip safe confirms or force reinstall only where documented; never silent security bypass |
 
@@ -134,7 +135,7 @@ When specializing product **B** from this bootstrap (**A → B only**):
 | **Primary executable** | `src/safe-rm` (POSIX `/bin/sh`, single-file for `curl \| sh`) |
 | **Dispatcher** | `app_main` (always invoked at end of script: `app_main "$@"` — no `${0##*/}` / APP_NAME basename gate; required for `curl \| sh`) |
 | **Output SSOT** | `out_text` + wrappers (`out_info`, `out_success`, `out_warn`, `out_error`, `out_die`, `out_plain`, `out_json`, …) |
-| **Version SSOT** | `VERSION` default `1.0.12` (script header / config block: `VERSION="1.0.12"`) |
+| **Version SSOT** | `VERSION` default `1.0.17` (script header / config block: `VERSION="1.0.17"`) |
 | **Install paths** | Global: `GLOBAL_BIN` default `/usr/local/bin`; User: `USER_BIN` default `${HOME}/.local/bin` |
 | **Remote channel env (help surface)** | `REPO_USER` / `REPO_NAME` / `SCRIPT_RELPATH` (defaults `cloudgen` / `safe-rm` / `src/safe-rm`); `SCRIPT_URL` composed default `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/${SCRIPT_RELPATH}` (literal product default: `https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm`; override via env). **`help` MUST list `REPO_USER`, `REPO_NAME`, `SCRIPT_RELPATH`, and `SCRIPT_URL`, and MUST NOT list `CHECKSUM`. `about` MUST NOT list `CHECKSUM`** (install-path runtime pin only; see `requirement-shell-automatic-checksum.md`) |
 | **Type 1 / Type 2 commands** | **None** on current surface — this tool is CLI lifecycle only |
@@ -169,6 +170,7 @@ Every command is also a switch of the same name. `help` and `--help` are the sam
 |------|-----------------|
 | `--quiet`, `-q` | Set `QUIET=1` in `app_main` |
 | `--json` | Set `JSON=1` and `QUIET=1` in `app_main` |
+| `--verbal` | Set `VERBAL=1` in `app_main`. On a remove, `srm_cmd_rm` sets the same flag and does not forward `--verbal` to the remover. The finished-remove line is owned by `requirement-domain-safe-rm.md` |
 | `--debug` | Set `DEBUG=1` in `app_main` |
 | `--force` | Parsed by `app_main` → `FORCE=1` and `FORCE_REINSTALL=1`; used by install reinstall, self-update (incl. deliberate downgrade), and uninstall confirm skip |
 
@@ -268,11 +270,21 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | `docs/requirements/requirement-shell-modular-function-design.md` | Prefix ownership (`app_`, `inst_`, `out_*`, `srm_`) |
 | `docs/requirements/index.md` | Registry SSOT |
 | `./src/selfmanaged` | Bootstrap origin ship unit (do not overwrite from safe-rm) |
-| `requirement-domain-safe-rm.md` | Domain SSOT for `rm` and `--dry-run` |
+| `requirement-domain-safe-rm.md` | Domain SSOT for `rm`, `--dry-run`, and `--verbal` |
 | `./src/safe-rm` | Specialized ship unit |
 
 ---
 
-**Last Updated**: 2026-09-30 (1.2.7 — `reset` points the system `rm` at an existing `origin-rm`; Linux uses root or `sudo`)  
+## Design-time verification
+
+| TP family / ID | Suite | Status |
+|----------------|-------|--------|
+| **TP-SRM-41** | `tests/run_dry_run.sh` | have |
+
+**Map:** `reviews/test-plan.md`
+
+`--verbal` shows the finished-remove line. The sentence itself is domain law. This file owns the flag wiring.
+
+**Last Updated**: 2026-09-30 (1.2.8 — `--verbal` shows the finished-remove line; that line stays hidden by default)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 5, 6, 10, 16, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

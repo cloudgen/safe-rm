@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.17] - 2026-09-30
+
+### Changed
+
+- A finished remove no longer prints `[OK] Caller <caller> removed <path>.` Scripts that call `rm` many times, such as a shim rehash, stay quiet. `--verbal` shows that line. On a terminal the caller and each path are still italic. `--quiet` hides the line even with `--verbal`. `--json` still puts the plain sentence in `message`. A refusal, an error, and a dry-run report stay visible. `--verbal` is not passed to `origin-rm`
+
 ## [1.0.16] - 2026-09-30
 
 ### Fixed

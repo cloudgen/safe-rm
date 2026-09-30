@@ -1620,25 +1620,41 @@ sh "$SAFE_RM" "\$@"
 EOF
 chmod 0755 "$REPORT_SWAP/caller.sh"
 cat > "$REPORT_SWAP/rc.sh" << EOF
-sh "$SAFE_RM" rm -- "$REPORT_SWAP/leaf"
+sh "$SAFE_RM" rm --verbal -- "$REPORT_SWAP/leaf"
 EOF
 usr_before=$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)
 
 out=$(SRM_SWAP_ROOT="$REPORT_SWAP" sh "$REPORT_SWAP/caller.sh" rm -- "$REPORT_SWAP/leaf" 2>"$err")
 ec=$?
+assert_eq "TP-SRM-41 default exit" 0 "$ec"
+assert_eq "TP-SRM-41 default stdout empty" "" "$out"
+assert_not_contains "TP-SRM-41 default hides the caller line" "$out" "Caller"
+assert_not_contains "TP-SRM-41 default hides the OK mark" "$out" "[OK]"
+if [ -f "$REPORT_SWAP/leaf" ]; then
+    t_pass "TP-SRM-41 default leaf still exists"
+else
+    t_fail "TP-SRM-41 default leaf was removed"
+fi
+assert_contains "TP-SRM-41 fixture received the path" "$(cat "$REPORT_SWAP/stub.log" 2>/dev/null || true)" "$REPORT_SWAP/leaf"
+assert_not_contains "TP-SRM-41 default did not forward --verbal" "$(cat "$REPORT_SWAP/stub.log" 2>/dev/null || true)" "--verbal"
+assert_eq "TP-SRM-39 system rm unchanged" "$usr_before" "$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)"
+
+: > "$REPORT_SWAP/stub.log"
+out=$(SRM_SWAP_ROOT="$REPORT_SWAP" sh "$REPORT_SWAP/caller.sh" --verbal rm -- "$REPORT_SWAP/leaf" 2>"$err")
+ec=$?
 assert_eq "TP-SRM-39 caller exit" 0 "$ec"
 assert_contains "TP-SRM-39 names the caller and the path" "$out" "Caller ${REPORT_SWAP}/caller.sh removed ${REPORT_SWAP}/leaf."
 assert_contains "TP-SRM-39 keeps the OK mark" "$out" "[OK]"
 assert_not_contains "TP-SRM-39 plain line has no italic" "$out" "$(printf '\033[3m')"
+assert_not_contains "TP-SRM-41 --verbal before rm is not forwarded" "$(cat "$REPORT_SWAP/stub.log" 2>/dev/null || true)" "--verbal"
 if [ -f "$REPORT_SWAP/leaf" ]; then
     t_pass "TP-SRM-39 leaf still exists"
 else
     t_fail "TP-SRM-39 leaf was removed"
 fi
 assert_contains "TP-SRM-39 fixture received the path" "$(cat "$REPORT_SWAP/stub.log" 2>/dev/null || true)" "$REPORT_SWAP/leaf"
-assert_eq "TP-SRM-39 system rm unchanged" "$usr_before" "$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)"
 
-out=$(TTY=1 SRM_SWAP_ROOT="$REPORT_SWAP" sh "$REPORT_SWAP/caller.sh" rm -- "$REPORT_SWAP/leaf" 2>"$err")
+out=$(TTY=1 SRM_SWAP_ROOT="$REPORT_SWAP" sh "$REPORT_SWAP/caller.sh" rm --verbal -- "$REPORT_SWAP/leaf" 2>"$err")
 ec=$?
 assert_eq "TP-SRM-39 italic exit" 0 "$ec"
 assert_contains "TP-SRM-39 italic caller" "$out" "$(printf '\033[3m')${REPORT_SWAP}/caller.sh$(printf '\033[0m')"
@@ -1649,7 +1665,7 @@ else
     t_fail "TP-SRM-39 italic leaf was removed"
 fi
 
-out=$(SRM_SWAP_ROOT="$REPORT_SWAP" sh "$REPORT_SWAP/caller.sh" rm -- "$REPORT_SWAP/leaf" "$REPORT_SWAP/leaf-b" 2>"$err")
+out=$(SRM_SWAP_ROOT="$REPORT_SWAP" sh "$REPORT_SWAP/caller.sh" rm --verbal -- "$REPORT_SWAP/leaf" "$REPORT_SWAP/leaf-b" 2>"$err")
 ec=$?
 assert_eq "TP-SRM-39 two paths exit" 0 "$ec"
 assert_contains "TP-SRM-39 two paths" "$out" "Caller ${REPORT_SWAP}/caller.sh removed ${REPORT_SWAP}/leaf, ${REPORT_SWAP}/leaf-b."
@@ -1659,7 +1675,7 @@ else
     t_fail "TP-SRM-39 second leaf was removed"
 fi
 
-out=$(SRM_SWAP_ROOT="$REPORT_SWAP" sh -c 'sh "$1" rm -- "$2"' sh "$SAFE_RM" "$REPORT_SWAP/leaf" 2>"$err")
+out=$(SRM_SWAP_ROOT="$REPORT_SWAP" sh -c 'sh "$1" rm --verbal -- "$2"' sh "$SAFE_RM" "$REPORT_SWAP/leaf" 2>"$err")
 ec=$?
 assert_eq "TP-SRM-39 sh -c exit" 0 "$ec"
 assert_contains "TP-SRM-39 sh -c names a script ancestor" "$out" "run_dry_run.sh"
@@ -1677,6 +1693,7 @@ assert_eq "TP-SRM-39 json exit" 0 "$ec"
 assert_contains "TP-SRM-39 json removed" "$out" '"removed":"true"'
 assert_contains "TP-SRM-39 json names the caller" "$out" "Caller ${REPORT_SWAP}/caller.sh removed ${REPORT_SWAP}/leaf."
 assert_not_contains "TP-SRM-39 json has no italic" "$out" "$(printf '\033[3m')"
+assert_not_contains "TP-SRM-41 json has no OK mark" "$out" "[OK]"
 if [ -f "$REPORT_SWAP/leaf" ]; then
     t_pass "TP-SRM-39 json leaf still exists"
 else
@@ -1692,6 +1709,19 @@ if [ -f "$REPORT_SWAP/leaf" ]; then
     t_pass "TP-SRM-39 quiet leaf still exists"
 else
     t_fail "TP-SRM-39 quiet leaf was removed"
+fi
+
+: > "$REPORT_SWAP/stub.log"
+out=$(SRM_SWAP_ROOT="$REPORT_SWAP" sh "$REPORT_SWAP/caller.sh" rm --verbal --quiet -- "$REPORT_SWAP/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-41 verbal quiet exit" 0 "$ec"
+assert_not_contains "TP-SRM-41 verbal quiet hides the caller line" "$out" "Caller"
+assert_not_contains "TP-SRM-41 verbal quiet hides the OK mark" "$out" "[OK]"
+assert_contains "TP-SRM-41 verbal quiet still removed" "$(cat "$REPORT_SWAP/stub.log" 2>/dev/null || true)" "$REPORT_SWAP/leaf"
+if [ -f "$REPORT_SWAP/leaf" ]; then
+    t_pass "TP-SRM-41 verbal quiet leaf still exists"
+else
+    t_fail "TP-SRM-41 verbal quiet leaf was removed"
 fi
 
 : > "$REPORT_SWAP/stub.log"
@@ -1713,6 +1743,8 @@ fi
 
 out=$(sh "$SAFE_RM" help 2>/dev/null)
 assert_contains "TP-SRM-39 help names the caller line" "$out" "names the caller and each path"
+assert_contains "TP-SRM-41 help names --verbal" "$out" "--verbal"
+assert_contains "TP-SRM-41 help says the line is hidden by default" "$out" "hidden by default"
 
 assert_eq "TP-SRM-39 system rm still unchanged" "$usr_before" "$(stat -c '%d:%i' /usr/bin/rm 2>/dev/null || true)"
 

@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-output-requirements.md  
-**Status**: Active (Version 1.0.1)  
+**Status**: Active (Version 1.0.2)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -130,6 +130,13 @@ Align with SSOT-of-stdout and SSOT-of-stderr terms:
 - Debug **MUST NOT** pollute stdout.  
 - Under JSON mode, debug **MUST** be suppressed or redirected so JSON stdout purity holds.
 
+#### 2.4.5 Verbal mode (`--verbal` or `VERBAL=1`)
+
+- A completion line that names a finished destructive action is hidden unless `VERBAL=1`.
+- That line still goes through `out_success`, so `--quiet` and `--json` hide the human text.
+- Other success lines stay on the normal `out_success` path.
+- This product’s finished-remove sentence is domain law (`requirement-domain-safe-rm.md`).
+
 ### 2.5 Implementation guidelines (portable)
 
 1. Centralize color, quiet filtering, and JSON gating in the output module.  
@@ -146,8 +153,8 @@ Align with SSOT-of-stdout and SSOT-of-stderr terms:
 | **Implementation file** | `src/safe-rm` |
 | **Human SSOT** | `out_text` |
 | **JSON SSOT** | `out_json` / `out_json_error` |
-| **Mode flags** | `QUIET`, `JSON`, `DEBUG`, `TTY` (defaults `0` except TTY when stdin/stdout are TTYs) |
-| **Flag wiring** | `app_main`: `--quiet`/`-q` → `QUIET=1`; `--json` → `JSON=1` and `QUIET=1`; `--debug` → `DEBUG=1` |
+| **Mode flags** | `QUIET`, `JSON`, `VERBAL`, `DEBUG`, `TTY` (defaults `0` except TTY when stdin/stdout are TTYs) |
+| **Flag wiring** | `app_main`: `--quiet`/`-q` → `QUIET=1`; `--json` → `JSON=1` and `QUIET=1`; `--verbal` → `VERBAL=1`; `--debug` → `DEBUG=1` |
 | **Color** | ANSI only when `TTY=1` and quiet/json off, inside `out_text` |
 | **Domain** | No separate product logger; lifecycle commands use the same `out_*` |
 
@@ -273,6 +280,7 @@ Output-related work for safe-rm is **not done** if any of the following fail:
 | TP family / ID | Suite | Status |
 |----------------|-------|--------|
 | **TP-JSON-RAW-01** / **TP-CLI-12** | `tests/test_cli.sh` | have |
+| **TP-SRM-41** | `tests/run_dry_run.sh` | have |
 
 **Map:** `reviews/test-plan.md`
 

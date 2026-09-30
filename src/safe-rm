@@ -50,12 +50,13 @@ APP_NAME="safe-rm"
 : "${SHORT_DESCRIPTION:=${APP_DESC}}"
 : "${DESCRIPTION:=POSIX /bin/sh program you install for yourself. It keeps self-install and self-update, and it refuses to remove the login home itself, every account home in /etc/passwd, /home, another login's folder under /home, /usr/bin, or other system directories. A named folder inside the login home, such as a cache directory, may be removed. --dry-run reports whether a path exists and whether removal is allowed, and removes nothing.}"
 # Product version SSOT (semver). Extractors use: grep '^VERSION="'
-VERSION="1.0.16"
-: "${VERSION:=1.0.16}"
+VERSION="1.0.17"
+: "${VERSION:=1.0.17}"
 
 # Runtime flags (safe defaults)
 : "${QUIET:=0}"
 : "${JSON:=0}"
+: "${VERBAL:=0}"
 : "${FORCE:=0}"
 : "${FORCE_REINSTALL:=0}"
 : "${DEBUG:=0}"
@@ -3216,6 +3217,7 @@ app_version() {
 # In --quiet mode: prints nothing (silent).
 #
 # Keep in sync with requirement-shell-cli-interface.md command table.
+# Last updated: 2026-09-30
 # =============================================================================
 
 app_help() {
@@ -3282,7 +3284,8 @@ app_help() {
     out_plain "  rm -- -file          A name that starts with - is a path after --. ./-file is that same path"
     out_plain "  rm -rf .             '.' and '..' are refused. Name the folder itself"
     out_plain "  rm --dry-run         Remove nothing. Say whether each path exists and whether it may be removed"
-    out_plain "                       A finished remove names the caller and each path. On a terminal those names are italic"
+    out_plain "                       A finished remove names the caller and each path when --verbal is set. That line is hidden by default. On a terminal those names are italic"
+    out_plain "  --verbal             Show that finished-remove line. Hidden by default. --quiet still hides it"
     out_plain "  --dry-run            Same switch, before or after rm"
     out_plain "                       A refused path stops the command. Do not retry with rm, /bin/rm, or /usr/bin/rm"
     out_plain "                       On Termux the same blacklist is \$PREFIX, \$PREFIX/bin and anything inside it, \$PREFIX/etc, \$PREFIX/var, \$PREFIX/lib, \$PREFIX/lib64, \$PREFIX/opt, \$PREFIX/sbin, and \$PREFIX/boot. A folder inside \$PREFIX/var may be removed, and so may \$PREFIX/share, \$PREFIX/include, \$PREFIX/tmp, and \$PREFIX/libexec"
@@ -3292,6 +3295,7 @@ app_help() {
 
     out_info "Global Options:"
     out_plain "  --quiet, -q          Suppress info/success (errors and warnings still shown)"
+    out_plain "  --verbal             Show the finished-remove line (hidden by default; --quiet still hides it)"
     out_plain "  --json               Machine-readable JSON (implies --quiet)"
     out_plain "  --force              Force reinstall / skip uninstall confirm / allow downgrade"
     out_plain "  --debug              Debug diagnostics on stderr"
@@ -5428,6 +5432,7 @@ srm_emit_json() {
 srm_cmd_rm() {
     : "${DRY_RUN:=0}"
     : "${JSON:=0}"
+    : "${VERBAL:=0}"
     : "${APP_NAME:=safe-rm}"
 
     # mktemp applies umask. A mask that strips owner execute leaves 0600,
@@ -5469,6 +5474,11 @@ srm_cmd_rm() {
             case "$_arg" in
                 --dry-run)
                     DRY_RUN=1
+                    continue
+                    ;;
+                --verbal)
+                    # Show the finished-remove line. Not a remover switch.
+                    VERBAL=1
                     continue
                     ;;
                 --)
@@ -5614,12 +5624,19 @@ srm_cmd_rm() {
     srm_exec_forward "$_origin" 1
     _rc=$?
     if [ "$_rc" -eq 0 ]; then
-        _done=$(srm_removed_sentence plain)
-        srm_emit_json "$_done" false true true "$_items"
-        if [ "${TTY:-0}" -eq 1 ]; then
-            _done=$(srm_removed_sentence tty)
+        # requirement-domain-safe-rm.md: the human success line is hidden
+        # unless --verbal. --json still carries the plain sentence.
+        # --quiet hides the human line even when --verbal is set.
+        if [ "${JSON:-0}" -eq 1 ] || [ "${VERBAL:-0}" -eq 1 ]; then
+            _done=$(srm_removed_sentence plain)
+            srm_emit_json "$_done" false true true "$_items"
+            if [ "${VERBAL:-0}" -eq 1 ]; then
+                if [ "${TTY:-0}" -eq 1 ]; then
+                    _done=$(srm_removed_sentence tty)
+                fi
+                out_success "$_done"
+            fi
         fi
-        out_success "$_done"
         return 0
     fi
     _done="The remover failed. Its result is the result of this command."
@@ -6268,7 +6285,7 @@ app_run_command() {
 # Thin dispatcher for the safe-rm CLI (Type 0 plus the rm guard).
 # Handles:
 #   - Auto-install behavior for classic `curl | sh` one-liner (zero arguments)
-#   - Global flag parsing (--quiet, --json, --debug, --force)
+#   - Global flag parsing (--quiet, --json, --verbal, --debug, --force)
 #   - Command routing for all Type 0 self-management commands
 #
 # This is the single entry point when the script is executed directly.
@@ -6321,6 +6338,7 @@ app_main() {
     : "${COMMAND:=help}"
     : "${QUIET:=0}"
     : "${JSON:=0}"
+    : "${VERBAL:=0}"
     : "${DEBUG:=0}"
     : "${DRY_RUN:=0}"
     : "${FORCE:=0}"
@@ -6376,6 +6394,7 @@ app_main() {
         case "$1" in
             --quiet|-q) QUIET=1 ;;
             --json)     JSON=1; QUIET=1 ;;
+            --verbal)   VERBAL=1 ;;
             --debug)    DEBUG=1 ;;
             --force)    FORCE=1; FORCE_REINSTALL=1 ;;
             # --- DOMAIN_DISPATCH_FLAGS (specializee injection) ---

@@ -140,7 +140,7 @@ Root may write global install path; non-root uses user path. Do not assume root 
 | **PATH ensure** | `path_add_shell`. **Path-ensure** writes `.bashrc`, `.zshrc` and `.zshenv` when zsh applies, `.profile`, and fish. When `/bin` is ahead of `/usr/local/bin`, the block is `${HOME}/.local/bin` then `/usr/local/bin`. **Profile-ensure** creates a missing `${HOME}/.profile` that sources `.bashrc`. The sample does not contain the PATH line (`requirement-shell-cli-self-install.md` §2.7) |
 | **PATH cleanup** | `inst_self_uninstall_cleanup_path` removes the path-ensure block from `.bashrc`, `.zshrc`, `.zshenv`, `.profile`, and fish only when `${HOME}/.local/bin` is empty. That includes the one-directory line and `export PATH="${HOME}/.local/bin:/usr/local/bin:$PATH"`. It does not delete `.profile` and does not strip the profile-ensure sample |
 | **Privilege** | Type 0 only for self-management surface; no dedicated system user |
-| **Version SSOT** | `VERSION` default `1.0.16` in script config block (`VERSION="1.0.16"`) |
+| **Version SSOT** | `VERSION` default `1.0.17` in script config block (`VERSION="1.0.17"`) |
 
 #### Normative acceptance behaviors (this project)
 
