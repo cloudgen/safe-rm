@@ -202,6 +202,60 @@ else
 fi
 unset _real_mktemp _wrap _srm36_before _srm36_after
 
+# TP-SRM-40 the temp maker may be absent. The scratch directory is then
+# a subdirectory of the cache folder, mode 0700, including under umask 0177.
+_srm40_before=$(srm36_work_now)
+out=$(umask 0177; SRM_MKTEMP_BIN= srm "$SCRATCH/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-40 absent mktemp dry-run exit" 0 "$ec"
+assert_contains "TP-SRM-40 absent mktemp allows the path" "$out" "Removal is allowed"
+assert_not_contains "TP-SRM-40 absent mktemp no permission denied" "$(cat "$err")" "Permission denied"
+assert_not_contains "TP-SRM-40 absent mktemp no scratch failure" "$(cat "$err")" "Could not create a scratch directory"
+_srm40_after=$(srm36_work_now)
+if [ "$_srm40_before" = "$_srm40_after" ]; then
+    t_pass "TP-SRM-40 absent mktemp scratch directory was removed"
+else
+    t_fail "TP-SRM-40 absent mktemp left a scratch directory"
+fi
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-40 absent mktemp file still exists"
+else
+    t_fail "TP-SRM-40 absent mktemp file was removed"
+fi
+_srm40_stub="${SCRATCH}/mktemp-missing"
+mkdir -p "$_srm40_stub"
+cat > "${_srm40_stub}/mktemp" << 'EOF'
+#!/bin/sh
+printf 'called\n' >> "${SRM40_MARK:?}"
+exit 127
+EOF
+chmod 0755 "${_srm40_stub}/mktemp"
+_srm40_mark="${SCRATCH}/mktemp-called"
+: > "$_srm40_mark"
+_srm40_before=$(srm36_work_now)
+out=$(umask 0177; SRM40_MARK="$_srm40_mark" PATH="${_srm40_stub}:${PATH}" srm "$SCRATCH/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-40 failing mktemp dry-run exit" 0 "$ec"
+assert_contains "TP-SRM-40 failing mktemp allows the path" "$out" "Removal is allowed"
+assert_not_contains "TP-SRM-40 failing mktemp no permission denied" "$(cat "$err")" "Permission denied"
+if [ -s "$_srm40_mark" ]; then
+    t_pass "TP-SRM-40 failing mktemp was invoked"
+else
+    t_fail "TP-SRM-40 failing mktemp was not invoked"
+fi
+_srm40_after=$(srm36_work_now)
+if [ "$_srm40_before" = "$_srm40_after" ]; then
+    t_pass "TP-SRM-40 failing mktemp scratch directory was removed"
+else
+    t_fail "TP-SRM-40 failing mktemp left a scratch directory"
+fi
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-40 failing mktemp file still exists"
+else
+    t_fail "TP-SRM-40 failing mktemp file was removed"
+fi
+unset _srm40_before _srm40_after _srm40_stub _srm40_mark
+
 # TP-SRM-06 missing path outside home: allowed verdict, still absent
 missing="/tmp/safe-rm-no-such-file-dry"
 if [ -e "$missing" ]; then
@@ -829,6 +883,32 @@ fi
 dollars=$(printf '%s%s' '$' '$')
 bad=$(sh -c '. "$1"; util_mktemp "$2"' sh "$lib" "x${dollars}y" 2>&1 >/dev/null) || true
 assert_contains "TP-CACHE-03 refuses a dollar file name" "$bad" "refuse predictable"
+fb=$(sh -c '. "$1"; SRM_MKTEMP_BIN= util_mktemp tmp' sh "$lib" 2>/dev/null) || fb=""
+case "$fb" in
+    /dev/shm/cache/cache-${app}-${login}-[0-9]*/${app}.tmp.*)
+        base=${fb##*/}
+        case "$base" in
+            *'$$'*)
+                t_fail "TP-CACHE-03 absent mktemp uses a dollar name: ${base}"
+                ;;
+            *)
+                mode=$(stat -c '%a' "$fb" 2>/dev/null || echo "")
+                if [ "$mode" = "600" ]; then
+                    t_pass "TP-CACHE-03 absent mktemp writes a mode-0600 file under the cache leaf"
+                else
+                    t_fail "TP-CACHE-03 absent mktemp mode ${mode:-empty} for ${fb}"
+                fi
+                ;;
+        esac
+        ;;
+    *)
+        t_fail "TP-CACHE-03 absent mktemp unexpected: ${fb:-empty}"
+        ;;
+esac
+if [ -n "$fb" ] && [ -f "$fb" ]; then
+    scratch_rm -f -- "$fb"
+fi
+unset fb base mode
 scratch_rm -f -- "$lib"
 
 # TP-SRM-19 quiet still shows the refusal

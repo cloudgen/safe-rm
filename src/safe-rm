@@ -50,8 +50,8 @@ APP_NAME="safe-rm"
 : "${SHORT_DESCRIPTION:=${APP_DESC}}"
 : "${DESCRIPTION:=POSIX /bin/sh program you install for yourself. It keeps self-install and self-update, and it refuses to remove the login home itself, every account home in /etc/passwd, /home, another login's folder under /home, /usr/bin, or other system directories. A named folder inside the login home, such as a cache directory, may be removed. --dry-run reports whether a path exists and whether removal is allowed, and removes nothing.}"
 # Product version SSOT (semver). Extractors use: grep '^VERSION="'
-VERSION="1.0.15"
-: "${VERSION:=1.0.15}"
+VERSION="1.0.16"
+: "${VERSION:=1.0.16}"
 
 # Runtime flags (safe defaults)
 : "${QUIET:=0}"
@@ -2766,6 +2766,9 @@ util_resolve_storage() {
 # =============================================================================
 # ALIGNMENT: requirement-shell-cli-storage.md
 # Forbidden: predictable $$ names (for example /tmp/${APP_NAME}.$$).
+# When mktemp is absent or cannot create the file, write a mode-0600
+# file under the cache folder. The name is not a $$ file name.
+# Last updated: 2026-09-30
 # =============================================================================
 util_mktemp() {
     : "${APP_NAME:=safe-rm}"
@@ -2781,9 +2784,62 @@ util_mktemp() {
         EFFECTIVE_STORAGE_DIR=$(util_resolve_storage)
         export EFFECTIVE_STORAGE_DIR
     fi
-    mktemp "${EFFECTIVE_STORAGE_DIR}/${APP_NAME}.${_suffix}.XXXXXX" 2>/dev/null \
-        || mktemp "${TMPDIR:-/tmp}/${APP_NAME}.${_suffix}.XXXXXX" 2>/dev/null \
-        || mktemp
+    _bin=$(util_mktemp_bin)
+    if [ -n "$_bin" ] && [ -x "$_bin" ]; then
+        _made=$("$_bin" "${EFFECTIVE_STORAGE_DIR}/${APP_NAME}.${_suffix}.XXXXXX" 2>/dev/null) || _made=
+        if [ -n "$_made" ]; then
+            printf '%s\n' "$_made"
+            return 0
+        fi
+        _made=$("$_bin" "${TMPDIR:-/tmp}/${APP_NAME}.${_suffix}.XXXXXX" 2>/dev/null) || _made=
+        if [ -n "$_made" ]; then
+            printf '%s\n' "$_made"
+            return 0
+        fi
+        _made=$("$_bin" 2>/dev/null) || _made=
+        if [ -n "$_made" ]; then
+            printf '%s\n' "$_made"
+            return 0
+        fi
+    fi
+    # The temp maker is absent, or it cannot create a file. The cache
+    # folder is already this process's scratch root.
+    _tok=$(util_scratch_token 1)
+    _path="${EFFECTIVE_STORAGE_DIR}/${APP_NAME}.${_suffix}.${_tok}"
+    if : > "$_path" 2>/dev/null; then
+        chmod 0600 "$_path" 2>/dev/null || true
+        printf '%s\n' "$_path"
+        return 0
+    fi
+    return 1
+}
+
+# Path of mktemp, or empty when this OS has no temp maker.
+# SRM_MKTEMP_BIN set (including empty) is the test stand-in. Operators do not set it.
+# Last updated: 2026-09-30
+util_mktemp_bin() {
+    if [ -n "${SRM_MKTEMP_BIN+x}" ]; then
+        printf '%s\n' "${SRM_MKTEMP_BIN}"
+        return 0
+    fi
+    command -v mktemp 2>/dev/null || true
+}
+
+# Short unpredictable token for a cache-folder leaf. Class B.
+# /dev/urandom when it can be read. Otherwise a hex mix. Not a $$ file name.
+# Last updated: 2026-09-30
+util_scratch_token() {
+    _tok=
+    if [ -r /dev/urandom ]; then
+        _tok=$(od -An -N3 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n') || _tok=
+    fi
+    case "$_tok" in
+        *[!0-9A-Fa-f]*|"")
+            _tok=$(printf '%04x%02x' "$$" "${1:-1}" 2>/dev/null) || _tok=
+            ;;
+    esac
+    [ -n "$_tok" ] || _tok="n${1:-1}"
+    printf '%s\n' "$_tok"
 }
 
 # =============================================================================
@@ -3292,11 +3348,64 @@ app_help() {
 
 # Mode 0700. chmod does not apply umask. mktemp -d does, so umask 0177
 # leaves a directory at 0600. That directory cannot be searched.
+# Last updated: 2026-09-30
 srm_dir_mode_0700() {
     _dmode=${1-}
     [ -n "$_dmode" ] || return 1
     chmod 0700 "$_dmode" 2>/dev/null || return 1
     [ -d "$_dmode" ] && [ -x "$_dmode" ] && [ -w "$_dmode" ]
+}
+
+# Subdirectory of the cache root when mktemp is absent or cannot create
+# a directory. mkdir applies umask, so the mode is forced to 0700 before
+# the path is returned. Class B.
+# Last updated: 2026-09-30
+srm_cache_work_mkdir() {
+    _parent=${1-}
+    [ -n "$_parent" ] || return 1
+    [ -d "$_parent" ] && [ -w "$_parent" ] && [ -x "$_parent" ] || return 1
+    _i=0
+    while [ "$_i" -lt 32 ]; do
+        _i=$((_i + 1))
+        _tok=$(util_scratch_token "$_i")
+        [ -n "$_tok" ] || return 1
+        _dir="${_parent%/}/safe-rm-work.${_tok}"
+        if [ -e "$_dir" ]; then
+            continue
+        fi
+        if mkdir "$_dir" 2>/dev/null; then
+            if srm_dir_mode_0700 "$_dir"; then
+                printf '%s\n' "$_dir"
+                return 0
+            fi
+            rmdir "$_dir" 2>/dev/null || true
+        fi
+    done
+    return 1
+}
+
+# Remove-check scratch directory under the cache root (TMPDIR).
+# Prefer mktemp -d when that program exists and can create a directory.
+# Otherwise make a subdirectory of the cache folder. Either way the
+# directory is mode 0700 before this returns. Class B.
+# Last updated: 2026-09-30
+srm_open_work_dir() {
+    _base=${TMPDIR:-${EFFECTIVE_STORAGE_DIR:-}}
+    [ -n "$_base" ] || return 1
+    _bin=$(util_mktemp_bin)
+    _made=
+    if [ -n "$_bin" ] && [ -x "$_bin" ]; then
+        _made=$(umask 077; "$_bin" -d "${_base%/}/safe-rm-work.XXXXXX" 2>/dev/null) || _made=
+        if [ -n "$_made" ] && srm_dir_mode_0700 "$_made"; then
+            printf '%s\n' "$_made"
+            return 0
+        fi
+        if [ -n "$_made" ] && [ -d "$_made" ]; then
+            srm_dir_mode_0700 "$_made" || true
+            rmdir "$_made" 2>/dev/null || true
+        fi
+    fi
+    srm_cache_work_mkdir "$_base"
 }
 
 srm_cleanup_work() {
@@ -5321,16 +5430,31 @@ srm_cmd_rm() {
     : "${JSON:=0}"
     : "${APP_NAME:=safe-rm}"
 
-    # umask 077 keeps owner execute. chmod still corrects a mktemp that
-    # created the directory at 0600.
-    SRM_WORK=$(umask 077; mktemp -d "${TMPDIR:-/tmp}/safe-rm-work.XXXXXX") || {
+    # mktemp applies umask. A mask that strips owner execute leaves 0600,
+    # and that directory cannot be searched. When mktemp is not installed,
+    # or it cannot create the directory, the scratch directory is a
+    # subdirectory of the cache folder. Mode 0700 is set before any file.
+    if [ -z "${TMPDIR:-}" ] || [ ! -d "${TMPDIR}" ] || [ ! -w "${TMPDIR}" ] || [ ! -x "${TMPDIR}" ]; then
+        TMPDIR=$(util_resolve_storage) || TMPDIR=
+        if [ -z "${TMPDIR}" ]; then
+            out_die "Could not create a scratch directory for the remove check. Nothing was removed. Next: check that the temp directory is writable."
+        fi
+        export TMPDIR
+        if [ -z "${EFFECTIVE_STORAGE_DIR:-}" ]; then
+            EFFECTIVE_STORAGE_DIR=$TMPDIR
+            export EFFECTIVE_STORAGE_DIR
+        fi
+    fi
+    SRM_WORK=$(srm_open_work_dir) || {
         out_die "Could not create a scratch directory for the remove check. Nothing was removed. Next: check that the temp directory is writable."
     }
     trap 'srm_cleanup_work' EXIT INT HUP TERM
     if ! srm_dir_mode_0700 "$SRM_WORK"; then
         out_die "Could not open the scratch directory for the remove check. Nothing was removed. Next: check that the temp directory is writable."
     fi
-    : > "${SRM_WORK}/flags"
+    if ! : > "${SRM_WORK}/flags" 2>/dev/null; then
+        out_die "Could not open the scratch directory for the remove check. Nothing was removed. Next: check that the temp directory is writable."
+    fi
     srm_load_account_homes "${SRM_WORK}/homes"
 
     _n=0

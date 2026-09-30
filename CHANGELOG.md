@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.16] - 2026-09-30
+
+### Fixed
+
+- The remove check does not require `mktemp`. That program is not installed on every OS until a package install. When it is missing, or it cannot create a directory, the scratch directory is a subdirectory of the cache folder. `mkdir` applies umask, so a mask such as `0177` would leave that directory `drw-------` (`0600`), which exists and cannot be searched. The directory is mode `0700` before any file is written, and cleanup sets `0700` again
+
 ## [1.0.15] - 2026-09-30
 
 ### Changed

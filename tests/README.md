@@ -38,6 +38,7 @@ Requires: `sh`, `curl`, `python3` (local HTTP channel), `sha256sum`, `grep`.
 | `TP-SRM-37` | `.`, `..`, and `./` from an allowed directory are refused and remain. `./file` and a `..` in the middle stay allowed. `rm -- -rf` is a path. Nothing is executed |
 | `TP-SRM-38` | `reset` points a fixture `rm` at `origin-rm` and leaves `origin-rm` and `safe-rm`. A missing `origin-rm` changes nothing. A non-admin `reset` leaves `/usr/bin/rm`. Nothing is executed |
 | `TP-SRM-39` | A finished remove names the caller and each path. On a terminal those names are italic. The fixture `origin-rm` does not unlink. The path remains |
+| `TP-SRM-40` | When `mktemp` is absent, or a maker on `PATH` exits without creating a directory, a dry-run of an allowed path is still allowed. The scratch directory is a mode-`0700` subdirectory of the cache folder, including under umask `0177`. It is not left behind. The file remains. Nothing is executed |
 | `TP-CLI-EMPTY-01`, `TP-CLI-17`, `TP-CLI-19`, `TP-CLI-21`, `TP-CLI-22`, `TP-CLI-SRM-01`, `TP-CLI-SRM-02` | Main menu, including `safe-rm --debug` and the folder list under **11**. No install. No real remove |
 | `TP-SRM-SWAP-01` | Before/after swap inside `/tmp/safe-rm-swap.*` only. The fixture `rm` is never executed. Non-admin setup leaves `/usr/bin/rm` unchanged |
 | `TP-SRM-29` | An empty first fixture directory does not stop setup. The second directory's regular `rm` is moved. A BusyBox symlink is not renamed; `origin-rm` runs `busybox rm`. Neither fixture is executed |
@@ -47,7 +48,7 @@ Requires: `sh`, `curl`, `python3` (local HTTP channel), `sha256sum`, `grep`.
 | `TP-SRM-33` | Measure 1 under a scratch `HOME`. A missing `.profile` sources `.bashrc` and keeps an existing body. The PATH line is once in `.bashrc`. `sudo` is not called. `tests/test_two_layer.sh` |
 | `TP-SRM-35` | TODO. When `/bin` is ahead of `/usr/local/bin`, the PATH line is `${HOME}/.local/bin` then `/usr/local/bin` once on `.bashrc`, `.zshrc`, `.zshenv`, `.profile`, and Fish. An existing `.profile` body stays. Not in the suite yet |
 | `TP-SRM-34` | Linux calls a sudo stand-in for measure 2 only. Darwin does not. A BusyBox symlink is not renamed. No real `sudo`. `tests/test_two_layer.sh` |
-| `TP-CACHE-01`, `TP-CACHE-02`, `TP-CACHE-03` | Cache folder chains, silent tier miss, persistence `~/.local/safe-rm`, mktemp scratch names. `about` is not a remove. HOME stays this login |
+| `TP-CACHE-01`, `TP-CACHE-02`, `TP-CACHE-03` | Cache folder chains, silent tier miss, persistence `~/.local/safe-rm`, mktemp scratch names, and a mode-`0600` cache file when `mktemp` is absent. `about` is not a remove. HOME stays this login |
 
 ## Specializee porting checklist (A → B)
 

@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-storage.md  
-**Status**: Active (Version 1.1.0)  
+**Status**: Active (Version 1.1.1)  
 **Area**: shell  
 **Key**: `requirement-shell-cli-storage`  
 **Philosophy**: CIAO **v2.10.2** / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered / Over-protect)
@@ -26,7 +26,7 @@ Placeholders only. **MUST NOT** hardcode an app name, a login name, or a process
 
 A skipped tier is silent. No warning and no error because a higher cache folder was not used. An error is only when every tier for this host failed.
 
-The directory name carries `$$`. Scratch files inside that directory stay `mktemp` names. They do not use a `$$` file name.
+The directory name carries `$$`. Scratch files inside that directory stay unpredictable names. They do not use a `$$` file name. `mktemp` is not installed on every OS. When it is missing, the file is still created under this cache folder.
 
 Volatile tiers (`/dev/shm` and `/tmp`) include `${login}` so two logins do not share one leaf. Home tiers omit `${login}` because `${HOME}` is already that login.
 
@@ -116,29 +116,33 @@ Walk this host’s chain in order. First directory that can be created **and** i
 1. Cache leaves **MUST** include **`cache-${APP_NAME}`** (app identity).  
 2. Volatile leaves (`/dev/shm/cache` and `/tmp/cache`) **MUST** be `cache-${APP_NAME}-${login}-$$`. Home leaves **MUST** be `cache-${APP_NAME}-$$` (no login segment). Isolation is the login segment plus this process id, not one shared directory that the second login falls out of.  
 3. **MUST NOT** use a single shared world-writable directory for all logins or all apps.  
-4. Live product **MUST** export `TMPDIR=${EFFECTIVE_STORAGE_DIR}` so `mktemp` inherits the isolated **cache** root.  
-5. New scratch files **MUST** be created via **`util_mktemp`** (or `mktemp` under a path `util_resolve_storage` returned).  
-6. The **cache directory** name includes `$$` (this process). Scratch **files** inside it **MUST NOT** use a predictable `$$` file name (forbidden: `/tmp/${APP_NAME}.$$`, `${EFFECTIVE_STORAGE_DIR}/${APP_NAME}.$$`).
+4. Live product **MUST** export `TMPDIR=${EFFECTIVE_STORAGE_DIR}` so a temp maker that is installed inherits the isolated **cache** root.  
+5. New scratch files **MUST** go through **`util_mktemp`**. That helper **MUST** check that `mktemp` exists and is executable before it calls it. `mktemp` is not installed on every OS until `apk`, `apt`, or a peer package install.  
+6. When the temp maker is absent, or every `mktemp` attempt fails, the scratch **file** **MUST** be created under the resolved cache folder as `${APP_NAME}.${suffix}.${token}`, then mode `0600`. The token **MUST NOT** be a `$$` name. A scratch **directory** uses the same check: `mktemp -d` only when it can create a directory; otherwise `mkdir` a unique subdirectory of that cache folder. `mkdir` applies umask. Mode **MUST** be `0700`, and the directory **MUST** be searchable and writable, before any file is written in it. A directory at `0600` (`drw-------`) exists and cannot be searched.  
+7. The **cache directory** name includes `$$` (this process). Scratch **files** inside it **MUST NOT** use a predictable `$$` file name (forbidden: `/tmp/${APP_NAME}.$$`, `${EFFECTIVE_STORAGE_DIR}/${APP_NAME}.$$`). A missing temp maker **MUST NOT** fall back to a bare `/tmp` dump.
 
-**Complete `util_mktemp` sample:**
+**`util_mktemp` shape** (the ship unit is the body; this is the contract):
 
 ```sh
 util_mktemp() {
     : "${APP_NAME:=safe-rm}"
     : "${EFFECTIVE_STORAGE_DIR:=}"
     _suffix="${1:-tmp}"
-    _dollar='$'
-    case "${_suffix}" in
-        *"${_dollar}${_dollar}"*)
-            out_die "util_mktemp: refuse predictable \$\$ name template"
-            ;;
-    esac
+    # Refuse a suffix that contains $$.
     if [ -z "${EFFECTIVE_STORAGE_DIR}" ]; then
         EFFECTIVE_STORAGE_DIR=$(util_resolve_storage)
         export EFFECTIVE_STORAGE_DIR
     fi
-    mktemp "${EFFECTIVE_STORAGE_DIR}/${APP_NAME}.${_suffix}.XXXXXX" \
-        || mktemp
+    _bin=$(command -v mktemp 2>/dev/null || true)
+    if [ -n "$_bin" ] && [ -x "$_bin" ]; then
+        _made=$("$_bin" "${EFFECTIVE_STORAGE_DIR}/${APP_NAME}.${_suffix}.XXXXXX" 2>/dev/null) || _made=
+        if [ -n "$_made" ]; then
+            printf '%s\n' "$_made"
+            return 0
+        fi
+    fi
+    # Temp maker absent or unable to create. Unique file under the cache folder.
+    # Token is not a $$ name. chmod 0600 after create.
 }
 ```
 
@@ -261,7 +265,8 @@ Detect: Termux — `uname` contains Android, or `PREFIX` / `TERMUX_VERSION` is s
 6. Scatter hard-coded `/tmp/safe-rm` roots outside the cache resolver.  
 7. Leave the resolvers dead with no call sites while claiming storage is product law.  
 8. Echo a tier path without creating it.  
-9. Use predictable `$$` scratch **file** names instead of `util_mktemp` / `mktemp` XXXXXX. The cache **directory** itself includes `$$`.  
+9. Use predictable `$$` scratch **file** names. The cache **directory** itself includes `$$`. Scratch file names stay unpredictable (`mktemp` `XXXXXX`, or a token when `mktemp` is absent).  
+9b. Call `mktemp` without checking that the program exists. Treat a directory at `0600` as usable. Fall back to a bare `/tmp` name when the temp maker is missing.  
 10. Warn or error only because a higher cache tier was skipped.  
 11. Drop `${login}` or `$$` from a volatile cache leaf, or put the login back on `/dev/shm/${APP_NAME}-${login}` outside `cache/`. Put `${login}` or `$$` on a home leaf or on persistence.  
 12. Exec a binary from the cache folder, `/tmp`, or `/dev/shm` on Termux.  
@@ -279,7 +284,7 @@ Detect: Termux — `uname` contains Android, or `PREFIX` / `TERMUX_VERSION` is s
 | AC-2 | Linux preferred leaf is `/dev/shm/cache/cache-${APP_NAME}-${login}-$$` when that directory is usable. Git Bash and Mac preferred leaf is `/tmp/cache/cache-${APP_NAME}-${login}-$$` |
 | AC-3 | `app_main` sets `EFFECTIVE_STORAGE_DIR` / `TMPDIR` / `PERSISTENT_STORAGE_DIR` early |
 | AC-4 | `about` human prints Cache folder used, preferred, 1st fallback, 2nd fallback when present, and Persistence storage; JSON has `cache_used` / `cache_preferred` / `cache_fallback` / `cache_fallback_2` / `persistence_storage` |
-| AC-5 | Scratch files use `util_mktemp` / `mktemp` XXXXXX; the cache directory name may include `$$`; scratch file names must not |
+| AC-5 | Scratch files use `util_mktemp`. When `mktemp` exists and works, the name is an `XXXXXX` name under the cache leaf. When it does not, the file is `${APP_NAME}.${suffix}.${token}` under that leaf, mode `0600`, and is not a `$$` name. A scratch directory created with `mkdir` is mode `0700` and searchable before any file is written |
 | AC-6 | Live cache path is not `/dev/shm/${APP_NAME}` or `/dev/shm/${APP_NAME}-${USERNAME}` |
 | AC-7 | Persistence path is `${HOME}/.local/${APP_NAME}` and the directory exists after resolve |
 | AC-8 | Skipping a cache tier prints no warning and no error. Git Bash has no 2nd fallback. Mac 2nd fallback is `${HOME}/cache/cache-${APP_NAME}-$$`. Home leaves omit `${login}` |
@@ -304,7 +309,7 @@ Detect: Termux — `uname` contains Android, or `PREFIX` / `TERMUX_VERSION` is s
 |----------------|-------|--------|
 | **TP-CACHE-01** | `tests/run_dry_run.sh` | **have** — about JSON cache + persistence fields + human labels; no Storage (effective) / Storage (fallback) |
 | **TP-CACHE-02** | same | **have** — Linux preferred `/dev/shm/cache/cache-${APP_NAME}-${login}-$$`; 1st `/tmp/cache/...`; 2nd `${HOME}/.cache/cache-${APP_NAME}-$$`; Git Bash and Mac chains; silent skip of preferred; leaf mode 0700; persistence `${HOME}/.local/${APP_NAME}`; live dir exists; not `/dev/shm/${APP_NAME}-${login}` |
-| **TP-CACHE-03** | same | **have** — `util_mktemp` writes `mktemp` names under the cache leaf and refuses a `$$` file-name template |
+| **TP-CACHE-03** | same | **have** — `util_mktemp` writes `mktemp` names under the cache leaf, refuses a `$$` file-name template, and when the temp maker is absent writes a mode-`0600` file under that leaf that is not a `$$` name |
 
 The suite does not assign `HOME` to a scratch directory. `about` is not a remove path.
 
@@ -316,9 +321,10 @@ The suite does not assign `HOME` to a scratch directory. `about` is not a remove
 |------|--------|------|
 | 2026-09-06 | Active 1.0.1 | Bootstrap wire: `/dev/shm/${APP_NAME}-${USERNAME}` then `/tmp` then `XDG_CACHE_HOME`. About said Storage (effective) |
 | 2026-09-27 | Active 1.1.0 | Per-login per-process cache leaves. Linux shm → tmp → `${HOME}/.cache`. Git Bash tmp → AppData Local Temp. Mac tmp → Library/Caches → `${HOME}/cache`. Silent tier miss. Persistence `${HOME}/.local/${APP_NAME}`. `about` prints used / preferred / 1st / 2nd. Ship unit `src/safe-rm` |
+| 2026-09-30 | Active 1.1.1 | `mktemp` is not on every OS. `util_mktemp` checks the maker first. A missing or failing maker writes a mode-`0600` file under the cache folder, not a `$$` name and not a bare `/tmp` dump. A scratch directory is mode `0700` before use. |
 
 ---
 
-**Last Updated**: 2026-09-27  
+**Last Updated**: 2026-09-30  
 **Owner**: project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; **CIAO** (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

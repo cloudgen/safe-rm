@@ -1,6 +1,6 @@
 # safe-rm - Guarded replacement for the system rm
 
-![Version](https://img.shields.io/badge/Version-1.0.15-blue?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.0.16-blue?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 [![CIAO](https://img.shields.io/badge/Philosophy-CIAO%20v2.10.*-purple.svg)](https://github.com/cloudgen/ciao)
 [![Stars](https://img.shields.io/github/stars/cloudgen/safe-rm?style=flat-square)](https://github.com/cloudgen/safe-rm)
@@ -81,7 +81,7 @@ macOS leaves Apple's `/bin/rm` in place, so the first row is the Linux setup. De
 
 ## Quick Installation
 
-Runtime version: `VERSION="1.0.15"` in `src/safe-rm`.
+Runtime version: `VERSION="1.0.16"` in `src/safe-rm`.
 
 Channel default:
 
@@ -141,7 +141,7 @@ After install, on a terminal:
 
 ```text
 $ safe-rm
-[INFO] **safe-rm**(*1.0.15*) — Guarded rm that refuses login homes and system directories
+[INFO] **safe-rm**(*1.0.16*) — Guarded rm that refuses login homes and system directories
 1. **remove-guard**: *check a path and remove it only when it is allowed*
 8. **self-management**: *this CLI install, version, update, uninstall*
 9. Exit
@@ -151,7 +151,7 @@ Choice:
 **1** opens the remove-guard board:
 
 ```text
-[INFO] **safe-rm**(*1.0.15*) — remove-guard
+[INFO] **safe-rm**(*1.0.16*) — remove-guard
 11. **rm**: *check each path and remove only when every path is allowed*
 0. Back
 ```
@@ -159,7 +159,7 @@ Choice:
 **11** lists each immediate subfolder of the current directory, then one number to type a path. The sample below was a temporary directory that held `cache` and `notes`. Your numbers are the folders where you are. That path runs the same guard as `safe-rm rm`.
 
 ```text
-[INFO] **safe-rm**(*1.0.15*) — remove-guard
+[INFO] **safe-rm**(*1.0.16*) — remove-guard
 [INFO] Current path: /tmp/safe-rm-menu-demo
 1. **cache**: */tmp/safe-rm-menu-demo/cache*
 2. **notes**: */tmp/safe-rm-menu-demo/notes*
@@ -170,7 +170,7 @@ Choice:
 **8** opens self-management. **81** is not listed.
 
 ```text
-[INFO] **safe-rm**(*1.0.15*) — self-management
+[INFO] **safe-rm**(*1.0.16*) — self-management
 82. **version**: *show current version*
 83. **about**: *show detailed diagnostics*
 84. **version-check**: *compare local vs remote version*
@@ -284,4 +284,4 @@ MIT. The full text is [LICENSE.md](LICENSE.md).
 
 ## Last Update
 
-2026-09-30 — a finished remove names the caller and each path, for version 1.0.15.
+2026-09-30 — the remove check works when `mktemp` is not installed. The scratch directory is then a mode-`0700` subdirectory of the cache folder, for version 1.0.16.
