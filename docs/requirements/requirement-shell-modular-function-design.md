@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-modular-function-design.md  
-**Status**: Active (Version 1.0.4)  
+**Status**: Active (Version 1.0.5)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -181,7 +181,7 @@ function_name() {
 | `out_` | `out_text`, `out_success`, `out_info`, `out_warn`, `out_error`, `out_die`, `out_plain`, `out_msg_n`, `out_empty_line`, `out_double_line`, `out_json`, `out_json_error` |
 | `inst_` | `inst_perform_install`, `inst_perform_install_prepare_target`, `inst_perform_install_download_with_checksum`, `inst_perform_install_download_without_checksum`, `inst_perform_install_atomic_install`, `inst_argv0_is_shell_interpreter`, `inst_resolve_self_script`, `inst_cli_dest_mode`, `inst_self_install_copy_from_script`, `inst_self_install`, `inst_maybe_install`, `inst_self_update`, `inst_self_uninstall` (+ determine_bin / confirm_and_remove / cleanup_path), `inst_is_installed`, `inst_get_version` |
 | `ver_` | `ver_gt`, `ver_check` |
-| `path_` | Live in `1.0.11`: `path_add_bashrc`, `path_add_zshenv`, `path_add_fish`, `path_add_shell`, `path_ensure_profile`. Path-ensure does not write `.zshrc` |
+| `path_` | Live in `1.0.11`: `path_add_bashrc`, `path_add_zshenv`, `path_add_fish`, `path_add_shell`, `path_ensure_profile`. Self-install §2.7 (`1.2.1`) also names `.zshrc` and a PATH block on `.profile`, plus `/usr/local/bin` next when `/bin` is ahead of it. Ship unit `1.0.12` does not write those yet |
 | `util_` | `util_json_escape`, `util_sha256_file`, `util_fetch_remote_version`, `util_get_install_bin_path`, `util_backup`, `util_resolve_storage` (**wired** from `app_main` / `app_about`; SSOT: `requirement-shell-cli-storage.md`), `util_get_current_shell` |
 | `prompt_` | `prompt_ask`, `prompt_yes_no` |
 | `app_` | `app_about`, `app_version` (dispatcher routes `version` here), `app_help`, `app_default`, `app_main` |
@@ -293,6 +293,6 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 
 ---
 
-**Last Updated**: 2026-09-29 (1.0.4 — ship unit `1.0.11` defines `path_ensure_profile` and `path_add_zshenv`)  
+**Last Updated**: 2026-09-29 (1.0.5 — §2.7 names `.zshrc` and the two-directory PATH block. Ship unit `1.0.12` does not define that write yet)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 6, 7, 8, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

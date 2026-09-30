@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-self-management.md  
-**Status**: Active (Version 1.0.3)  
+**Status**: Active (Version 1.0.4)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -137,10 +137,10 @@ Root may write global install path; non-root uses user path. Do not assume root 
 | **Companion digest** | Default `${SCRIPT_URL}.sha256` via `inst_perform_install_download_without_checksum` — law + transparency: `requirement-shell-automatic-checksum.md` |
 | **Force reinstall** | `FORCE_REINSTALL`; CLI `--force` required by CLI interface requirement |
 | **Uninstall steps** | `inst_self_uninstall_determine_bin` → `inst_self_uninstall_confirm_and_remove` → `inst_self_uninstall_cleanup_path` |
-| **PATH ensure** | `path_add_shell`. **Path-ensure** writes `.bashrc`, `.zshenv` when zsh applies, and fish. **Profile-ensure** creates a missing `${HOME}/.profile` that sources `.bashrc` and does not write the PATH line (`requirement-shell-cli-self-install.md` §2.7) |
-| **PATH cleanup** | `inst_self_uninstall_cleanup_path` removes the path-ensure block from `.bashrc`, `.zshenv`, and fish only when `${HOME}/.local/bin` is empty. It does not delete `.profile` and does not strip the profile-ensure sample |
+| **PATH ensure** | `path_add_shell`. **Path-ensure** writes `.bashrc`, `.zshrc` and `.zshenv` when zsh applies, `.profile`, and fish. When `/bin` is ahead of `/usr/local/bin`, the block is `${HOME}/.local/bin` then `/usr/local/bin`. **Profile-ensure** creates a missing `${HOME}/.profile` that sources `.bashrc`. The sample does not contain the PATH line (`requirement-shell-cli-self-install.md` §2.7) |
+| **PATH cleanup** | `inst_self_uninstall_cleanup_path` removes the path-ensure block from `.bashrc`, `.zshrc`, `.zshenv`, `.profile`, and fish only when `${HOME}/.local/bin` is empty. That includes the one-directory line and `export PATH="${HOME}/.local/bin:/usr/local/bin:$PATH"`. It does not delete `.profile` and does not strip the profile-ensure sample |
 | **Privilege** | Type 0 only for self-management surface; no dedicated system user |
-| **Version SSOT** | `VERSION` default `1.0.11` in script config block (`VERSION="1.0.11"`) |
+| **Version SSOT** | `VERSION` default `1.0.13` in script config block (`VERSION="1.0.13"`) |
 
 #### Normative acceptance behaviors (this project)
 
@@ -248,6 +248,6 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 
 ---
 
-**Last Updated**: 2026-09-29 (1.0.3 — path-ensure cleanup stays off `.profile`; profile-ensure sample is kept; uninstall still does not call `sudo`)  
+**Last Updated**: 2026-09-29 (1.0.4 — uninstall removes the one-directory line and the `${HOME}/.local/bin:/usr/local/bin` line from `.bashrc`, `.zshrc`, `.zshenv`, `.profile`, and fish when `${HOME}/.local/bin` is empty. The profile-ensure sample stays. Uninstall still does not call `sudo`)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 5, 10, 11, 14, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

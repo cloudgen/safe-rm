@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-self-install.md  
-**Status**: Active (Version 1.2.0)  
+**Status**: Active (Version 1.2.1)  
 **Philosophy**: CIAO **v2.10.2** / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered / Over-protect)
 
 ## 1. Purpose
@@ -108,7 +108,7 @@ Force off → `out_success` already installed; exit 0; no re-copy; no download. 
 | **Copy** | `inst_self_install_copy_from_script` |
 | **Dest mode helper** | `inst_cli_dest_mode` → **0755** root / **0700** non-root |
 | **Download peer** | `inst_perform_install_download_*` + `inst_perform_install_atomic_install` then dest-mode chmod |
-| **PATH** | `path_add_shell` on this path (CLI on PATH). §2.7: **path-ensure** writes the user-bin line; **profile-ensure** creates a missing `.profile` that sources `.bashrc` |
+| **PATH** | `path_add_shell` on this path (CLI on PATH). §2.7: **path-ensure** writes the PATH block on `.bashrc`, `.zshrc`, `.zshenv`, `.profile`, and Fish. When `/bin` is ahead of `/usr/local/bin`, `${HOME}/.local/bin` stays first and `/usr/local/bin` is next. **Profile-ensure** creates a missing `.profile` that sources `.bashrc` |
 | **Dispatcher** | `app_main` empty-argv NI / quiet / json → `inst_self_install`; interactive empty argv → `app_default`; command `self-install` same; `install` alias same |
 | **TTY first-shot** | Numbered menu (`app_default`). Place only when the person chooses **87** / `self-install` |
 | **Global bin** | `/usr/local/bin` |
@@ -151,30 +151,48 @@ fi
 
 Two named startup-file edits run together after a non-root place, and again from measure 1 of setup (`requirement-domain-safe-rm.md` §2.0.5). This login writes both. Neither calls `sudo`. The measure-2 child does not run them.
 
-**Path-ensure** prepends the user bin, default `${HOME}/.local/bin`:
+**Path-ensure** reads this process’s `PATH` and writes one block into each startup file below. Compare elements from left to right. Strip one trailing slash before comparing. Skip an empty element. The condition holds when `/bin` appears before `/usr/local/bin`, and when `/bin` appears and `/usr/local/bin` does not.
+
+When that condition holds, the block puts `/usr/local/bin` in front of the previous `PATH`, then puts `${HOME}/.local/bin` in front of that. One line:
+
+```sh
+export PATH="${HOME}/.local/bin:/usr/local/bin:$PATH"
+```
+
+Fish uses `set -gx PATH ${HOME}/.local/bin /usr/local/bin $PATH`. After a shell sources the block, the first directory is `${HOME}/.local/bin`. The next directory added by this block is `/usr/local/bin`, and that copy is ahead of `/usr/bin` and `/bin`.
+
+When `/usr/local/bin` is already ahead of `/bin`, the block is only the user bin:
 
 ```sh
 export PATH="${HOME}/.local/bin:$PATH"
 ```
 
-Fish uses `set -gx PATH ${HOME}/.local/bin $PATH`. Each written file gets `# Added by safe-rm installer (VERSION)` immediately above that line. A second run does not append a second copy of that exact line. A mention of the directory in some other line is not “already present.”
+Fish uses `set -gx PATH ${HOME}/.local/bin $PATH`.
+
+Each written file gets `# Added by safe-rm installer (VERSION)` immediately above that line. A second run does not append a second copy of that exact line. A mention of the directory in some other line is not “already present.” An older one-directory line stays. When the condition holds and the two-directory line is absent, append the two-directory line. `${HOME}/.local/bin` stays ahead of `/usr/local/bin`. This rule does not install the guard as `/usr/local/bin/rm`.
 
 | File | When it is missing | What is written |
 |------|--------------------|-----------------|
 | `${HOME}/.bashrc` | Create it, mode `0644`, owned by this login | The PATH block |
+| `${HOME}/.zshrc` | Create it, mode `0644`, only when this login’s shell is zsh, or `ZSHRC` is set, or the file already exists | The PATH block |
 | `${HOME}/.zshenv` | Create it, mode `0644`, only when this login’s shell is zsh, or `ZSHENV` is set, or the file already exists | The PATH block |
+| `${HOME}/.profile` | Profile-ensure creates the source-bashrc sample first. Path-ensure then appends the PATH block after that sample | The PATH block, after any existing body |
 | `${HOME}/.config/fish/config.fish` | Create the directory and the file | The Fish line |
 
-Path-ensure **MUST NOT** write that line into `${HOME}/.profile`, `${HOME}/.zshrc`, `${HOME}/.bash_profile`, or `${HOME}/.zprofile`. It **MUST NOT** create `.bash_profile` or `.zprofile`. It **MUST NOT** prepend `/usr/local/bin` ahead of `${HOME}/.local/bin`, and **MUST NOT** write a `PATH` line into the pyenv shims directory or `/opt/homebrew`.
+On macOS, `/etc/zprofile` runs `path_helper` after `.zshenv` and can leave `/bin` ahead of `/usr/local/bin`. The same block on `.zshrc` runs later for an interactive zsh. Login `sh` does not source `.bashrc`, so `.profile` carries the block itself.
 
-On the reported Mac, `PATH` already lists `${HOME}/.local/bin` ahead of `/bin`, and `/bin` ahead of `/usr/local/bin`. Path-ensure is what puts that user-bin line on `.bashrc` and, for zsh, on `.zshenv`, for a login that does not have it yet.
+Path-ensure **MUST NOT** create `${HOME}/.bash_profile` or `${HOME}/.zprofile`. It **MUST NOT** put `/usr/local/bin` ahead of `${HOME}/.local/bin`. It **MUST NOT** write a `PATH` line into the pyenv shims directory or `/opt/homebrew`.
+
+On the reported Mac, `PATH` lists `${HOME}/.local/bin`, then the pyenv shims, then `/opt/homebrew/bin`, then `/bin`, then `/usr/local/bin`. The condition holds. The block is the two-directory line.
+
+Ship unit `1.0.12` still writes only `export PATH="${HOME}/.local/bin:$PATH"` on `.bashrc`, `.zshenv`, and Fish. It does not yet write `.zshrc` or the PATH block on `.profile`, and it does not yet prepend `/usr/local/bin`. Proof of this block is `TP-SRM-35` (TODO).
 
 **Profile-ensure** is the rule for keeping the login profile. A missing `.profile` means a login `sh`, and a login `bash` that has no `.bash_profile` and no `.bash_login`, never reads `.bashrc`. The feature checks `${HOME}/.profile` (tests may retarget `PROFILE`).
 
 | State | What this login does |
 |-------|----------------------|
-| Absent | Create it, mode `0644`, owned by this login, with the sample below. The sample sources `.bashrc`. It does **not** contain the PATH line |
-| Present | Do **not** replace the body. A marker the operator wrote stays |
+| Absent | Create it, mode `0644`, owned by this login, with the sample below. The sample sources `.bashrc`. The sample does **not** contain the PATH line. Path-ensure appends its block after the sample |
+| Present | Do **not** replace the body. A marker the operator wrote stays. Path-ensure appends its block when that exact line is absent |
 
 ```sh
 # BEGIN safe-rm profile source-bashrc
@@ -187,9 +205,9 @@ fi
 # END safe-rm profile source-bashrc
 ```
 
-A second run creates the file once and does not append a second sample. Login bash reaches the path-ensure line because this sample sources `.bashrc`. Zsh reaches its line on `.zshenv`. This product does not add a `.zprofile` for that.
+A second run creates the file once and does not append a second sample. Login bash reaches the path-ensure line because this sample sources `.bashrc` and because `.profile` also has the PATH block. Zsh reaches its line on `.zshenv` and, for an interactive shell, on `.zshrc`. This product does not add a `.zprofile` for that.
 
-Uninstall removes the path-ensure blocks from `.bashrc`, `.zshenv`, and the Fish file only when `${HOME}/.local/bin` is empty (`requirement-shell-self-management.md`). It **MUST NOT** delete `.profile`, and it **MUST NOT** strip the profile-ensure sample.
+Uninstall removes the path-ensure blocks from `.bashrc`, `.zshrc`, `.zshenv`, `.profile`, and the Fish file only when `${HOME}/.local/bin` is empty (`requirement-shell-self-management.md`). The blocks are the installer comment, `export PATH="${HOME}/.local/bin:$PATH"`, `export PATH="${HOME}/.local/bin:/usr/local/bin:$PATH"`, and the two Fish lines of the same shape. It **MUST NOT** delete `.profile`, and it **MUST NOT** strip the profile-ensure sample.
 
 ## Under command line for normal user only
 
@@ -215,7 +233,7 @@ When Termux, Git Bash, Windows cmd, or macOS is detected: Type 1/2 unused; the p
 7. Invent a payload `install` that empty argv also runs (this product has no payload).  
 8. Strip **Under command line for normal user only**.  
 9. Specialize B from this origin while restoring `chmod +x` or dropping `inst_cli_dest_mode` / **TP-SI-07** / **TP-SI-08**.
-10. Skip profile-ensure because `${HOME}/.profile` is missing, overwrite an existing `.profile` body, write the PATH line into `.profile` or `.zshrc`, or append a second copy of the exact user-bin line.
+10. Skip profile-ensure because `${HOME}/.profile` is missing, overwrite an existing `.profile` body, put the PATH line inside the profile-ensure sample, append a second copy of the same PATH line, skip the `/usr/local/bin` prepend when `/bin` is ahead of `/usr/local/bin`, or put `/usr/local/bin` ahead of `${HOME}/.local/bin`.
 11. Call `sudo` from the place step. The Linux `sudo` re-exec belongs to setup measure 2, after this place.
 
 ## 5. Definition of done
@@ -228,7 +246,7 @@ When Termux, Git Bash, Windows cmd, or macOS is detected: Type 1/2 unused; the p
 6. Help lists `self-install`.  
 7. Tests **TP-SI-01** .. **TP-SI-08**.  
 8. Changes cite this file.
-9. A missing `${HOME}/.profile` is created once and sources `.bashrc`. It does not contain the PATH line. That line is in `.bashrc` once. A second run does not append it again and does not replace an existing `.profile` body.
+9. A missing `${HOME}/.profile` is created once and sources `.bashrc`. The profile-ensure sample does not contain the PATH line. The PATH block from §2.7 is on `.bashrc`, `.profile`, and, when zsh applies, `.zshrc` and `.zshenv`. When this process `PATH` has `/bin` before `/usr/local/bin`, that block is `export PATH="${HOME}/.local/bin:/usr/local/bin:$PATH"`. A second run does not append it again and does not replace an existing `.profile` body. `TP-SRM-35` proves that block.
 
 ### Design-time verification
 
@@ -257,6 +275,6 @@ When Termux, Git Bash, Windows cmd, or macOS is detected: Type 1/2 unused; the p
 | `docs/requirements/requirement-shell-automatic-checksum.md` | Integrity on **download** path only |
 | `./src/safe-rm` | Implementation |
 
-**Last Updated**: 2026-09-29 (1.2.0 — §2.7 names **profile-ensure** and **path-ensure**. A missing `.profile` sources `.bashrc` and is not overwritten. The PATH line stays on `.bashrc`, `.zshenv`, and Fish)  
+**Last Updated**: 2026-09-29 (1.2.1 — when `/bin` is ahead of `/usr/local/bin`, the PATH block is `${HOME}/.local/bin` then `/usr/local/bin`. That block is written on `.bashrc`, `.zshrc`, `.zshenv`, `.profile`, and Fish. Ship unit `1.0.12` does not implement this block yet. `TP-SRM-35` is TODO)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; **CIAO** (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

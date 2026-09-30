@@ -126,6 +126,73 @@ else
     t_fail "TP-SRM-05 file was removed"
 fi
 
+# TP-SRM-36 scratch directory stays searchable.
+# mktemp -d applies umask, so 0177 leaves the directory at 0600.
+# A mktemp that returns 0600 is the same failure. A 0600 directory cannot
+# hold the path list, and removal of that directory fails.
+srm36_work_now() {
+    find /dev/shm/cache /tmp/cache "${HOME}/.cache" \
+        -maxdepth 3 -type d -name 'safe-rm-work.*' -mmin -2 \
+        2>/dev/null | sort
+}
+_real_mktemp=$(command -v mktemp 2>/dev/null || true)
+_wrap="${SCRATCH}/mktemp-bin"
+mkdir -p "$_wrap"
+if [ -n "$_real_mktemp" ] && [ -x "$_real_mktemp" ]; then
+    cat > "${_wrap}/mktemp" << EOF
+#!/bin/sh
+_dir=0
+for _a in "\$@"; do
+    [ "\$_a" = "-d" ] && _dir=1
+done
+if [ "\$_dir" -eq 1 ]; then
+    _name=\$("${_real_mktemp}" "\$@") || exit 1
+    chmod 0600 "\$_name" || exit 1
+    printf '%s\\n' "\$_name"
+    exit 0
+fi
+exec "${_real_mktemp}" "\$@"
+EOF
+    chmod 0755 "${_wrap}/mktemp"
+    _srm36_before=$(srm36_work_now)
+    out=$(PATH="${_wrap}:${PATH}" srm "$SCRATCH/leaf" 2>"$err")
+    ec=$?
+    assert_eq "TP-SRM-36 mode 0600 dry-run exit" 0 "$ec"
+    assert_contains "TP-SRM-36 mode 0600 allows the path" "$out" "Removal is allowed"
+    assert_not_contains "TP-SRM-36 mode 0600 no permission denied" "$(cat "$err")" "Permission denied"
+    _srm36_after=$(srm36_work_now)
+    if [ "$_srm36_before" = "$_srm36_after" ]; then
+        t_pass "TP-SRM-36 mode 0600 scratch directory was removed"
+    else
+        t_fail "TP-SRM-36 mode 0600 left a scratch directory"
+    fi
+else
+    t_fail "TP-SRM-36 mktemp missing"
+fi
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-36 mode 0600 file still exists"
+else
+    t_fail "TP-SRM-36 mode 0600 file was removed"
+fi
+_srm36_before=$(srm36_work_now)
+out=$(umask 0177; srm "$SCRATCH/leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-36 umask 0177 dry-run exit" 0 "$ec"
+assert_contains "TP-SRM-36 umask 0177 allows the path" "$out" "Removal is allowed"
+assert_not_contains "TP-SRM-36 umask 0177 no permission denied" "$(cat "$err")" "Permission denied"
+_srm36_after=$(srm36_work_now)
+if [ "$_srm36_before" = "$_srm36_after" ]; then
+    t_pass "TP-SRM-36 umask 0177 scratch directory was removed"
+else
+    t_fail "TP-SRM-36 umask 0177 left a scratch directory"
+fi
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-36 umask 0177 file still exists"
+else
+    t_fail "TP-SRM-36 umask 0177 file was removed"
+fi
+unset _real_mktemp _wrap _srm36_before _srm36_after
+
 # TP-SRM-06 missing path outside home: allowed verdict, still absent
 missing="/tmp/safe-rm-no-such-file-dry"
 if [ -e "$missing" ]; then
@@ -256,6 +323,90 @@ out=$(srm '${HOME}/.cache' 2>"$err")
 ec=$?
 assert_eq "TP-SRM-12 literal cache exit" 0 "$ec"
 assert_contains "TP-SRM-12 literal cache allowed" "$out" "allowed"
+
+# TP-SRM-37 '.' and '..' are refused when the directory itself would be allowed.
+# A '..' in the middle stays the resolved directory. A name that starts with
+# '-' is a path after '--'. Nothing here is removed.
+out=$(cd "$SCRATCH/leaf" && sh "$SAFE_RM" --dry-run rm --dry-run . 2>"$err")
+ec=$?
+assert_eq "TP-SRM-37 dot exit" 1 "$ec"
+assert_contains "TP-SRM-37 dot refused" "$(cat "$err")" "'.' or '..'"
+assert_contains "TP-SRM-37 dot STOP" "$(cat "$err")" "STOP"
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-37 dot left the file"
+else
+    t_fail "TP-SRM-37 dot removed the file"
+fi
+out=$(cd "$SCRATCH/leaf" && sh "$SAFE_RM" --dry-run rm --dry-run .. 2>"$err")
+ec=$?
+assert_eq "TP-SRM-37 dotdot exit" 1 "$ec"
+assert_contains "TP-SRM-37 dotdot refused" "$(cat "$err")" "Refusing to remove"
+if [ -d "$SCRATCH/leaf" ]; then
+    t_pass "TP-SRM-37 dotdot left the directory"
+else
+    t_fail "TP-SRM-37 dotdot removed the directory"
+fi
+out=$(cd "$SCRATCH/leaf" && sh "$SAFE_RM" --dry-run rm --dry-run ./ 2>"$err")
+ec=$?
+assert_eq "TP-SRM-37 dot slash exit" 1 "$ec"
+out=$(cd "$SCRATCH/leaf" && sh "$SAFE_RM" --dry-run rm --dry-run ./file 2>"$err")
+ec=$?
+assert_eq "TP-SRM-37 ./file exit" 0 "$ec"
+assert_contains "TP-SRM-37 ./file allowed" "$out" "Removal is allowed"
+if [ -f "$SCRATCH/leaf/file" ]; then
+    t_pass "TP-SRM-37 ./file still exists"
+else
+    t_fail "TP-SRM-37 ./file was removed"
+fi
+out=$(srm "$SCRATCH/leaf/../leaf" 2>"$err")
+ec=$?
+assert_eq "TP-SRM-37 middle dotdot exit" 0 "$ec"
+assert_contains "TP-SRM-37 middle dotdot allowed" "$out" "Removal is allowed"
+if [ -d "$SCRATCH/leaf" ]; then
+    t_pass "TP-SRM-37 middle dotdot left the directory"
+else
+    t_fail "TP-SRM-37 middle dotdot removed the directory"
+fi
+out=$(srm "$SCRATCH/leaf/.." 2>"$err")
+ec=$?
+assert_eq "TP-SRM-37 final dotdot exit" 1 "$ec"
+assert_contains "TP-SRM-37 final dotdot refused" "$(cat "$err")" "'.' or '..'"
+out=$(srm "$SCRATCH/leaf" . 2>"$err")
+ec=$?
+assert_eq "TP-SRM-37 mixed dot exit" 1 "$ec"
+assert_contains "TP-SRM-37 mixed dot nothing removed" "$(cat "$err")" "Nothing was removed"
+if [ -d "$SCRATCH/leaf" ]; then
+    t_pass "TP-SRM-37 mixed dot left the allowed directory"
+else
+    t_fail "TP-SRM-37 mixed dot removed the allowed directory"
+fi
+json=$(cd "$SCRATCH/leaf" && sh "$SAFE_RM" --json --dry-run rm --dry-run . 2>"$err")
+ec=$?
+assert_eq "TP-SRM-37 json dot exit" 1 "$ec"
+assert_contains "TP-SRM-37 json class" "$json" '"class":"DENY-DOT"'
+assert_contains "TP-SRM-37 json verdict" "$json" '"verdict":"refuse"'
+printf 'dash\n' > "$SCRATCH/-rf"
+out=$(cd "$SCRATCH" && sh "$SAFE_RM" rm --dry-run -- -rf 2>"$err")
+ec=$?
+assert_eq "TP-SRM-37 hyphen path exit" 0 "$ec"
+assert_contains "TP-SRM-37 hyphen path allowed" "$out" "Removal is allowed"
+if [ -f "$SCRATCH/-rf" ]; then
+    t_pass "TP-SRM-37 hyphen file still exists"
+else
+    t_fail "TP-SRM-37 hyphen file was removed"
+fi
+out=$(cd "$SCRATCH" && sh "$SAFE_RM" rm --dry-run -rf 2>"$err")
+ec=$?
+assert_eq "TP-SRM-37 bare -rf is a switch" 1 "$ec"
+assert_contains "TP-SRM-37 bare -rf no path" "$(cat "$err")" "No path was given"
+if [ -f "$SCRATCH/-rf" ]; then
+    t_pass "TP-SRM-37 bare -rf left the file"
+else
+    t_fail "TP-SRM-37 bare -rf removed the file"
+fi
+help=$(sh "$SAFE_RM" help 2>/dev/null)
+assert_contains "TP-SRM-37 help names --" "$help" "A name that starts with - is a path after --"
+assert_contains "TP-SRM-37 help names dot" "$help" "'.' and '..' are refused"
 
 # TP-SRM-20 another account home from /etc/passwd is refused
 other=$(awk -F: -v h="$HOME" '$1 !~ /^#/ && $6 ~ /^\// && $6 != "/" && $6 != h { print $6; exit }' /etc/passwd)

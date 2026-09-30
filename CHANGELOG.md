@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.13] - 2026-09-30
+
+### Added
+
+- The README states the purpose in plain language: what the guard refuses, what a named folder inside a login home may still lose, where setup is the right tool, and where a package-managed host or a trash bin is a better fit. A comparison table covers an absolute `/bin/rm` inside `/bin/sh -c`, extra runtimes, systems, undo, and the effect on the packaged `rm`
+
+### Fixed
+
+- An operand whose final component is `.` or `..` is refused when that directory would otherwise be allowed. `rm -rf .` and `rm -rf ..` no longer pass the check and then depend on the remover. Naming the directory still removes it. `$HOME/.` stays the login-home refusal. A `..` in the middle of a path, as in `leaf/../leaf`, stays the resolved directory
+- Account-home matching uses `grep -Fxq` for an exact line. If `grep` is missing or errors, the same list is read in the shell, so a missing `grep` does not allow an account home
+
+## [1.0.12] - 2026-09-30
+
+### Fixed
+
+- The remove check's scratch directory `safe-rm-work.*` is mode `0700`. `mktemp -d` applies the process umask, so a mask that strips the owner execute bit (such as `0177` on Termux) left that directory `drw-------`. The check could not write its path list, and the directory stayed behind under the cache folder, including `${HOME}/.cache/cache-safe-rm-$$`
+
 ## [1.0.11] - 2026-09-29
 
 ### Added

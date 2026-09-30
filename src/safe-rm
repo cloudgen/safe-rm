@@ -50,8 +50,8 @@ APP_NAME="safe-rm"
 : "${SHORT_DESCRIPTION:=${APP_DESC}}"
 : "${DESCRIPTION:=POSIX /bin/sh program you install for yourself. It keeps self-install and self-update, and it refuses to remove the login home itself, every account home in /etc/passwd, /home, another login's folder under /home, /usr/bin, or other system directories. A named folder inside the login home, such as a cache directory, may be removed. --dry-run reports whether a path exists and whether removal is allowed, and removes nothing.}"
 # Product version SSOT (semver). Extractors use: grep '^VERSION="'
-VERSION="1.0.11"
-: "${VERSION:=1.0.11}"
+VERSION="1.0.13"
+: "${VERSION:=1.0.13}"
 
 # Runtime flags (safe defaults)
 : "${QUIET:=0}"
@@ -2670,7 +2670,9 @@ util_cache_try_dir() {
             ;;
     esac
     mkdir -m 0700 -p "${_cdir}" 2>/dev/null || mkdir -p "${_cdir}" 2>/dev/null || return 1
-    [ -d "${_cdir}" ] && [ -w "${_cdir}" ] || return 1
+    # mkdir applies umask. A mask that includes the owner execute bit leaves 0600.
+    chmod 0700 "${_cdir}" 2>/dev/null || return 1
+    [ -d "${_cdir}" ] && [ -w "${_cdir}" ] && [ -x "${_cdir}" ] || return 1
     return 0
 }
 
@@ -3219,6 +3221,8 @@ app_help() {
     out_info "Remove guard:"
     out_plain "  rm                   Check each path. Remove only when every path is allowed"
     out_plain "  rm -rf <path>        When this program is the rm people type, the same switches as origin-rm, including -rf"
+    out_plain "  rm -- -file          A name that starts with - is a path after --. ./-file is that same path"
+    out_plain "  rm -rf .             '.' and '..' are refused. Name the folder itself"
     out_plain "  rm --dry-run         Remove nothing. Say whether each path exists and whether it may be removed"
     out_plain "  --dry-run            Same switch, before or after rm"
     out_plain "                       A refused path stops the command. Do not retry with rm, /bin/rm, or /usr/bin/rm"
@@ -3283,6 +3287,15 @@ app_help() {
 # A refused path must stop the whole command before any removal
 # =============================================================================
 
+# Mode 0700. chmod does not apply umask. mktemp -d does, so umask 0177
+# leaves a directory at 0600. That directory cannot be searched.
+srm_dir_mode_0700() {
+    _dmode=${1-}
+    [ -n "$_dmode" ] || return 1
+    chmod 0700 "$_dmode" 2>/dev/null || return 1
+    [ -d "$_dmode" ] && [ -x "$_dmode" ] && [ -w "$_dmode" ]
+}
+
 srm_cleanup_work() {
     _w=${SRM_WORK-}
     [ -n "$_w" ] || return 0
@@ -3318,6 +3331,8 @@ srm_cleanup_work() {
             ;;
     esac
     if [ "$_ok" -eq 1 ]; then
+        # 0600 cannot be searched, so the remover cannot remove it.
+        srm_dir_mode_0700 "$_w" || true
         # The remover, not /bin/rm. After setup /bin/rm is this guard.
         if [ -x /usr/bin/origin-rm ]; then
             /usr/bin/origin-rm -rf -- "$_w" 2>/dev/null || true
@@ -3457,6 +3472,9 @@ srm_msg_refuse() {
         DENY-ROOT|DENY-HOST)
             printf '%s\n' "Refusing to remove ${_path}. That path is a system directory. Removing it can make the machine unusable. STOP. Do not retry with rm, /bin/rm, or /usr/bin/rm. Next: stop."
             ;;
+        DENY-DOT)
+            printf '%s\n' "Refusing to remove ${_path}. That path is '.' or '..'. Removing it deletes the current directory or its parent. STOP. Do not retry with rm, /bin/rm, or /usr/bin/rm. Next: name the folder itself, for example ${APP_NAME} rm --dry-run <folder>."
+            ;;
         DENY-EMPTY)
             printf '%s\n' "Refusing to remove an empty path. Name a real folder. Nothing was removed. Next: ${APP_NAME} rm --dry-run <path>."
             ;;
@@ -3560,15 +3578,51 @@ srm_load_account_homes() {
 }
 
 # Return 0 when the resolved path is an account home loaded by srm_load_account_homes.
+# grep -Fxq matches one whole line. A grep error falls back to the read loop
+# so a missing grep does not treat every home as allowed.
 srm_is_account_home() {
     _apath=${1-}
     _alist=${SRM_WORK-}/homes
     [ -n "$_apath" ] || return 1
     [ -f "$_alist" ] || return 1
+    if command -v grep >/dev/null 2>&1; then
+        grep -Fxq -- "$_apath" "$_alist"
+        _grc=$?
+        if [ "$_grc" -eq 0 ]; then
+            unset _apath _alist _grc
+            return 0
+        fi
+        if [ "$_grc" -eq 1 ]; then
+            unset _apath _alist _grc
+            return 1
+        fi
+    fi
     while IFS= read -r _aline; do
         [ -n "$_aline" ] || continue
         [ "$_apath" = "$_aline" ] && return 0
     done < "$_alist"
+    unset _apath _alist _aline _grc
+    return 1
+}
+
+# Return 0 when the operand's final component is '.' or '..'.
+# Trailing slashes do not count. A '..' earlier in the path does not count.
+srm_operand_is_dot() {
+    _dot=${1-}
+    while [ -n "$_dot" ] && [ "$_dot" != / ]; do
+        case "$_dot" in
+            */) _dot=${_dot%/} ;;
+            *) break ;;
+        esac
+    done
+    _dot=${_dot##*/}
+    case "$_dot" in
+        .|..)
+            unset _dot
+            return 0
+            ;;
+    esac
+    unset _dot
     return 1
 }
 
@@ -3727,6 +3781,11 @@ srm_classify() {
                     ;;
             esac
         fi
+    fi
+    # '.' and '..' stay refused when the directory itself would be allowed.
+    # A stronger class keeps its own sentence. A '..' in the middle does not.
+    if [ "$SRM_CLASS" = ALLOW ] && srm_operand_is_dot "$SRM_RAW"; then
+        SRM_CLASS=DENY-DOT
     fi
 
     if [ "$SRM_CLASS" = ALLOW ]; then
@@ -4839,10 +4898,15 @@ srm_cmd_rm() {
     : "${JSON:=0}"
     : "${APP_NAME:=safe-rm}"
 
-    SRM_WORK=$(mktemp -d "${TMPDIR:-/tmp}/safe-rm-work.XXXXXX") || {
+    # umask 077 keeps owner execute. chmod still corrects a mktemp that
+    # created the directory at 0600.
+    SRM_WORK=$(umask 077; mktemp -d "${TMPDIR:-/tmp}/safe-rm-work.XXXXXX") || {
         out_die "Could not create a scratch directory for the remove check. Nothing was removed. Next: check that the temp directory is writable."
     }
     trap 'srm_cleanup_work' EXIT INT HUP TERM
+    if ! srm_dir_mode_0700 "$SRM_WORK"; then
+        out_die "Could not open the scratch directory for the remove check. Nothing was removed. Next: check that the temp directory is writable."
+    fi
     : > "${SRM_WORK}/flags"
     srm_load_account_homes "${SRM_WORK}/homes"
 

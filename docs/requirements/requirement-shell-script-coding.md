@@ -85,7 +85,7 @@ It owns **how** the single-file ship unit `./src/safe-rm` is written: shebang, q
 | **Primary dialect** | POSIX `/bin/sh` (dash / bash-as-sh / BusyBox ash intended) |
 | **Inherited non-POSIX** | Existing `local` in some helpers is **bootstrap inheritance** — **MUST NOT** mass-rewrite; **SHOULD NOT** add new `local` when a POSIX assignment works |
 | **`set -u`** | Present at script top with documented defaults (`HOME`, privilege, storage) |
-| **In-tool sudo** | Ship unit `1.0.11` has one Linux measure-2 re-exec (`${SRM_SUDO:-sudo}` in §2.0.5 of the domain requirement). No `util_sudo`, no password reader, no sudoers file |
+| **In-tool sudo** | Ship unit `1.0.12` has one Linux measure-2 re-exec (`${SRM_SUDO:-sudo}` in §2.0.5 of the domain requirement). No `util_sudo`, no password reader, no sudoers file |
 | **Domain prefix** | `srm_` for the guard (`requirement-domain-safe-rm.md`). Specializee anchors `DOMAIN_*` stay for a later product |
 | **Coding-style owner** | **this file** |
 | **Peer pointers** | modular-function-design (prefixes); output-requirements (`out_*`); interactive (TTY / `prompt_*`); cli-storage (scratch root) |
@@ -172,6 +172,6 @@ On detect of that class:
 
 ---
 
-**Last Updated**: 2026-09-29 (1.0.1 — ship unit `1.0.11` has the one Linux measure-2 re-exec; other hosts do not call it)
+**Last Updated**: 2026-09-30 (1.0.1 — ship unit `1.0.12` has the one Linux measure-2 re-exec; other hosts do not call it)
 **Owner**: safe-rm project maintainers
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 4, 20, 21 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

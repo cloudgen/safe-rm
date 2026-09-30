@@ -1,6 +1,6 @@
 **file**: docs/requirements/requirement-domain-safe-rm.md
 **id**: RQ-DOMAIN-SAFE-RM
-**Status**: Active (Version 1.2.11)
+**Status**: Active (Version 1.2.14)
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -161,7 +161,7 @@ Save `origin-rm` before any system path named `rm` is replaced:
 
 On the reported Mac, `PATH` lists `${HOME}/.local/bin`, then the pyenv shims, then `/opt/homebrew/bin`, then `/bin`, then `/usr/local/bin`. The home guard has to be `${HOME}/.local/bin/rm` because that directory is ahead of `/bin`. A guard placed only in `/usr/local/bin` is behind `/bin` on that `PATH` and is not the `rm` the shell runs. Setup **MUST NOT** write the guard into the pyenv shims directory or into `/opt/homebrew/bin`.
 
-Measure 1 then runs **path-ensure** and **profile-ensure** in `requirement-shell-cli-self-install.md` §2.7, so later shells find `${HOME}/.local/bin` before `/bin`. Path-ensure writes that line on `.bashrc` and, for zsh, on `.zshenv`. Profile-ensure creates a missing `.profile` that sources `.bashrc` and does not put the PATH line in `.profile`. The measure-2 child does not run either edit.
+Measure 1 then runs **path-ensure** and **profile-ensure** in `requirement-shell-cli-self-install.md` §2.7. When this process `PATH` has `/bin` before `/usr/local/bin`, the block later shells source is `${HOME}/.local/bin` first and `/usr/local/bin` next, so `/usr/local/bin` is ahead of `/usr/bin` and `/bin`. The home guard stays `${HOME}/.local/bin/rm`. Setup does not install that guard as `/usr/local/bin/rm`. The block is written on `.bashrc`, `.zshrc`, `.zshenv`, `.profile`, and Fish. Profile-ensure creates a missing `.profile` that sources `.bashrc`. The PATH line stays outside that sample. The measure-2 child does not run either edit. Ship unit `1.0.12` still writes only the user-bin line on `.bashrc`, `.zshenv`, and Fish.
 
 #### Measure 2 — system `rm`
 
@@ -201,11 +201,13 @@ Shell startup lines stay until uninstall. Uninstall removes them only when `${HO
 
 #### Proof
 
-`TP-SRM-33` is measure 1 with `HOME` inside `/tmp/safe-rm-swap.*`. Profile-ensure creates a missing `.profile` that sources `.bashrc` and does not write the PATH line there. An existing `.profile` body, including a marker, stays. Path-ensure writes the user-bin line in `.bashrc` once. A second run does not append that line again. The fixture is not executed. `sudo` is not called.
+`TP-SRM-33` is measure 1 with `HOME` inside `/tmp/safe-rm-swap.*`, as ship unit `1.0.11` implements it. Profile-ensure creates a missing `.profile` that sources `.bashrc` and leaves an existing body. Path-ensure writes the one-directory user-bin line in `.bashrc` once. A second run does not append that line again. The fixture is not executed. `sudo` is not called.
+
+`TP-SRM-35` is the §2.7 PATH block from self-install `1.2.1`. `HOME` is inside `/tmp/safe-rm-swap.*`. When `PATH` has `/bin` before `/usr/local/bin`, `.bashrc`, `.zshrc`, `.zshenv`, and `.profile` each gain `export PATH="${HOME}/.local/bin:/usr/local/bin:$PATH"` once. Fish gains `set -gx PATH ${HOME}/.local/bin /usr/local/bin $PATH` once. `${HOME}/.local/bin` stays ahead of `/usr/local/bin`, and that `/usr/local/bin` is ahead of `/usr/bin`. When `/usr/local/bin` is already ahead of `/bin`, the block is only the user-bin line. An existing `.profile` body, including a marker, stays, and the profile-ensure sample does not contain the PATH line. A second run does not append again. The fixture is not executed. `sudo` is not called. Status: **TODO**. Ship unit `1.0.12` does not implement this proof.
 
 `TP-SRM-34` is measure 2 under `/tmp/safe-rm-swap.*` with a sudo stand-in. The test does not run the real `sudo` and does not write the host `/bin` or `/usr/bin`. On the Linux stand-in, measure 1 finishes and the stand-in is then invoked for measure 2 only. On the Darwin stand-in, the stand-in is not invoked and the fixture that stands for `/bin/rm` stays. A BusyBox symlink is not renamed. Nothing in the fixture is executed.
 
-Ship unit `1.0.11` implements this section. §2.6 records that.
+Ship unit `1.0.11` implements the two-layer swap in this section. Ship unit `1.0.12` keeps that swap and sets the remove-check scratch directory to mode `0700` (`TP-SRM-36`). §2.6 records that the §2.7 PATH block added in `1.2.12` is not in that ship unit yet.
 
 ### 2.1 Specialized CLI subcommands
 
@@ -265,6 +267,7 @@ Resolve the path first (physical directory, symlink target when the path exists;
 
 | Class | Match | Result |
 |-------|--------|--------|
+| `DENY-DOT` | The operand's final component, after trailing slashes are removed, is `.` or `..`, and every earlier class would allow the resolved directory | Refuse |
 | `DENY-EMPTY` | Empty operand | Refuse |
 | `DENY-STDIN` | Operand is exactly `-` | Refuse |
 | `DENY-LOGIN-HOME` | Operand text is exactly `$HOME`, `${HOME}`, or `~`; or the resolved path is the login home directory itself | Refuse |
@@ -277,6 +280,8 @@ Resolve the path first (physical directory, symlink target when the path exists;
 | `DENY-UNRESOLVED` | The path cannot be resolved | Refuse |
 | `ALLOW` | Anything else | May be removed when `--dry-run` is off |
 
+An operand whose final component is `.` or `..` is refused when the resolved directory would otherwise be allowed. Trailing slashes do not change that component, so `./` and `../` are the same refusal. A `..` earlier in the path is not this class: `leaf/../leaf` is the resolved directory `leaf`. When `.` or `..` resolves to a stronger class, that class stays. `$HOME/.` stays the login home. `/etc/..` stays `/`. Naming the directory, as in `rm -rf /tmp/my-folder`, is how that directory is removed. Proof: `TP-SRM-37`.
+
 `rm -rf` of any account home directory is refused, because that path is the whole home. A named folder strictly inside any account home is allowed, including a cache directory. That folder does not, by itself, mean the home is being wiped. The text `$HOME/...`, `${HOME}/...`, and `~/...` is expanded and then classified, so a suffix is a folder inside that home. `/etc/passwd` stores every account's home in the sixth field. Each of those directories, and only the directory itself, is refused. `/home` itself stays refused because it is the parent of the homes. A path strictly inside another account's home is allowed. The reviewed blacklist still refuses `/`, `/usr/bin` and anything inside it, and the named system directories below. On Termux that same blacklist is the §2.0.4 table. `$PREFIX/var` is refused. A folder inside `$PREFIX/var` is allowed. `$PREFIX/share` is allowed.
 
 #### Dry-run report
@@ -286,6 +291,12 @@ For each path, human mode says:
 - allowed and present: the path exists, the kind (`dir`, `file`, `link`, or `other`), removal is allowed, and nothing was removed
 - allowed and absent: the path does not exist, removal would be allowed if it existed, and nothing was removed
 - refused: `Refusing to remove <path>`, what that path is, `STOP`, `Do not retry with rm, /bin/rm, or /usr/bin/rm`, and a next step
+
+#### Remove-check scratch directory
+
+The remove check writes its switch list and path list in a directory named `safe-rm-work.` plus an `mktemp` suffix, under the cache root (`TMPDIR`). `mktemp -d` creates that directory as mode `0700` minus the process umask. A umask that includes the owner execute bit, such as `0177`, leaves mode `0600` (`drw-------`). A directory at `0600` cannot be searched, so the check cannot write the path list, and removing the directory fails, which leaves it behind. On Termux the cache root is often `${HOME}/.cache/cache-${APP_NAME}-$$`, because `/dev/shm` and `/tmp` are not usable. The same `0600` directory appears there.
+
+After `mktemp -d`, the program **MUST** set that directory to mode `0700` before it writes any file in it. `chmod 0700` does not apply umask. Cleanup **MUST** set mode `0700` again before it removes the directory, so a directory left at `0600` is still removed. Proof: `TP-SRM-36`.
 
 #### Machine contract
 
@@ -333,6 +344,8 @@ When `--dry-run` is off and every path is allowed, exec the remover from §2.0.5
 |-----|------------------------|
 | `rm` | Check each path. Remove only when every path is allowed |
 | `rm -rf` | When this program is the `rm` people type, the same switches as `origin-rm`, including `-rf` |
+| `rm -- -file` | A name that starts with `-` is a path after `--`. `./-file` is that same path |
+| `rm -rf .` | `'.' and '..' are refused. Name the folder itself` |
 | `rm --dry-run` | Remove nothing. Say whether each path exists and whether it may be removed |
 | `--dry-run` | The same switch may appear before or after `rm` |
 | `restore` | Put `origin-rm` back as `rm` |
@@ -381,13 +394,16 @@ JSON `about` includes `"remove_guard":"on"` and `"dry_run_switch":"--dry-run"`.
 | `TP-SRM-30` | Termux layout only. `SRM_TERMUX_PREFIX` is `/tmp/safe-rm-swap.*` and stands in for `/data/data/com.termux/files/usr`. Setup moves `$PREFIX/bin/rm` to `$PREFIX/bin/origin-rm` and points `rm` at `safe-rm`. A symlink to `toybox` or `coreutils` is not renamed; `origin-rm` runs that program's `rm`, and `restore` puts the symlink back. An empty `bin` moves nothing and does not say an admin login is required. A prefix outside `/tmp/safe-rm-swap.*` moves nothing. `/usr/bin/rm` stays. Nothing in the fixture is executed |
 | `TP-SRM-31` | Termux blacklist only. `SRM_TERMUX_PREFIX` is `/tmp/safe-rm-swap.*`. Dry-run refuses `$PREFIX`, `$PREFIX/bin` and a name inside it, and the exact directories `$PREFIX/etc`, `$PREFIX/var`, `$PREFIX/lib`, `$PREFIX/lib64`, `$PREFIX/opt`, `$PREFIX/sbin`, and `$PREFIX/boot`. Each of those paths remains. Dry-run allows `$PREFIX/share`, `$PREFIX/include`, `$PREFIX/tmp`, `$PREFIX/libexec`, `$PREFIX/var/log`, and a name inside `$PREFIX/sbin`. Those paths remain. The command named `rm` with `rm -rf $PREFIX/var --dry-run` refuses and the directory remains. Without that test variable, the scratch `$PREFIX/var` is allowed and `/var` is still refused. Nothing in the fixture is executed |
 | `TP-SRM-32` | Layout only, under `/tmp/safe-rm-swap.*`, with `HOME` set inside that test file and not by `tests/run_dry_run.sh`. `self-install` runs setup: a regular `rm` moves to `origin-rm` and `rm` points at the placed file. A second `self-install` replaces a stub guard and does not move `origin-rm`. An already-current `self-update` does the same with the placed file, not an older `$0`. A newer `self-update` copies that newer file onto the guard. On Termux, `self-install` runs the `$PREFIX/bin` setup and leaves `/usr/bin/rm` in place. Nothing in the fixture is executed |
-| `TP-SRM-33` | §2.0.5 measure 1. `HOME` is inside `/tmp/safe-rm-swap.*`. Profile-ensure creates a missing `.profile` that sources `.bashrc` and leaves an existing body. Path-ensure names `${HOME}/.local/bin` once in `.bashrc`, not in `.profile`. A second run does not append again. `sudo` is not called. Nothing is executed |
+| `TP-SRM-33` | §2.0.5 measure 1 as ship unit `1.0.11`. `HOME` is inside `/tmp/safe-rm-swap.*`. Profile-ensure creates a missing `.profile` that sources `.bashrc` and leaves an existing body. Path-ensure names `${HOME}/.local/bin` once in `.bashrc`. A second run does not append again. `sudo` is not called. Nothing is executed |
+| `TP-SRM-35` | §2.7 PATH block (self-install `1.2.1`). When `PATH` has `/bin` before `/usr/local/bin`, `export PATH="${HOME}/.local/bin:/usr/local/bin:$PATH"` is written once on `.bashrc`, `.zshrc`, `.zshenv`, and `.profile`. Fish gets `set -gx PATH ${HOME}/.local/bin /usr/local/bin $PATH` once. `${HOME}/.local/bin` stays first. `/usr/local/bin` stays ahead of `/usr/bin`. An existing `.profile` body stays. A second run does not append again. Nothing is executed. **TODO** in ship unit `1.0.12` |
+| `TP-SRM-36` | Remove-check scratch directory. A `mktemp -d` that returns mode `0600`, and a process umask `0177`, still let a dry-run allow an existing temporary directory. The directory remains. The scratch directory is not left behind. Nothing is executed |
+| `TP-SRM-37` | From an allowed temporary directory, dry-run of `.`, `..`, and `./` is refused and the directory remains. `./file` and `leaf/../leaf` stay allowed and remain. `leaf/..` is refused. One `.` beside an allowed path removes nothing. JSON `class` is `DENY-DOT`. `rm --dry-run -- -rf` treats `-rf` as a path. `rm --dry-run -rf` with no `--` gives no path. Nothing is executed |
 | `TP-SRM-34` | §2.0.5 measure 2 under `/tmp/safe-rm-swap.*` with a sudo stand-in. The real `sudo` is not run and the host `/bin` and `/usr/bin` are not written. Linux: measure 1 finishes, then the stand-in runs measure 2 only. Darwin: the stand-in is not called and the fixture `/bin/rm` stays. A BusyBox symlink is not renamed. Nothing is executed |
 | `TP-SRM-28` | `help` says a local `install` copies this file into `/usr/local/bin/` or `${HOME}/.local/bin/` and does not download |
 | `TP-SRM-18` | `about` includes `Remove guard:` |
 | `TP-SRM-19` | `--quiet` still prints the refusal |
 
-Runner: `tests/run_dry_run.sh`. Its swap block points `HOME` at `/tmp/safe-rm-place.*` and restores the login `HOME` before later checks. `TP-SRM-32` runs in `tests/test_place_setup.sh`. `TP-SRM-33` and `TP-SRM-34` run in `tests/test_two_layer.sh`. Each of those files sets `HOME` only inside that file.
+Runner: `tests/run_dry_run.sh`. Its swap block points `HOME` at `/tmp/safe-rm-place.*` and restores the login `HOME` before later checks. `TP-SRM-32` runs in `tests/test_place_setup.sh`. `TP-SRM-33` and `TP-SRM-34` run in `tests/test_two_layer.sh`. `TP-SRM-35` is TODO and is not in the suite yet. Each of those files sets `HOME` only inside that file.
 
 ### 2.6 Implementation Notes (this project)
 
@@ -396,12 +412,12 @@ Runner: `tests/run_dry_run.sh`. Its swap block points `HOME` at `/tmp/safe-rm-pl
 | Product | `safe-rm` |
 | Ship unit | `src/safe-rm` |
 | Companion | `src/safe-rm.sha256` |
-| Version | `1.0.11` |
+| Version | `1.0.13` |
 | Prefix | `srm_` |
 | Type 0 lifecycle | Kept in full (self-install, self-update, self-uninstall, version, about, help, numbered menu, `out_*`). The 2023 setup is kept as well: `origin-rm`, `rm` → this program, `restore` |
 | Channel default | `REPO_USER=cloudgen`, `REPO_NAME=safe-rm`, `SCRIPT_RELPATH=src/safe-rm` |
 | Dispatcher anchors | Basename `rm` routes to `srm_cmd_rm` before the menu. `safe-rm rm` is the same remove. `--dry-run` is not forwarded |
-| Honesty | **Implemented** in ship unit `1.0.11`. Measure 1 writes `${HOME}/.local/bin` as this login, then measure 2. Linux measure 2 re-execs this program through `sudo` when the invoker is not root (`SRM_SUDO` in tests; the default is `sudo`). macOS, Termux, Git Bash, and Windows cmd do not call `sudo`. macOS does not move `/bin/rm`. The saved original is named `origin-rm`. Profile-ensure creates a missing `.profile` that sources `.bashrc`. Path-ensure writes the user-bin line on `.bashrc`, `.zshenv`, and Fish. Termux `$PREFIX/bin` still has no `sudo`. Tests pass `SRM_SWAP_ROOT=/tmp/safe-rm-swap.*` or `SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*` so they never touch the host `/usr/bin` or `/bin`. Dry-run never execs the remover. `TP-SRM-33` and `TP-SRM-34` are in `tests/test_two_layer.sh` |
+| Honesty | The two-layer setup is **implemented** in ship unit `1.0.11`. Measure 1 writes `${HOME}/.local/bin` as this login, then measure 2. Linux measure 2 re-execs this program through `sudo` when the invoker is not root (`SRM_SUDO` in tests; the default is `sudo`). macOS, Termux, Git Bash, and Windows cmd do not call `sudo`. macOS does not move `/bin/rm`. The saved original is named `origin-rm`. Profile-ensure creates a missing `.profile` that sources `.bashrc`. Ship unit `1.0.12` writes the one-directory user-bin line on `.bashrc`, `.zshenv`, and Fish. The §2.7 block that puts `/usr/local/bin` next, on `.zshrc` and `.profile` as well, is **not implemented** yet (`TP-SRM-35` TODO). Termux `$PREFIX/bin` still has no `sudo`. Tests pass `SRM_SWAP_ROOT=/tmp/safe-rm-swap.*` or `SRM_TERMUX_PREFIX=/tmp/safe-rm-swap.*` so they never touch the host `/usr/bin` or `/bin`. Dry-run never execs the remover. `TP-SRM-33` and `TP-SRM-34` are in `tests/test_two_layer.sh`. Ship unit `1.0.12` sets the remove-check scratch directory to mode `0700` after `mktemp -d` (`TP-SRM-36`). Ship unit `1.0.13` refuses an operand whose final component is `.` or `..` when that resolved directory would otherwise be allowed (`TP-SRM-37`). Account-home lookup uses `grep -Fxq` and falls back to a read loop when `grep` fails |
 
 ---
 
@@ -425,7 +441,7 @@ Runner: `tests/run_dry_run.sh`. Its swap block points `HOME` at `/tmp/safe-rm-pl
 5. Add a test that invokes `rm` without `--dry-run`.
 6. Print the refusal with `echo` or `printf` instead of `out_*`.
 7. Allow an account home directory itself, including the login home.
-8. Refuse a named folder strictly inside an account home, such as a cache directory, unless that folder is itself an account home.
+8. Refuse a named folder strictly inside an account home, such as a cache directory, unless that folder is itself an account home. An operand whose final component is `.` or `..` is not that named folder.
 9. Exec `/usr/bin/rm`, `/bin/rm`, `$PREFIX/bin/rm`, or `${HOME}/.local/bin/rm` for the real delete. The real delete execs the remover in §2.0.5. On macOS the guard itself execs `/bin/rm`.
 10. Reject a remover switch, including a clustered short switch such as `-rf`, with `safe-rm help` or `Unknown command`.
 11. Require a second `rm` verb when the command name is already `rm`.
@@ -438,6 +454,7 @@ Runner: `tests/run_dry_run.sh`. Its swap block points `HOME` at `/tmp/safe-rm-pl
 18. Skip measure 1 and swap only the system `rm`, or run measure 2 on macOS.
 19. Call `sudo` for measure 1, or call `sudo` on macOS, Termux, Git Bash, or Windows cmd. Let the measure-2 child call `sudo` again.
 20. Save the original under a second name `rm-original`, or make the Linux home `origin-rm` a script that execs `/bin/rm` or `/usr/bin/rm` after those paths are the guard.
+21. Allow an operand whose final component is `.` or `..` when the resolved directory would otherwise be allowed. The operator names the directory.
 
 **Violating this rule is a critical remove-guard regression.**
 
@@ -489,8 +506,11 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 | 2026-09-28 | 1.2.8: a finished `self-install` or `self-update` runs setup when this login may. The guard bytes are the placed file. A non-root Linux place does not run setup. |
 | 2026-09-29 | 1.2.9: §2.0.5. Two layers. Measure 1 is `${HOME}/.local/bin` as this login, with the original saved as `origin-rm`. Measure 2, except on macOS, moves `/usr/bin/rm` and `/bin/rm` to `origin-rm` and points `rm` at this program. On Linux that measure re-execs this program through `sudo` when the invoker is not root. macOS, Termux, Git Bash, and Windows cmd do not call `sudo`. macOS does not move `/bin/rm`. Ship unit `1.0.10` does not implement this section yet. |
 | 2026-09-29 | 1.2.10: Measure 1 names **profile-ensure** and **path-ensure** (`requirement-shell-cli-self-install.md` §2.7). A missing `.profile` sources `.bashrc` and is not given the PATH line. That line stays on `.bashrc` and `.zshenv`. |
-| 2026-09-29 | 1.2.11: Ship unit `1.0.11` implements §2.0.5 and §2.7. `TP-SRM-33` and `TP-SRM-34` are in the suite. |
+| 2026-09-29 | 1.2.11: Ship unit `1.0.11` implements §2.0.5 and §2.7 as of that date. `TP-SRM-33` and `TP-SRM-34` are in the suite. |
+| 2026-09-29 | 1.2.12: When `/bin` is ahead of `/usr/local/bin`, path-ensure writes `${HOME}/.local/bin` then `/usr/local/bin` on `.bashrc`, `.zshrc`, `.zshenv`, `.profile`, and Fish. `/usr/local/bin` is then ahead of `/usr/bin`. Ship unit `1.0.11` does not implement this block yet. `TP-SRM-35` is TODO. |
+| 2026-09-30 | 1.2.13: The remove-check scratch directory is mode `0700` after `mktemp -d`. A umask that strips the owner execute bit, or a `mktemp` that returns `0600`, must not leave `safe-rm-work.*` unsearchable. Cleanup sets `0700` before it removes that directory. `TP-SRM-36`. Ship unit `1.0.12`. |
+| 2026-09-30 | 1.2.14: `DENY-DOT`. An operand whose final component is `.` or `..` is refused when the resolved directory would otherwise be allowed. A stronger class stays. A `..` in the middle is not this class. `TP-SRM-37`. Ship unit `1.0.13`. |
 
-**Last Updated**: 2026-09-29
+**Last Updated**: 2026-09-30
 **Owner**: safe-rm project maintainers
 **Alignment**: Registry `docs/requirements/index.md`; CIAO (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

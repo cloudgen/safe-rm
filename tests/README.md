@@ -35,6 +35,7 @@ Requires: `sh`, `curl`, `python3` (local HTTP channel), `sha256sum`, `grep`.
 | `TP-SRM-14` .. `TP-SRM-19` | JSON, missing operand, unknown command, about, quiet |
 | `TP-SRM-21` .. `TP-SRM-26` | The command named `rm` accepts origin-rm switches, including `-rf`. A later setup replaces a stale guard and does not move `origin-rm` again |
 | `TP-SRM-27` | Each lifecycle verb is also `--` plus that name. On the command named `rm`, `rm --version` prints this program's version. A bare word such as `version` is a path, so a link with that name is a dry-run remove and stays in place |
+| `TP-SRM-37` | `.`, `..`, and `./` from an allowed directory are refused and remain. `./file` and a `..` in the middle stay allowed. `rm -- -rf` is a path. Nothing is executed |
 | `TP-CLI-EMPTY-01`, `TP-CLI-17`, `TP-CLI-19`, `TP-CLI-21`, `TP-CLI-22`, `TP-CLI-SRM-01`, `TP-CLI-SRM-02` | Main menu, including `safe-rm --debug` and the folder list under **11**. No install. No real remove |
 | `TP-SRM-SWAP-01` | Before/after swap inside `/tmp/safe-rm-swap.*` only. The fixture `rm` is never executed. Non-admin setup leaves `/usr/bin/rm` unchanged |
 | `TP-SRM-29` | An empty first fixture directory does not stop setup. The second directory's regular `rm` is moved. A BusyBox symlink is not renamed; `origin-rm` runs `busybox rm`. Neither fixture is executed |
@@ -42,6 +43,7 @@ Requires: `sh`, `curl`, `python3` (local HTTP channel), `sha256sum`, `grep`.
 | `TP-SRM-31` | Termux blacklist inside `/tmp/safe-rm-swap.*`. `$PREFIX/var` and the other prefix system directories are refused and remain. A folder inside `$PREFIX/var`, and `$PREFIX/share`, stay allowed. `rm -rf $PREFIX/var --dry-run` refuses. The fixture is never executed |
 | `TP-SRM-32` | `self-install` and `self-update` run setup inside `/tmp/safe-rm-swap.*`. The guard is the placed file. A non-root place without that fixture does not ask for an admin login. The fixture is never executed. `tests/test_place_setup.sh` |
 | `TP-SRM-33` | Measure 1 under a scratch `HOME`. A missing `.profile` sources `.bashrc` and keeps an existing body. The PATH line is once in `.bashrc`. `sudo` is not called. `tests/test_two_layer.sh` |
+| `TP-SRM-35` | TODO. When `/bin` is ahead of `/usr/local/bin`, the PATH line is `${HOME}/.local/bin` then `/usr/local/bin` once on `.bashrc`, `.zshrc`, `.zshenv`, `.profile`, and Fish. An existing `.profile` body stays. Not in the suite yet |
 | `TP-SRM-34` | Linux calls a sudo stand-in for measure 2 only. Darwin does not. A BusyBox symlink is not renamed. No real `sudo`. `tests/test_two_layer.sh` |
 | `TP-CACHE-01`, `TP-CACHE-02`, `TP-CACHE-03` | Cache folder chains, silent tier miss, persistence `~/.local/safe-rm`, mktemp scratch names. `about` is not a remove. HOME stays this login |
 
