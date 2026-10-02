@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-modular-function-design.md  
-**Status**: Active (Version 1.0.5)  
+**Status**: Active (Version 1.0.6)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -63,7 +63,7 @@ The installable CLI **MUST** remain **one** file so `curl | sh` still works. Thi
 | `out_` | Output system | All user-facing and machine-readable output | `out_text`, `out_info`, `out_success`, `out_json`, `out_die` |
 | `inst_` | Installation & self-management | Self-install, self-update, self-uninstall, install detect | `inst_self_install`, `inst_perform_install`, `inst_self_update`, `inst_is_installed` |
 | `util_` | General utilities | Reusable helpers (backup, path resolve, storage) | `util_backup`, `util_resolve_storage`, `util_get_install_bin_path` |
-| `app_` | General app CLI surface (product-neutral) | Entry, dispatch, about/help/version presentation | `app_main`, `app_about`, `app_help`, `app_version` |
+| `app_` | General app CLI surface (product-neutral) | Entry, dispatch, about/help/version presentation, menu language | `app_main`, `app_about`, `app_help`, `app_version`, `app_lang_load`, `app_lang_save`, `app_menu_text`, `app_cmd_menu_language` |
 | `ver_` | Version comparison | Semantic version handling | `ver_gt`, `ver_check` |
 | `path_` | Shell PATH & environment | PATH manipulation and shell config | `path_add_shell`, `path_add_bashrc`, `path_ensure_profile` |
 | `prompt_` | Interactive prompts | TTY-safe confirmations and questions | `prompt_yes_no`, `prompt_ask` |
@@ -293,6 +293,6 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 
 ---
 
-**Last Updated**: 2026-09-29 (1.0.5 — §2.7 names `.zshrc` and the two-directory PATH block. Ship unit `1.0.12` does not define that write yet)  
+**Last Updated**: 2026-10-02 (1.0.6 — `app_lang_load`, `app_lang_save`, `app_menu_text`, `app_cmd_menu_language`. The menu strings stay in `requirement-shell-cli-language.md`)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 6, 7, 8, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

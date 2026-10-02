@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| **1.0.19** (current) | Yes — the remove check does not read `/etc/passwd` or `getent passwd` onto the refusal list. The login home, `/home`, and a folder under `/home` outside this login stay refused |
+| **1.0.20** (current) | Yes — front row **5** sets the menu language. The leaf is mode `0600` under this login's persistence directory. `SRM_LANG` overrides it for one process and does not write the file |
+| **1.0.19** | Yes — the remove check does not read `/etc/passwd` or `getent passwd` onto the refusal list. The login home, `/home`, and a folder under `/home` outside this login stay refused |
 | **1.0.18** | Yes — `INT`, `HUP`, and `TERM` during a remove leave the process. An empty scratch directory is not treated as an empty path. This process's cache leaf is removed on exit |
 | **1.0.17** | Yes — a finished remove stays quiet. `--verbal` shows `Caller <caller> removed <path>.` `--quiet` still hides that line |
 | **1.0.16** | Yes — the remove check does not require `mktemp`. A missing or failing temp maker uses a mode-`0700` subdirectory of the cache folder. A directory left at `0600` cannot be searched |

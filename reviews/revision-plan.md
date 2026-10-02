@@ -2,7 +2,7 @@
 
 Living backlog. Closed rows below are Type 0 origin work. This product is **safe-rm** (`src/safe-rm`) with domain SSOT `requirement-domain-safe-rm`.  
 **Source reflection:** specialize gitlab-nginx (2026-08-11)  
-**Last update:** 2026-09-06 (SM-REV-06 / TP-JSON-RAW-01 **done**)
+**Last update:** 2026-10-02 (menu language **1.0.20** / requirement-shell-cli-language **1.0.0** **done**)
 
 Status: **done** · **open** · **deferred**
 
@@ -29,6 +29,18 @@ Status: **done** · **open** · **deferred**
 | SM-REV-06 | low | TP-JSON-RAW-01 suite assertion for `out_json` `@key` | **done** (1.2.4) | `tests/test_cli.sh`; closes SM-PLAN-01 |
 | SM-REV-07 | low | Optional GitHub Action template comment for specializees | **deferred** | This repo already has `.github/workflows/ci.yml` |
 | SM-REV-08 | n/a | Domain verbs copied onto the bootstrap snapshot | **rejected** | Would pollute that snapshot; reverse-copy risk. Domain verbs stay on `src/safe-rm` |
+
+---
+
+## Closed in 1.0.20 (menu language)
+
+Coverage review on 2026-10-02: the software-development class gate passes (one Active class requirement). The registry matched disk at 15 Active rows and had no language row. Front row **5** was absent. That gap is closed here. The copy is specialized from the sibling language contract onto this menu. Domain law does not own the strings.
+
+| ID | Item | Status | Evidence |
+|----|------|--------|----------|
+| LANG-01 | Requirement `requirement-shell-cli-language` 1.0.0, registry row, peer pins | **done** | `docs/requirements/index.md` (16 Active rows) |
+| LANG-02 | Front **5**, thirteen codes, leaf `language`, `SRM_LANG` | **done** | `src/safe-rm` `app_lang_load` / `app_cmd_menu_language` |
+| LANG-03 | `TP-CLI-24` under a scratch `HOME`. No real remove | **done** | `tests/run_dry_run.sh` PASS=760 FAIL=0 |
 
 ---
 

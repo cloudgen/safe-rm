@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.20] - 2026-10-02
+
+### Added
+
+- Front row **5** chooses the menu language. The board is rows **51–63** (English, Simplified Chinese, Traditional Chinese, Spanish, Arabic, French, Portuguese, Russian, German, Japanese, Korean, Dutch, Greek). **50** and **64–69** stay unprinted. The choice is one line in `${HOME}/.local/safe-rm/language`, mode `0600`. A missing or unrecognized line stays English and is not rewritten. `SRM_LANG` overrides that file for one process and does not write it. Help headings, the menu sentence, and the human about title and cache labels follow the saved language. Operational `rm` text, JSON about, and `version` stay English
+
 ## [1.0.19] - 2026-09-30
 
 ### Changed

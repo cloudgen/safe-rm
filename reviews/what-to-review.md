@@ -4,7 +4,7 @@
 **Domain SSOT:** `requirement-domain-safe-rm`.  
 **Always load first:** `reviews/lessons.md`
 
-**Last plan update:** 2026-09-28 (product identity safe-rm; selfmanaged-only reports removed)
+**Last plan update:** 2026-10-02 (menu language; 16 Active requirements; front **5**)
 
 ---
 
@@ -12,7 +12,7 @@
 
 | # | Check | Notes |
 |---|--------|--------|
-| P1 | Read `docs/requirements/index.md` (live law only) | **15** Active REQs: class, 13 shell, domain SSOT |
+| P1 | Read `docs/requirements/index.md` (live law only) | **16** Active REQs: class, 14 shell, domain SSOT |
 | P0 | Pre-git SSH profile report if remote git | Active profile + git-capable candidates vs `REPO_USER` |
 | P2 | Confirm ship unit `src/safe-rm` + companion `src/safe-rm.sha256` | Digest match via `tests/run_dry_run.sh` |
 | P3 | Load `reviews/lessons.md` and re-check every open L-* | Mandatory |
@@ -33,9 +33,10 @@
 | Idempotency | `requirement-shell-idempotency.md` | Re-run ensure safety |
 | Interactive modes | `requirement-shell-interactive-vs-noninteractive.md` | TTY vs pipe / quiet / json |
 | Automatic checksum | `requirement-shell-automatic-checksum.md` | Companion primary; CHECKSUM not help/about |
-| CLI storage | `requirement-shell-cli-storage.md` 1.1.0 | Per-login per-process cache folder; persistence `${HOME}/.local/${APP_NAME}`; silent tier miss; about labels |
-| Domain guard | `requirement-domain-safe-rm.md` | Swap, restore, refuse classes, `--dry-run`, command named `rm` |
-| Main menu | `requirement-shell-cli-default-interaction.md` | Front **1** / **8** / **9**; **11** under **1** |
+| CLI storage | `requirement-shell-cli-storage.md` 1.1.3 | Per-login per-process cache folder; persistence `${HOME}/.local/${APP_NAME}`; language leaf; silent tier miss; about labels |
+| Menu language | `requirement-shell-cli-language.md` 1.0.0 | Front **5**; rows **51–63**; leaf `language`; `SRM_LANG`; JSON about stays English |
+| Domain guard | `requirement-domain-safe-rm.md` | Swap, restore, refuse classes, `--dry-run`, command named `rm`. Front **5** is not this file |
+| Main menu | `requirement-shell-cli-default-interaction.md` | Front **1** / **5** / **8** / **9**; **11** under **1** |
 
 ---
 
@@ -76,7 +77,7 @@ Ship unit `src/safe-rm`. Interactive empty argv opens this board. A pipe, quiet,
 |-------|-----------|
 | Interactive empty argv | Numbered menu. No install prompt and no place |
 | Pipe / quiet / json empty argv | Still `inst_self_install` (TP-SI-03) |
-| Front board | Header nametag, **1** remove-guard, **8** self-management, **9** Exit. No lifecycle verb and no `rm` row on this board |
+| Front board | Header nametag, **1** remove-guard, **5** language, **8** self-management, **9** Exit. No lifecycle verb and no `rm` row on this board |
 | Under **8** | **82–87** and **0** Back. **81** not printed |
 | Domain | `rm` on its own front category, not beside **8** |
 | Under **11** | Subfolders of the current path as **1…N**, then **custom-path**, then **0** Back. Files and dotfolders stay off the list |

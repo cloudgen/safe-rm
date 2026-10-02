@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-storage.md  
-**Status**: Active (Version 1.1.2)  
+**Status**: Active (Version 1.1.3)  
 **Area**: shell  
 **Key**: `requirement-shell-cli-storage`  
 **Philosophy**: CIAO **v2.10.2** / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered / Over-protect)
@@ -161,14 +161,15 @@ tmp="${EFFECTIVE_STORAGE_DIR}/${APP_NAME}.$$"
 2. Helper **`util_persistent_storage_dir`** **MUST** print that path. **`util_resolve_persistent_storage`** **MUST** `mkdir -p` it, confirm it is writable, then print it (fail closed).  
 3. **MUST NOT** use `${HOME}/.local/bin` as persistence (that is `USER_BIN`).  
 4. **MUST NOT** store scratch/temps in persistence when a cache root is available.  
-5. Persistence **MUST** be under the invoking login’s `$HOME` (per-user). **MUST** include `${APP_NAME}`. **MUST NOT** add a login suffix or `$$`.
+5. Persistence **MUST** be under the invoking login’s `$HOME` (per-user). **MUST** include `${APP_NAME}`. **MUST NOT** add a login suffix or `$$`.  
+6. The menu-language leaf is `${HOME}/.local/${APP_NAME}/language` (one line, mode **0600**, not in the cache folder). Accepted first-line codes are the thirteen codes in `requirement-shell-cli-language.md`. A missing, empty, or unrecognized first line stays English and is not rewritten. `SRM_LANG`, when it is one of those codes, wins for that process and does not write the file.
 
 ### 2.6 Wire and diagnostics
 
 | Surface | Requirement |
 |---------|-------------|
 | `app_main` | Resolve once early: `EFFECTIVE_STORAGE_DIR=$(util_resolve_storage)`; `PERSISTENT_STORAGE_DIR=$(util_resolve_persistent_storage)`; export `EFFECTIVE_STORAGE_DIR`, `STORAGE_DIR`, `PERSISTENT_STORAGE_DIR`, `TMPDIR` (`TMPDIR` = cache root; `STORAGE_DIR` = 1st fallback path) |
-| `app_about` human | **MUST** print **`Cache folder used:`** then the live directory; **`Cache folder (preferred):`** then this host’s preferred path; **`Cache folder (1st fallback):`** then the 1st fallback; **`Cache folder (2nd fallback):`** only when this host has a 2nd fallback; **`Persistence storage:`** then `${HOME}/.local/${APP_NAME}`. Linux sample below. **MUST NOT** label cache lines **Storage (effective)** or **Storage (fallback)**. **MUST NOT** warn or error when the used directory is a fallback |
+| `app_about` human | In English, **MUST** print **`Cache folder used:`** then the live directory; **`Cache folder (preferred):`** then this host’s preferred path; **`Cache folder (1st fallback):`** then the 1st fallback; **`Cache folder (2nd fallback):`** only when this host has a 2nd fallback; **`Persistence storage:`** then `${HOME}/.local/${APP_NAME}`. Linux sample below. When `APP_LANG` is another accepted code, those labels follow `requirement-shell-cli-language.md`. **MUST NOT** label cache lines **Storage (effective)** or **Storage (fallback)**. **MUST NOT** warn or error when the used directory is a fallback |
 | `app_about` JSON | **MUST** include `cache_used`, `cache_preferred`, `cache_fallback` (1st), `cache_fallback_2` (2nd, empty string when the host has none), `persistence_storage`, and the live chosen cache root as `effective_storage` (same value as `cache_used`; `storage_dir` = 1st fallback). **MUST NOT** include `CHECKSUM` |
 
 `Cache folder used` is the tier that was created. When the preferred tier is the one used, the used line and the preferred line are the same path. When a fallback is used, the used line is that fallback path and the preferred line still shows the preferred path. Neither case prints a warning.
@@ -326,9 +327,10 @@ The suite does not assign `HOME` to a scratch directory. `about` is not a remove
 | 2026-09-27 | Active 1.1.0 | Per-login per-process cache leaves. Linux shm → tmp → `${HOME}/.cache`. Git Bash tmp → AppData Local Temp. Mac tmp → Library/Caches → `${HOME}/cache`. Silent tier miss. Persistence `${HOME}/.local/${APP_NAME}`. `about` prints used / preferred / 1st / 2nd. Ship unit `src/safe-rm` |
 | 2026-09-30 | Active 1.1.1 | `mktemp` is not on every OS. `util_mktemp` checks the maker first. A missing or failing maker writes a mode-`0600` file under the cache folder, not a `$$` name and not a bare `/tmp` dump. A scratch directory is mode `0700` before use. |
 | 2026-09-30 | Active 1.1.2 | The process removes its cache leaf on exit. The leaf stays mode `0700` while the process is alive. Cleanup does not remove `$HOME`, a cache parent, or persistence storage. |
+| 2026-10-02 | Active 1.1.3 | Persistence also holds the menu-language leaf `language` (mode `0600`, thirteen codes). It is not a cache file. |
 
 ---
 
-**Last Updated**: 2026-09-30 (1.1.2 — the process removes its cache leaf on exit)  
+**Last Updated**: 2026-10-02 (1.1.3 — language leaf under persistence)  
 **Owner**: project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; **CIAO** (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

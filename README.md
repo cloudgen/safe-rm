@@ -1,6 +1,6 @@
 # safe-rm - Guarded replacement for the system rm
 
-![Version](https://img.shields.io/badge/Version-1.0.19-blue?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.0.20-blue?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 [![CIAO](https://img.shields.io/badge/Philosophy-CIAO%20v2.10.*-purple.svg)](https://github.com/cloudgen/ciao)
 [![Stars](https://img.shields.io/github/stars/cloudgen/safe-rm?style=flat-square)](https://github.com/cloudgen/safe-rm)
@@ -81,7 +81,7 @@ macOS leaves Apple's `/bin/rm` in place, so the first row is the Linux setup. De
 
 ## Quick Installation
 
-Runtime version: `VERSION="1.0.19"` in `src/safe-rm`.
+Runtime version: `VERSION="1.0.20"` in `src/safe-rm`.
 
 Channel default:
 
@@ -141,17 +141,20 @@ After install, on a terminal:
 
 ```text
 $ safe-rm
-[INFO] **safe-rm**(*1.0.19*) — Guarded rm that refuses login homes and system directories
+[INFO] **safe-rm**(*1.0.20*) — Guarded rm that refuses login homes and system directories
 1. **remove-guard**: *check a path and remove it only when it is allowed*
+5. **language**: *display language for this menu*
 8. **self-management**: *this CLI install, version, update, uninstall*
 9. Exit
 Choice:
 ```
 
+**5** lists rows **51** through **63** (English, 简体中文, 繁體中文, Español, العربية, Français, Português, Русский, Deutsch, 日本語, 한국어, Nederlands, Ελληνικά). The choice is one line in `~/.local/safe-rm/language`. The next run uses that language. `0` goes back and does not write the file.
+
 **1** opens the remove-guard board:
 
 ```text
-[INFO] **safe-rm**(*1.0.19*) — remove-guard
+[INFO] **safe-rm**(*1.0.20*) — remove-guard
 11. **rm**: *check each path and remove only when every path is allowed*
 0. Back
 ```
@@ -159,7 +162,7 @@ Choice:
 **11** lists each immediate subfolder of the current directory, then one number to type a path. The sample below was a temporary directory that held `cache` and `notes`. Your numbers are the folders where you are. That path runs the same guard as `safe-rm rm`.
 
 ```text
-[INFO] **safe-rm**(*1.0.19*) — remove-guard
+[INFO] **safe-rm**(*1.0.20*) — remove-guard
 [INFO] Current path: /tmp/safe-rm-menu-demo
 1. **cache**: */tmp/safe-rm-menu-demo/cache*
 2. **notes**: */tmp/safe-rm-menu-demo/notes*
@@ -170,7 +173,7 @@ Choice:
 **8** opens self-management. **81** is not listed.
 
 ```text
-[INFO] **safe-rm**(*1.0.19*) — self-management
+[INFO] **safe-rm**(*1.0.20*) — self-management
 82. **version**: *show current version*
 83. **about**: *show detailed diagnostics*
 84. **version-check**: *compare local vs remote version*
@@ -285,4 +288,4 @@ MIT. The full text is [LICENSE.md](LICENSE.md).
 
 ## Last Update
 
-2026-09-30 — version 1.0.19 does not read the password database to build the refusal list. The login home, `/home`, and a folder under `/home` outside this login stay refused. A named folder inside the login home stays allowed. Version 1.0.18 stops a remove on `INT`, `HUP`, or `TERM` instead of continuing after the scratch directory is gone, and it removes this process's cache leaf on exit. A finished remove stays quiet unless `--verbal` is set. The line is `Caller <caller> removed <path>.` `--quiet` still hides it.
+2026-10-02 — version 1.0.20 adds front row 5 language. Rows 51–63 save one line in `~/.local/safe-rm/language`. `SRM_LANG` overrides that file for one run and does not write it. Operational remove text stays English. 2026-09-30 — version 1.0.19 does not read the password database to build the refusal list. The login home, `/home`, and a folder under `/home` outside this login stay refused. A named folder inside the login home stays allowed. Version 1.0.18 stops a remove on `INT`, `HUP`, or `TERM` instead of continuing after the scratch directory is gone, and it removes this process's cache leaf on exit. A finished remove stays quiet unless `--verbal` is set. The line is `Caller <caller> removed <path>.` `--quiet` still hides it.

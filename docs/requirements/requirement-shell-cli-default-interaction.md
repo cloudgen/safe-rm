@@ -1,19 +1,19 @@
 **file**: docs/requirements/requirement-shell-cli-default-interaction.md  
-**Status**: Active (Version 1.1.2)  
+**Status**: Active (Version 1.1.3)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
 
 This requirement is the project Single Source of Truth for the **numbered terminal menu** of safe-rm.
 
-This file is the **main menu requirement**. On a real terminal, typing only `safe-rm` shows that menu. `safe-rm --debug` is the same menu: `--debug` is not a command, so it does not take the run off the menu. `safe-rm menu` and `safe-rm main` open the same list. **1** is the remove guard. **8** is self-management. Choosing **1** opens **11** `rm` and **0** Back. Choosing **8** opens the lifecycle list **82–87** and **0** Back. **9** leaves. A pipe, a quiet run, or a json run with no command still places the program and does not open this list.
+This file is the **main menu requirement**. On a real terminal, typing only `safe-rm` shows that menu. `safe-rm --debug` is the same menu: `--debug` is not a command, so it does not take the run off the menu. `safe-rm menu` and `safe-rm main` open the same list. **1** is the remove guard. **5** is the menu language (`requirement-shell-cli-language.md`). **8** is self-management. Choosing **1** opens **11** `rm` and **0** Back. Choosing **5** opens rows **51–63** and **0** Back. Choosing **8** opens the lifecycle list **82–87** and **0** Back. **9** leaves. **2**, **3**, **4**, **6**, and **7** are not printed. A pipe, a quiet run, or a json run with no command still places the program and does not open this list.
 
 **Scope:** When the list appears, which rows it has, how a row is drawn, what a bad pick does, and what happens after a command finishes.  
 **Out of scope:** How place/copy/download works (`requirement-shell-cli-self-install.md`); the non-interactive empty-argv place matrix (`requirement-shell-cli-zero-arguments.md`); the full `out_*` catalog (`requirement-shell-output-requirements.md`); refuse classes for `rm` (`requirement-domain-safe-rm.md`).
 
 ### 1.1 Human-facing
 
-**In one sentence:** At a terminal, `safe-rm` and `safe-rm --debug` show the main menu (item **1** is the remove guard, item **8** is self-management). Away from a terminal, no command still installs or says it is already installed.
+**In one sentence:** At a terminal, `safe-rm` and `safe-rm --debug` show the main menu (item **1** is the remove guard, item **5** is the menu language, item **8** is self-management). Away from a terminal, no command still installs or says it is already installed.
 
 | Box | Meaning | Example |
 |-----|---------|---------|
@@ -23,13 +23,14 @@ This file is the **main menu requirement**. On a real terminal, typing only `saf
 
 | Includes | Excludes |
 |----------|----------|
-| Front **1**, **8**, and **9**; remove-guard **11** and **0** Back; self-management **82–87** and **0** Back | Server-side **2** (this product has no server board) |
+| Front **1**, **5**, **8**, and **9**; remove-guard **11** and **0** Back; language **51–63** and **0** Back; self-management **82–87** and **0** Back | Server-side **2**, and front **3**, **4**, **6**, and **7** (not printed) |
 | Bold short name and italic gray explain on a terminal | A second menu look |
 
 | You do… | What it means | What you type |
 |---------|---------------|---------------|
 | Open the list | Front board, then leave. `--debug` alone still opens this list | `safe-rm` then `9`, or `safe-rm --debug` then `9` |
 | Open the remove guard | **11** lists subfolders of the current path, plus a number to type a path | `safe-rm` then `1` then `11` |
+| Choose the menu language | Rows **51–63**. The copy is the language requirement | `safe-rm` then `5` |
 | Check, update, or place | Open **8**, then **82–87** | `safe-rm` then `8` |
 | Step back | Return to the front board | `0` |
 
@@ -58,20 +59,22 @@ safe-rm has a zero-argument requirement. That file owns empty argv. This file ow
 
 ### 2.2 Front board
 
-**2** stays reserved and **MUST NOT** be printed. The front board **MUST NOT** print Back. The front board **MUST NOT** print `rm`, `version`, `about`, `version-check`, `self-update`, `self-uninstall`, `self-install`, `install`, `help`, `menu`, or `main` as its own row.
+**2**, **3**, **4**, **6**, and **7** stay unprinted. The front board **MUST NOT** print Back. The front board **MUST NOT** print `rm`, `version`, `about`, `version-check`, `self-update`, `self-uninstall`, `self-install`, `install`, `help`, `menu`, or `main` as its own row. Row **5** is the language category. Its copy is `requirement-shell-cli-language.md`.
 
 | # | Token | Label |
 |---|-------|-------|
 | *(header)* | — | `**safe-rm**(*version*) — Guarded rm that refuses login homes and system directories` |
 | **1** | `remove-guard` | `remove-guard: check a path and remove it only when it is allowed` |
+| **5** | `language` | `language: display language for this menu` |
 | **8** | `self-management` | `self-management: this CLI install, version, update, uninstall` |
 | **9** | Exit | leave the program |
 
-1. **9**, `exit`, `quit`, or an empty line on the front board **MUST** return 0.  
-2. **1** or `remove-guard` **MUST** open the remove-guard board.  
-3. **8** or `self-management` **MUST** open the self-management board.  
-4. A typed leaf that is listed under **1** (`11`, `rm`) or under **8** (`version`, `about`, `version-check`, `self-update`, `self-uninstall`, `self-install`) **MAY** run from the front prompt, then the front board **MUST** show again.  
-5. `install` is not a listed row (**81** is reserved). Typing it here is a bad pick. `help`, `menu`, and `main` **MUST NOT** be rows.
+1. **9**, `exit`, `quit`, or an empty line on the front board **MUST** return 0. The translated Exit word for the saved language does the same.  
+2. **1** or `remove-guard` **MUST** open the remove-guard board. The translated remove-guard short does the same.  
+3. **5** or `language` **MUST** open the language board (`app_cmd_menu_language`), then the front board **MUST** show again.  
+4. **8** or `self-management` **MUST** open the self-management board. The translated self-management short does the same.  
+5. A typed leaf that is listed under **1** (`11`, `rm`) or under **8** (`version`, `about`, `version-check`, `self-update`, `self-uninstall`, `self-install`) **MAY** run from the front prompt, then the front board **MUST** show again.  
+6. `install` is not a listed row (**81** is reserved). Typing it here is a bad pick. `help`, `menu`, and `main` **MUST NOT** be rows. A bad pick such as **3** stays invalid after row **5** is added. The English error still contains `Not a menu choice '3'`.
 
 ### 2.3 Remove-guard board (parent 1)
 
@@ -81,7 +84,7 @@ safe-rm has a zero-argument requirement. That file owns empty argv. This file ow
 | **11** | `rm` | `rm: check each path and remove only when every path is allowed` |
 | **0** | Back | return to the front board |
 
-1. **0**, `back`, or an empty line **MUST** return to the front board and **MUST NOT** run `rm`.  
+1. **0**, `back`, or an empty line **MUST** return to the front board and **MUST NOT** run `rm`. The translated Back word does the same.  
 2. **11** or `rm` **MUST** open a path board in the current shell. The board **MUST** show `Current path:` as the working directory, then each immediate subfolder as **1…N** (`folder name: absolute path`), then the next number **custom-path** (`type a path`), then **0** Back. Files and dotfolders **MUST NOT** be rows. Names that contain a newline **MUST NOT** be rows. Folder order **MUST** be byte order (`LC_ALL=C`).  
 3. A folder number, or that folder’s name, **MUST** call `srm_cmd_rm` with that folder’s absolute path. The **custom-path** number **MUST** ask `Path:` in the current shell, then call `srm_cmd_rm` with the typed text. The tokens `custom-path` and `custom` **MUST** do the same, unless a listed folder already has that name, in which case the folder is chosen.  
 4. An empty typed path **MUST** `out_error` and reprint the path board. **MUST NOT** `out_die` for an empty path. **MUST NOT** call `srm_cmd_rm` for an empty path.  
@@ -107,7 +110,7 @@ Online script-alone, no payload. **81** `install` stays reserved and **MUST NOT*
 | **87** | `self-install` | `self-install: place this CLI only (copy when $0 is a script; download when piped)` |
 | **0** | Back | return to the front board |
 
-1. **0**, `back`, or an empty line **MUST** return to the front board and **MUST NOT** run a verb.  
+1. **0**, `back`, or an empty line **MUST** return to the front board and **MUST NOT** run a verb. The translated Back word does the same.  
 2. A listed number or its token **MUST** run that handler, then the **front** board **MUST** show again. **MUST NOT** stay on this board after a finished command. **MUST NOT** leave the program because the command finished.  
 3. **9** is not a row on this board. It is a bad pick here.
 
@@ -130,7 +133,7 @@ An unused number, an unknown name, or a hidden reserved number (**2**, **81**, s
 | **Ship unit** | `src/safe-rm` |
 | **Claimed** | yes |
 | **Case** | Zero-argument requirement exists. It defers **interactive** empty argv here. Non-interactive empty argv stays Type O place |
-| **Handler** | `app_default`; remove-guard layer `app_default_rm_loop`; path board `app_default_ask_rm`; self-management layer `app_default_self_loop` |
+| **Handler** | `app_default`; remove-guard layer `app_default_rm_loop`; path board `app_default_ask_rm`; language board `app_cmd_menu_language`; self-management layer `app_default_self_loop` |
 | **Honesty** | **Implemented.** |
 
 ### 2.8 Why this requirement exists (CIAO)
@@ -179,6 +182,7 @@ An unused number, an unknown name, or a hidden reserved number (**2**, **81**, s
 | **TP-CLI-EMPTY-01** | `tests/run_dry_run.sh` | have (interactive empty argv is the menu and does not place; `safe-rm --debug` on a TTY is the same menu) |
 | **TP-CLI-SRM-01** | `tests/run_dry_run.sh` | have (front has remove-guard, **8**, and **9**; `rm` is **11** under **1**) |
 | **TP-CLI-SRM-02** | `tests/run_dry_run.sh` | have (**11** lists subfolders of the current path, then **custom-path**, then **0** Back; empty custom path and a bad pick reprint that board; nothing is removed) |
+| **TP-CLI-24** | `tests/run_dry_run.sh` | have (front **5**; thirteen languages; Back does not write the leaf). The copy is `requirement-shell-cli-language.md` |
 
 The Type 0 suite `tests/test_cli.sh` still targets the bootstrap snapshot `src/selfmanaged`. These menu rows live on the safe-rm suite because that is the program the operator runs.
 
@@ -193,11 +197,12 @@ The Type 0 suite `tests/test_cli.sh` still targets the bootstrap snapshot `src/s
 | `docs/requirements/requirement-shell-cli-self-install.md` | What **87** / `self-install` does |
 | `docs/requirements/requirement-shell-output-requirements.md` | `out_menu_choice` / `out_text` |
 | `docs/requirements/requirement-shell-interactive-vs-noninteractive.md` | No hang off a TTY |
+| `docs/requirements/requirement-shell-cli-language.md` | Front **5** and the menu copy |
 | `docs/requirements/requirement-domain-safe-rm.md` | What **11** / `rm` refuses |
 | `src/safe-rm` | `app_default` |
 
 ---
 
-**Last Updated**: 2026-09-27 (1.1.2 — the command named `rm` is not this menu)  
+**Last Updated**: 2026-10-02 (1.1.3 — front **5** language; **2** / **3** / **4** / **6** / **7** stay unprinted)  
 **Owner**: safe-rm project maintainers  
 **Alignment:** requirement-shell-cli-zero-arguments · requirement-shell-cli-interface · requirement-shell-cli-self-install · requirement-shell-output-requirements · requirement-domain-safe-rm · CIAO / CIAO-Lite

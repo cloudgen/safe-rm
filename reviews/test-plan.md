@@ -3,7 +3,7 @@
 Maps **baseline coverage** and **finding lock-in (TP-*)** to `tests/`.  
 **Product suite:** `./tests/run_dry_run.sh` (`src/safe-rm`).  
 **Type 0 snapshot suite:** `./tests/run.sh` also runs that product suite, then the older snapshot suite.  
-**Last update:** 2026-09-30 (domain 1.2.20: the password database is not on the refusal list. The login home, `/home`, and a folder under `/home` outside this login stay refused. `TP-SRM-20` allows an account home outside that list. Domain 1.2.19: a stop signal during a remove leaves the process, a missing scratch directory is not an empty path, and the cache leaf is removed on exit. `TP-SRM-42` is in `tests/run_dry_run.sh`. Storage `1.1.2`. `TP-SRM-35` is still TODO. Ship unit 1.0.19)
+**Last update:** 2026-10-02 (menu language 1.0.0: front **5**, thirteen codes, `TP-CLI-24`. Dry-run suite PASS=760 FAIL=0 on ship unit 1.0.20. Domain 1.2.21 points at that requirement and does not own the copy. Domain 1.2.20: the password database is not on the refusal list. The login home, `/home`, and a folder under `/home` outside this login stay refused. `TP-SRM-20` allows an account home outside that list. Domain 1.2.19: a stop signal during a remove leaves the process, a missing scratch directory is not an empty path, and the cache leaf is removed on exit. `TP-SRM-42` is in `tests/run_dry_run.sh`. Storage `1.1.2`. `TP-SRM-35` is still TODO. Ship unit 1.0.19)
 
 Status: **have** = automated today · **TODO** = needed · **n/a** = not applicable / product choice
 
@@ -88,6 +88,7 @@ These rows are what `tests/test_cli.sh` asserts against the older snapshot. Prod
 | TP-CLI-19 | L-MENU-01 | Bad pick reprints that layer; process stays up (`out_error`, not `out_die`) | **have** | `tests/run_dry_run.sh` |
 | TP-CLI-21 | L-MENU-01 | Finished **82** redisplays the front board | **have** | `tests/run_dry_run.sh` |
 | TP-CLI-22 | L-MENU-01 | Off-TTY `menu` is help. Under **8**, **87** is listed and **81** is omitted | **have** | `tests/run_dry_run.sh` |
+| TP-CLI-24 | requirement-shell-cli-language 1.0.0 | Front **5**. Rows **51–63** save the language leaf under a scratch `HOME`. Back and reserved **50** / **64** / **69** do not write it. An unrecognized line stays English. `SRM_LANG` overrides and does not rewrite. Japanese and Korean help and about headings follow the language. JSON about stays English. `language` is not an argv verb. Nothing is removed | **have** | `tests/run_dry_run.sh` |
 | TP-CLI-SRM-01 | L-MENU-01 | Front board has the remove-guard category plus **8** and **9**. `rm` is **11** under **1**, not on the front board | **have** | `tests/run_dry_run.sh` |
 | TP-CLI-SRM-02 | L-MENU-01 | **11** lists subfolders of the current path, then **custom-path**, then **0** Back. Empty custom path and a bad pick reprint that board. Nothing is removed | **have** | `tests/run_dry_run.sh` |
 | TP-SRM-SWAP-01 | domain 1.2.6 | Setup moves a fixture `rm` to `origin-rm` and points `rm` at this program. Second setup does not move again. `restore` reverses it. Non-admin setup moves nothing. No real directory remove | **have** | `tests/run_dry_run.sh` (`SRM_SWAP_ROOT=/tmp/safe-rm-swap.*`) |

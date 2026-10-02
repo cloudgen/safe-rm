@@ -1,7 +1,7 @@
 # Reviews index — safe-rm
 
 **Registry** of review plan artifacts and run reports. Keep rows in sync with disk.  
-**Updated:** 2026-09-28 (product identity safe-rm; reports that only covered the old bootstrap name removed)
+**Updated:** 2026-10-02 (menu language coverage; ship unit 1.0.20)
 
 ## Plan artifacts
 
@@ -17,6 +17,7 @@
 
 | Date | File | Scope | Baseline | Verdict |
 |------|------|-------|----------|---------|
+| 2026-10-02 | `reports/2026-10-02-menu-language-coverage.md` | front **5** menu language | dry-run PASS=760 FAIL=0 | **Closed** (ship unit 1.0.20) |
 | 2026-09-27 | `reports/2026-09-27-safe-rm-main-menu-vs-selfmanaged.md` | safe-rm numbered main menu | probes; later `tests/run_dry_run.sh` | **Closed** (menu shipped the same day) |
 | 2026-09-27 | `reports/2026-09-27-checklist-temp-file-system-cache-folder.md` | safe-rm cache folder vs storage law | dry-run PASS=200 | **Pass** |
 
@@ -30,6 +31,6 @@
 
 ## Notes
 
-- Product: **safe-rm**. Ship unit `src/safe-rm`. Version SSOT `VERSION="1.0.19"`.  
+- Product: **safe-rm**. Ship unit `src/safe-rm`. Version SSOT `VERSION="1.0.20"`.  
 - Domain proof: `tests/run_dry_run.sh`.  
 - One Active domain SSOT: `requirement-domain-safe-rm`.  

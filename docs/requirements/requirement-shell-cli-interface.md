@@ -1,5 +1,5 @@
 **file**: docs/requirements/requirement-shell-cli-interface.md  
-**Status**: Active (Version 1.2.8)  
+**Status**: Active (Version 1.2.9)  
 **Philosophy**: CIAO / CIAO-Lite (Caution • Intentional • Anti-fragile • Over-engineered)
 
 ## 1. Purpose
@@ -135,7 +135,7 @@ When specializing product **B** from this bootstrap (**A → B only**):
 | **Primary executable** | `src/safe-rm` (POSIX `/bin/sh`, single-file for `curl \| sh`) |
 | **Dispatcher** | `app_main` (always invoked at end of script: `app_main "$@"` — no `${0##*/}` / APP_NAME basename gate; required for `curl \| sh`) |
 | **Output SSOT** | `out_text` + wrappers (`out_info`, `out_success`, `out_warn`, `out_error`, `out_die`, `out_plain`, `out_json`, …) |
-| **Version SSOT** | `VERSION` default `1.0.19` (script header / config block: `VERSION="1.0.19"`) |
+| **Version SSOT** | `VERSION` default `1.0.20` (script header / config block: `VERSION="1.0.20"`) |
 | **Install paths** | Global: `GLOBAL_BIN` default `/usr/local/bin`; User: `USER_BIN` default `${HOME}/.local/bin` |
 | **Remote channel env (help surface)** | `REPO_USER` / `REPO_NAME` / `SCRIPT_RELPATH` (defaults `cloudgen` / `safe-rm` / `src/safe-rm`); `SCRIPT_URL` composed default `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/${SCRIPT_RELPATH}` (literal product default: `https://raw.githubusercontent.com/cloudgen/safe-rm/main/src/safe-rm`; override via env). **`help` MUST list `REPO_USER`, `REPO_NAME`, `SCRIPT_RELPATH`, and `SCRIPT_URL`, and MUST NOT list `CHECKSUM`. `about` MUST NOT list `CHECKSUM`** (install-path runtime pin only; see `requirement-shell-automatic-checksum.md`) |
 | **Type 1 / Type 2 commands** | **None** on current surface — this tool is CLI lifecycle only |
@@ -148,16 +148,16 @@ Every command is also a switch of the same name. `help` and `--help` are the sam
 | Command | Type | Handler (current) | Required behavior |
 |---------|------|-------------------|-------------------|
 | *(no command — 0-argv)* | Type 0 | `app_main` → `app_default` or `inst_self_install` | **Interactive**, including `safe-rm --debug` (`--debug` is not a command): main menu. **Non-interactive / quiet / json:** Type O CLI self-install-ensure (not help, not the menu). See `requirement-shell-cli-zero-arguments.md` · `requirement-shell-cli-default-interaction.md` |
-| `menu` | Type 0 | `app_default` | Numbered list on a TTY (front **1** / **8** / **9**; remove-guard **11**; self-management **82–87**). Off a TTY: help. Sample: `safe-rm menu` |
+| `menu` | Type 0 | `app_default` | Numbered list on a TTY (front **1** / **5** / **8** / **9**; remove-guard **11**; language **51–63**; self-management **82–87**). Off a TTY: help. Human headings follow `requirement-shell-cli-language.md`. Sample: `safe-rm menu` |
 | `main` | Type 0 | `app_default` | Alias of `menu` |
 | `self-install` | Type 0 | `inst_self_install` | Place **this CLI** (copy when `$0` is a script; download when piped). Dest **0700** local / **0755** global. Dual mention: `requirement-shell-cli-self-install.md`. Sample: `safe-rm self-install` |
 | `install` | Type 0 | `inst_self_install` | **Alias of `self-install`** (this product has no payload). Same copy/download/dest-mode contract. Sample: `safe-rm install` |
 | `version`, `--version` | Type 0 | `app_main` / `app_version` | Print local version; JSON object when `--json`. On the command named `rm`, `--version` is this command. The bare word `version` is a path, including a link |
-| `about` | Type 0 | `app_about` | Diagnostics: install presence, global/local paths, user, shell, TTY; **Cache folder used**, **Cache folder (preferred)**, **Cache folder (1st fallback)**, **Cache folder (2nd fallback)** when that host has one, and **Persistence storage** (`requirement-shell-cli-storage`); JSON when `--json`; **no `CHECKSUM` field** |
+| `about` | Type 0 | `app_about` | Diagnostics: install presence, global/local paths, user, shell, TTY; **Cache folder used**, **Cache folder (preferred)**, **Cache folder (1st fallback)**, **Cache folder (2nd fallback)** when that host has one, and **Persistence storage** (`requirement-shell-cli-storage`). Human title and those labels follow `requirement-shell-cli-language.md`. JSON stays English; **no `CHECKSUM` field** |
 | `version-check` | Type 0 | `ver_check` | Compare local vs remote `VERSION` from `SCRIPT_URL`; fail clearly if URL unset/unreachable |
 | `self-update` | Type 0 | `inst_self_update` | Fetch remote version; reinstall when policy allows; reuse install primitives |
 | `self-uninstall` | Type 0 | `inst_self_uninstall` | Remove managed binary; PATH cleanup only if `~/.local/bin` empty (user installs) |
-| `help`, `--help` | Type 0 | `app_help` | Full usage in human mode; short JSON note in JSON mode; Environment lists channel vars only — **not** `CHECKSUM`. Lists every command switch |
+| `help`, `--help` | Type 0 | `app_help` | Full usage in human mode; short JSON note in JSON mode; Environment lists channel vars only — **not** `CHECKSUM`. Lists every command switch. Human headings and the `menu` sentence follow `requirement-shell-cli-language.md`. The paragraphs under those headings stay English |
 | `setup` | domain | `srm_cmd_setup` | Admin login checks the before/after table and swaps when needed. Sample: `safe-rm setup`. Law: `requirement-domain-safe-rm.md` |
 | `restore` | domain | `srm_cmd_restore` | Put `origin-rm` back as `rm` and remove the `safe-rm` link. Sample: `safe-rm restore`. Law: `requirement-domain-safe-rm.md` |
 | `-restore` | domain | `srm_cmd_restore` | 2023 token when this program is the `rm` people type |
@@ -285,6 +285,6 @@ This product may run on Termux, Git Bash, Windows cmd, or the same class (this l
 
 `--verbal` shows the finished-remove line. The sentence itself is domain law. This file owns the flag wiring.
 
-**Last Updated**: 2026-09-30 (1.2.8 — `--verbal` shows the finished-remove line; that line stays hidden by default)  
+**Last Updated**: 2026-10-02 (1.2.9 — human help and about follow the menu language; JSON about stays English)  
 **Owner**: safe-rm project maintainers  
 **Alignment**: Registry `docs/requirements/index.md`; CIAO Principles 1, 2, 3, 5, 6, 10, 16, 4, 20 (v2.10.2) (https://github.com/cloudgen/ciao); CIAO-Lite (https://github.com/cloudgen/ciao-lite).

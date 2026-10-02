@@ -1173,6 +1173,170 @@ case "$out" in
     *) t_pass "TP-CLI-22 off-tty menu does not draw 82" ;;
 esac
 
+# TP-CLI-24 menu language. HOME is under the suite scratch directory so the
+# language leaf is not this login's file. No path is removed.
+LANG_HOME="${SCRATCH}/langhome"
+mkdir -p "$LANG_HOME"
+_saved_lang_home=${HOME-}
+export HOME="$LANG_HOME"
+_lang_file="${LANG_HOME}/.local/safe-rm/language"
+
+out=$(printf '9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-24 English front exit" 0 "$ec"
+assert_contains "TP-CLI-24 front row 5" "$out" "5."
+assert_contains "TP-CLI-24 language explain" "$out" "display language for this menu"
+assert_contains "TP-CLI-24 English choice" "$out" "Choice: "
+assert_contains "TP-CLI-24 English exit" "$out" "9. Exit"
+out=$(sh "$SAFE_RM" help </dev/null 2>&1)
+assert_contains "TP-CLI-24 English help Usage" "$out" "Usage:"
+assert_contains "TP-CLI-24 help names 5 language" "$out" "5 language"
+assert_contains "TP-CLI-24 help names 52" "$out" "52 Simplified Chinese"
+assert_contains "TP-CLI-24 help names 60" "$out" "60 Japanese"
+
+out=$(printf '5\n0\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-24 back exit" 0 "$ec"
+assert_contains "TP-CLI-24 language row 51" "$out" "51."
+assert_contains "TP-CLI-24 language row 63" "$out" "63."
+assert_contains "TP-CLI-24 language back" "$out" "0. Back"
+if [ -f "$_lang_file" ]; then
+    t_fail "TP-CLI-24 back wrote the language file"
+else
+    t_pass "TP-CLI-24 back does not write the language file"
+fi
+case "$out" in
+    *"50."*) t_fail "TP-CLI-24 printed reserved 50" ;;
+    *) t_pass "TP-CLI-24 omits reserved 50" ;;
+esac
+case "$out" in
+    *"64."*) t_fail "TP-CLI-24 printed reserved 64" ;;
+    *) t_pass "TP-CLI-24 omits reserved 64" ;;
+esac
+case "$out" in
+    *"69."*) t_fail "TP-CLI-24 printed reserved 69" ;;
+    *) t_pass "TP-CLI-24 omits reserved 69" ;;
+esac
+
+out=$(printf '5\n50\n64\n69\n0\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-24 reserved exit" 0 "$ec"
+assert_contains "TP-CLI-24 reserved 50" "$out" "Unknown menu choice '50'"
+assert_contains "TP-CLI-24 reserved 64" "$out" "Unknown menu choice '64'"
+assert_contains "TP-CLI-24 reserved 69" "$out" "Unknown menu choice '69'"
+if [ -f "$_lang_file" ]; then
+    t_fail "TP-CLI-24 reserved wrote the language file"
+else
+    t_pass "TP-CLI-24 reserved does not write the language file"
+fi
+
+out=$(printf '5\n52\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-24 pick 52 exit" 0 "$ec"
+assert_contains "TP-CLI-24 pick 52 still shows English first" "$out" "remove-guard"
+assert_contains "TP-CLI-24 pick 52 redraws Simplified Chinese" "$out" "删除防护"
+assert_contains "TP-CLI-24 pick 52 saved" "$out" "菜单语言是简体中文"
+_got=$(head -n 1 "$_lang_file" 2>/dev/null || true)
+assert_eq "TP-CLI-24 pick 52 file" "zh-Hans" "$_got"
+_mode=$(stat -c '%a' "$_lang_file" 2>/dev/null || stat -f '%OLp' "$_lang_file")
+assert_eq "TP-CLI-24 language file mode" "600" "$_mode"
+
+out=$(printf '9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+assert_contains "TP-CLI-24 later run is Simplified Chinese" "$out" "删除防护"
+assert_not_contains "TP-CLI-24 later run drops English remove-guard" "$out" "remove-guard"
+
+out=$(printf '删除防护\n0\n离开\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+ec=$?
+assert_eq "TP-CLI-24 translated category exit" 0 "$ec"
+assert_contains "TP-CLI-24 translated remove opens 11" "$out" "11."
+assert_contains "TP-CLI-24 translated back" "$out" "0. 返回"
+
+printf 'nope\n' > "$_lang_file"
+chmod 0600 "$_lang_file"
+out=$(printf '9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+assert_contains "TP-CLI-24 unrecognized stays English" "$out" "remove-guard"
+assert_not_contains "TP-CLI-24 unrecognized is not Chinese" "$out" "删除防护"
+_got=$(head -n 1 "$_lang_file" 2>/dev/null || true)
+assert_eq "TP-CLI-24 unrecognized line kept" "nope" "$_got"
+
+printf 'zh-Hans\n' > "$_lang_file"
+chmod 0600 "$_lang_file"
+out=$(printf '9\n' | SRM_LANG=ja TTY=1 sh "$SAFE_RM" 2>&1)
+assert_contains "TP-CLI-24 SRM_LANG Japanese" "$out" "削除ガード"
+_got=$(head -n 1 "$_lang_file" 2>/dev/null || true)
+assert_eq "TP-CLI-24 SRM_LANG does not rewrite" "zh-Hans" "$_got"
+out=$(printf '9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+assert_contains "TP-CLI-24 next run follows the file" "$out" "删除防护"
+assert_not_contains "TP-CLI-24 next run drops the override" "$out" "削除ガード"
+
+while IFS='|' read -r _n _code _saved _short; do
+    [ -n "${_n}" ] || continue
+    out=$(printf '5\n%s\n9\n' "${_n}" | TTY=1 sh "$SAFE_RM" 2>&1)
+    ec=$?
+    assert_eq "TP-CLI-24 row ${_n} exit" 0 "$ec"
+    assert_contains "TP-CLI-24 row ${_n} saved" "$out" "${_saved}"
+    assert_contains "TP-CLI-24 row ${_n} redraw" "$out" "${_short}"
+    _got=$(head -n 1 "$_lang_file" 2>/dev/null || true)
+    assert_eq "TP-CLI-24 row ${_n} file" "${_code}" "$_got"
+done <<'EOF'
+51|en|Menu language is English|remove-guard
+52|zh-Hans|菜单语言是简体中文|删除防护
+53|zh-Hant|選單語言是繁體中文|刪除防護
+54|es|El idioma del menú es español|guarda
+55|ar|لغة القائمة هي العربية|حماية-الحذف
+56|fr|La langue du menu est le français|garde
+57|pt|O idioma do menu é português|guarda
+58|ru|Язык меню — русский|защита
+59|de|Die Menüsprache ist Deutsch|Schutz
+60|ja|メニューの言語は日本語|削除ガード
+61|ko|메뉴 언어는 한국어|삭제-가드
+62|nl|De menutaal is Nederlands|bewaking
+63|el|Η γλώσσα του μενού είναι ελληνικά|φρουρά
+EOF
+
+out=$(printf '5\nenglish\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+_got=$(head -n 1 "$_lang_file" 2>/dev/null || true)
+assert_eq "TP-CLI-24 alias english" "en" "$_got"
+assert_contains "TP-CLI-24 alias english saved" "$out" "Menu language is English"
+out=$(printf '5\n简体中文\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+_got=$(head -n 1 "$_lang_file" 2>/dev/null || true)
+assert_eq "TP-CLI-24 alias simplified short name" "zh-Hans" "$_got"
+out=$(printf '5\n日本語\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
+_got=$(head -n 1 "$_lang_file" 2>/dev/null || true)
+assert_eq "TP-CLI-24 alias Japanese short name" "ja" "$_got"
+
+out=$(SRM_LANG=ja sh "$SAFE_RM" help </dev/null 2>&1)
+assert_contains "TP-CLI-24 Japanese help heading" "$out" "使い方:"
+assert_not_contains "TP-CLI-24 Japanese help is not Usage" "$out" "Usage:"
+out=$(SRM_LANG=ko sh "$SAFE_RM" help </dev/null 2>&1)
+assert_contains "TP-CLI-24 Korean help heading" "$out" "사용법:"
+out=$(SRM_LANG=ja sh "$SAFE_RM" about </dev/null 2>&1)
+assert_contains "TP-CLI-24 Japanese about title" "$out" "概要 / 診断"
+assert_contains "TP-CLI-24 Japanese cache label" "$out" "使用中のキャッシュフォルダ:"
+out=$(SRM_LANG=ko sh "$SAFE_RM" about </dev/null 2>&1)
+assert_contains "TP-CLI-24 Korean about title" "$out" "개요 / 진단"
+assert_contains "TP-CLI-24 Korean cache label" "$out" "사용 중인 캐시 폴더:"
+out=$(sh "$SAFE_RM" --json about </dev/null 2>&1)
+assert_contains "TP-CLI-24 JSON about stays English" "$out" '"cache_used"'
+assert_contains "TP-CLI-24 JSON about remove_guard stays English" "$out" '"remove_guard":"on"'
+assert_contains "TP-CLI-24 JSON about dry_run_switch stays English" "$out" '"dry_run_switch":"--dry-run"'
+case "$out" in
+    *'概要'*) t_fail "TP-CLI-24 JSON about followed the menu language" ;;
+    *) t_pass "TP-CLI-24 JSON about does not follow the menu language" ;;
+esac
+
+out=$(sh "$SAFE_RM" language </dev/null 2>&1)
+ec=$?
+assert_eq "TP-CLI-24 language is not a verb" 1 "$ec"
+assert_contains "TP-CLI-24 language verb refused" "$out" "Unknown command or flag: language"
+
+if [ -n "${_saved_lang_home}" ]; then
+    export HOME="${_saved_lang_home}"
+else
+    unset HOME
+fi
+unset _saved_lang_home _lang_file _got _mode _n _code _saved _short
+
 # TP-CLI-SRM-01 rm lives under 1 as 11
 out=$(printf '1\n0\n9\n' | TTY=1 sh "$SAFE_RM" 2>&1)
 ec=$?
